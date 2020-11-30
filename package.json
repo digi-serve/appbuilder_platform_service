@@ -1,0 +1,23 @@
+{
+  "name": "ab_platform_service",
+  "version": "0.0.0",
+  "description": "(AppBuilder) A multi-tenant aware runtime for a micro-service platform.",
+  "main": "ABBootstrap.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/appdevdesigns/appbuilder_platform_service.git"
+  },
+  "author": "Johnny Hausman",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/appdevdesigns/appbuilder_platform_service/issues"
+  },
+  "homepage": "https://github.com/appdevdesigns/appbuilder_platform_service#readme",
+  "dependencies": {
+    "objection": "^2.2.3",
+    "xml-js": "^1.6.11"
+  }
+}
