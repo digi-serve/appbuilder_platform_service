@@ -2,8 +2,6 @@ const path = require("path");
 // prettier-ignore
 const AccountingFPCloseCore = require(path.join(__dirname, "..", "..", "..", "core", "process","tasks", "ABProcessTaskServiceAccountingFPCloseCore.js"));
 
-const AB = require("ab-utils");
-
 module.exports = class AccountingFPClose extends AccountingFPCloseCore {
    ////
    //// Process Instance Methods
@@ -21,6 +19,7 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
    do(instance, trx) {
       this.fpObject = this.AB.objects((o) => o.id == this.objectFP)[0];
       this.glObject = this.AB.objects((o) => o.id == this.objectGL)[0];
+      this.accObject = this.AB.objects((o) => o.id == this.objectAcc)[0];
 
       return new Promise((resolve, reject) => {
          var myState = this.myState(instance);
@@ -148,7 +147,7 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
 
                         // make sure exists next FP
                         if (this.nextFP == null) {
-                           this.log(instance, "Count not found next FP");
+                           this.log(instance, "Count not find next FP");
                            return next();
                         }
 
@@ -184,83 +183,241 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
                         let fieldGLRc = this.glObject.fields(
                            (f) => f.id == this.fieldGLRc
                         )[0];
+                        let fieldGLDebit = this.glObject.fields(
+                           (f) => f.id == this.fieldGLDebit
+                        )[0];
+                        let fieldGLCredit = this.glObject.fields(
+                           (f) => f.id == this.fieldGLCredit
+                        )[0];
+                        let fieldAccType = this.accObject.fields(
+                           (f) => f.id == this.fieldAccType
+                        )[0];
 
                         let linkName = fieldFPLink.relationName();
                         let tasks = [];
 
                         (this.currentFP[linkName] || []).forEach(
                            (glSegment) => {
-                              let newGL = {};
-                              newGL[this.glObject.PK()] = this.AB.uuid();
+                              // Check if the Next Balance Exists (with same RC, Account, Fiscal Month +1)
+                              let nextGlSegment = (
+                                 this.nextFP[linkName] || []
+                              ).filter((nextGl) => {
+                                 let isExists = false;
 
-                              // link to the next FP
-                              if (fieldGLlink) {
-                                 newGL[
-                                    fieldGLlink.columnName
-                                 ] = fieldGLlink.getRelationValue(this.nextFP);
+                                 if (fieldGLRc) {
+                                    isExists =
+                                       nextGl[fieldGLRc.columnName] ==
+                                       glSegment[fieldGLRc.columnName];
+                                 }
+
+                                 if (isExists && fieldGLAccount) {
+                                    isExists = nextGl[
+                                       fieldGLAccount.columnName
+                                    ] = glSegment[fieldGLAccount.columnName];
+                                 }
+
+                                 return isExists;
+                              });
+
+                              // Update the exists Balance
+                              if (nextGlSegment) {
+                                 tasks.push(
+                                    Promise.resolve()
+                                       .then(() =>
+                                          this.glObject.model().findAll({
+                                             where: {
+                                                glue: "and",
+                                                rules: [
+                                                   {
+                                                      key: this.glObject.PK(),
+                                                      rule: "equals",
+                                                      value:
+                                                         nextGlSegment[
+                                                            this.glObject.PK()
+                                                         ],
+                                                   },
+                                                ],
+                                             },
+                                             populate: true,
+                                          })
+                                       )
+                                       .then((nextGlInfo) => {
+                                          let updateExistsVals = {};
+
+                                          // Update the Next Balance > Starting Balance = Original Balance > Running Balance
+                                          if (fieldGLStarting) {
+                                             updateExistsVals[
+                                                fieldGLStarting.columnName
+                                             ] =
+                                                glSegment[
+                                                   fieldGLRunning.columnName
+                                                ];
+
+                                             // Calculate Next Balance > Running Balance
+                                             if (fieldGLRunning) {
+                                                let glAccount =
+                                                   nextGlInfo[
+                                                      fieldGLAccount.relationName()
+                                                   ] || {};
+
+                                                if (
+                                                   glAccount &&
+                                                   Array.isArray(glAccount)
+                                                )
+                                                   glAccount = glAccount[0];
+
+                                                switch (
+                                                   glAccount[fieldAccType]
+                                                ) {
+                                                   // If account category is Asset or Expense: Running Balance = Starting Balance + Debit - Credit
+                                                   case this.fieldAccAsset:
+                                                   case this.fieldAccExpense:
+                                                      updateExistsVals[
+                                                         fieldGLRunning.columnName
+                                                      ] =
+                                                         nextGlInfo[
+                                                            fieldGLStarting
+                                                               .columnName
+                                                         ] +
+                                                         nextGlInfo[
+                                                            fieldGLDebit
+                                                               .columnName
+                                                         ] -
+                                                         nextGlInfo[
+                                                            fieldGLCredit
+                                                               .columnName
+                                                         ];
+                                                      break;
+                                                   // If account category is Liabilities, Equity, Income: Running Balance = Starting Balance - Debit + Credit
+                                                   case this
+                                                      .fieldAccLiabilities:
+                                                   case this.fieldAccEquity:
+                                                   case this.fieldAccIncome:
+                                                      updateExistsVals[
+                                                         fieldGLRunning.columnName
+                                                      ] =
+                                                         nextGlInfo[
+                                                            fieldGLStarting
+                                                               .columnName
+                                                         ] -
+                                                         nextGlInfo[
+                                                            fieldGLDebit
+                                                               .columnName
+                                                         ] +
+                                                         nextGlInfo[
+                                                            fieldGLCredit
+                                                               .columnName
+                                                         ];
+                                                      break;
+                                                }
+                                             }
+                                          }
+
+                                          this.glObject
+                                             .model()
+                                             .update(
+                                                nextGlSegment[
+                                                   this.glObject.PK()
+                                                ],
+                                                updateExistsVals,
+                                                trx
+                                             )
+                                             .then((updatedExistsGl) => {
+                                                console.error(
+                                                   "FIX sails.sockets.broadcast()"
+                                                );
+                                                if (false) {
+                                                   // Broadcast
+                                                   sails.sockets.broadcast(
+                                                      this.glObject.id,
+                                                      "ab.datacollection.update",
+                                                      {
+                                                         objectId: this.fpObject
+                                                            .id,
+                                                         data: updatedExistsGl,
+                                                      }
+                                                   );
+                                                }
+                                                return Promise.resolve();
+                                             })
+                                             .catch(fail);
+                                       })
+                                 );
                               }
+                              // Create a new Balance
+                              else {
+                                 let newGL = {};
+                                 newGL[this.glObject.PK()] = this.AB.uuid();
 
-                              // set Starting & Running Balance
-                              if (fieldGLRunning) {
-                                 if (fieldGLStarting) {
-                                    newGL[fieldGLStarting.columnName] =
+                                 // link to the next FP
+                                 if (fieldGLlink) {
+                                    newGL[
+                                       fieldGLlink.columnName
+                                    ] = fieldGLlink.getRelationValue(
+                                       this.nextFP
+                                    );
+                                 }
+
+                                 // set Starting & Running Balance
+                                 if (fieldGLRunning) {
+                                    if (fieldGLStarting) {
+                                       newGL[fieldGLStarting.columnName] =
+                                          glSegment[fieldGLRunning.columnName];
+                                    }
+                                    newGL[fieldGLRunning.columnName] =
                                        glSegment[fieldGLRunning.columnName];
                                  }
-                                 newGL[fieldGLRunning.columnName] =
-                                    glSegment[fieldGLRunning.columnName];
-                              }
 
-                              // set link to Account
-                              if (fieldGLAccount) {
-                                 newGL[fieldGLAccount.columnName] =
-                                    glSegment[fieldGLAccount.columnName];
-                              }
+                                 // set link to Account
+                                 if (fieldGLAccount) {
+                                    newGL[fieldGLAccount.columnName] =
+                                       glSegment[fieldGLAccount.columnName];
+                                 }
 
-                              // set link to RC
-                              if (fieldGLRc) {
-                                 newGL[fieldGLRc.columnName] =
-                                    glSegment[fieldGLRc.columnName];
-                              }
+                                 // set link to RC
+                                 if (fieldGLRc) {
+                                    newGL[fieldGLRc.columnName] =
+                                       glSegment[fieldGLRc.columnName];
+                                 }
 
-                              // make a new GLSegment ( same Account & RC + new FiscalMonth)
-                              tasks.push(
-                                 new Promise((ok, bad) => {
-                                    this.glObject
-                                       .model()
-                                       .create(newGL)
-                                       .catch(bad)
-                                       .then((newGLResult) => {
-                                          if (!this.nextFP[linkName])
-                                             this.nextFP[linkName] = [];
+                                 // make a new GLSegment ( same Account & RC + new FiscalMonth)
+                                 tasks.push(
+                                    new Promise((ok, bad) => {
+                                       this.glObject
+                                          .model()
+                                          .create(newGL)
+                                          .then((newGLResult) => {
+                                             if (!this.nextFP[linkName])
+                                                this.nextFP[linkName] = [];
 
-                                          this.nextFP[linkName].push(
-                                             newGLResult
-                                          );
-
-                                          if (false) {
-                                             // Broadcast the create
-                                             sails.sockets.broadcast(
-                                                this.glObject.id,
-                                                "ab.datacollection.create",
+                                             this.nextFP[linkName].push(
                                                 newGLResult
                                              );
-                                          } else {
                                              console.error(
-                                                "Fix sails.sockets.broadcast()"
+                                                "FIX sails.sockets.broadcast()"
                                              );
-                                          }
-                                          ok();
-                                       });
-                                 })
-                              );
+                                             if (false) {
+                                                // Broadcast the create
+                                                sails.sockets.broadcast(
+                                                   this.glObject.id,
+                                                   "ab.datacollection.create",
+                                                   newGLResult
+                                                );
+                                             }
+                                             ok();
+                                          })
+                                          .catch(bad);
+                                    })
+                                 );
+                              }
                            }
                         );
 
                         Promise.all(tasks)
-                           .catch(fail)
                            .then(() => {
                               next();
-                           });
+                           })
+                           .catch(fail);
                      })
                )
             )
@@ -305,8 +462,8 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
                      this.fpObject
                         .model()
                         .update(nextFpID, values, trx)
-                        .catch(fail)
                         .then((updatedNextFP) => {
+                           console.error("FIX sails.sockets.broadcast()");
                            if (false) {
                               // Broadcast
                               sails.sockets.broadcast(
@@ -317,11 +474,10 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
                                     data: updatedNextFP,
                                  }
                               );
-                           } else {
-                              console.error("Fix sails.sockets.broadcast()");
                            }
                            next();
-                        });
+                        })
+                        .catch(fail);
                   })
             )
             // Final step
