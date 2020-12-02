@@ -211,13 +211,13 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
                                  }
 
                                  if (isExists && fieldGLAccount) {
-                                    isExists = nextGl[
-                                       fieldGLAccount.columnName
-                                    ] = glSegment[fieldGLAccount.columnName];
+                                    isExists =
+                                       nextGl[fieldGLAccount.columnName] ==
+                                       glSegment[fieldGLAccount.columnName];
                                  }
 
                                  return isExists;
-                              });
+                              })[0];
 
                               // Update the exists Balance
                               if (nextGlSegment) {
@@ -242,6 +242,10 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
                                           })
                                        )
                                        .then((nextGlInfo) => {
+                                          // array to a object
+                                          nextGlInfo =
+                                             nextGlInfo[0] || nextGlInfo;
+
                                           let updateExistsVals = {};
 
                                           // Update the Next Balance > Starting Balance = Original Balance > Running Balance
@@ -275,7 +279,7 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
                                                       updateExistsVals[
                                                          fieldGLRunning.columnName
                                                       ] =
-                                                         nextGlInfo[
+                                                         updateExistsVals[
                                                             fieldGLStarting
                                                                .columnName
                                                          ] +
@@ -296,7 +300,7 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
                                                       updateExistsVals[
                                                          fieldGLRunning.columnName
                                                       ] =
-                                                         nextGlInfo[
+                                                         updateExistsVals[
                                                             fieldGLStarting
                                                                .columnName
                                                          ] -
@@ -332,7 +336,7 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
                                                       this.glObject.id,
                                                       "ab.datacollection.update",
                                                       {
-                                                         objectId: this.fpObject
+                                                         objectId: this.glObject
                                                             .id,
                                                          data: updatedExistsGl,
                                                       }
