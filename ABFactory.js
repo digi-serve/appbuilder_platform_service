@@ -308,8 +308,6 @@ class ABFactory extends EventEmitter {
             return moment(date).utc().format("YYYY-MM-DD HH:mm:ss");
          },
       };
-
-      this.init();
    }
 
    init() {
