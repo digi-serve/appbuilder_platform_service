@@ -6,33 +6,12 @@
  */
 
 const _ = require("lodash");
-const EventEmitter = require("events").EventEmitter;
-const path = require("path");
+const Knex = require("knex");
 const uuidv4 = require("uuid");
 
-const ABApplication = require("./platform/ABApplication");
-const ABDefinition = require("./platform/ABDefinition");
-const ABFieldManager = require("./core/ABFieldManager");
-const ABIndex = require("./platform/ABIndex");
-const ABObject = require(path.join(__dirname, "platform", "ABObject"));
-// prettier-ignore
-const ABObjectExternal = require(path.join(__dirname, "platform", "ABObjectExternal"));
-// prettier-ignore
-const ABObjectImport = require(path.join(__dirname, "platform", "ABObjectImport"));
-const ABDataCollection = require("./platform/ABDataCollection");
-// prettier-ignore
-const ABObjectQuery = require(path.join(__dirname, "platform", "ABObjectQuery"));
+var ABFactoryCore = require("./core/ABFactoryCore");
 
-const ABProcess = require("./platform/ABProcess");
-const ABProcessParticipant = require("./platform/process/ABProcessParticipant");
-const ABProcessLane = require("./platform/process/ABProcessLane");
-const ABProcessTaskManager = require("./core/process/ABProcessTaskManager");
-
-// const ABRole = require("../platform/ABRole");
-
-const RowFilter = require("./platform/RowFilter");
-
-class ABFactory extends EventEmitter {
+class ABFactory extends ABFactoryCore {
    constructor(definitions, DefinitionManager, req) {
       /**
        * @param {hash} definitions
@@ -51,11 +30,7 @@ class ABFactory extends EventEmitter {
        *        Should be created by the
        */
 
-      super();
-      this.setMaxListeners(0);
-
-      this._definitions = definitions;
-      // {hash}  { ABDefinition.id : {ABDefinition} }
+      super(definitions);
 
       this.Definitions = DefinitionManager;
       // {obj} the provided interface for working with the ABDefinition table.
@@ -69,37 +44,6 @@ class ABFactory extends EventEmitter {
       // an instance of a {Knex} object that is tied to this Tenant's MySQL
       // connection settings. The base definition is found in config/local.js
       // and can be returned by the this.req object.
-
-      //
-      //
-      // Manage our working objects
-      //
-
-      this._allApplications = [];
-      // {array} of all the ABApplication(s) in our site.
-
-      this._allObjects = [];
-      // {array} of all the ABObject(s) in our site.
-
-      this._allProcesses = [];
-      // {array} of all the ABProcess(s) in our site.
-
-      this._allQueries = [];
-      // {array} of all the ABObjectQuery(s) in our site.
-
-      this._allDatacollections = [];
-      // {array} of all the ABDataCollection(s) in our site.
-
-      //
-      // Class References
-      //
-      this.Class = {
-         ABObject,
-         ABObjectExternal,
-         ABObjectImport,
-         ABObjectQuery,
-         // ABRole      // Do we need this anymore?
-      };
 
       //
       // Config Data
@@ -127,7 +71,9 @@ class ABFactory extends EventEmitter {
           */
          connection: () => {
             if (!this._knexConn) {
-               var tenantDB = this.req.tenantDB();
+               // NOTE: .tenantDB() returns the db name enclosed with ` `
+               // our KNEX connection doesn't want that for the DB Name:
+               var tenantDB = this.req.tenantDB().replaceAll("`", "");
                if (!tenantDB) {
                   throw new Error(
                      `ABFactory.Knex.connection(): Could not find Tenant DB information for id[${this.req.tenantID()}]`
@@ -140,7 +86,7 @@ class ABFactory extends EventEmitter {
                   );
                }
 
-               this._knexConn = require("knex")({
+               this._knexConn = Knex({
                   client: "mysql",
                   connection: {
                      host: config.host,
@@ -310,85 +256,15 @@ class ABFactory extends EventEmitter {
       };
    }
 
-   init() {
-      let allDefinitions = Object.keys(this._definitions).map(
-         (k) => this._definitions[k]
-      );
-      // {array} all our definitions in an Array format.
-
-      // make sure our definitions.json field is an {} and not string
-      allDefinitions.forEach((d) => {
-         if (typeof d.json == "string") {
-            try {
-               d.json = JSON.parse(d.json);
-            } catch (e) {
-               console.log(e);
-            }
-         }
-      });
-
-      //
-      // Prepare our Objects
-      //
-      let allObjects = allDefinitions.filter((def) => {
-         return def.type == "object";
-      });
-      (allObjects || []).forEach((defObj) => {
-         this._allObjects.push(this.objectNew(defObj.json));
-      });
-
-      //
-      // Prepare our Queries
-      //
-      let allQueries = allDefinitions.filter((def) => {
-         return def.type == "query";
-      });
-      (allQueries || []).forEach((defQry) => {
-         this._allQueries.push(this.queryNew(defQry.json));
-      });
-
-      //
-      // Prepare our DataCollections
-      //
-      let allDCs = allDefinitions.filter((def) => {
-         return def.type == "datacollection";
-      });
-      (allDCs || []).forEach((def) => {
-         this._allDatacollections.push(this.datacollectionNew(def.json));
-      });
-
-      //
-      // Prepare our Processes
-      //
-      let allProcesses = allDefinitions.filter((def) => {
-         return def.type == "process";
-      });
-      (allProcesses || []).forEach((def) => {
-         this._allProcesses.push(this.processNew(def.json));
-      });
-
-      //
-      // Prepare our Applications
-      //
-      let appDefs = allDefinitions.filter((def) => {
-         return def.type == "application";
-      });
-      appDefs.forEach((app) => {
-         this._allApplications.push(this.applicationNew(app.json));
-      });
-   }
+   // init() {
+   // super.init().then(()=>{
+   //    // perform any local setups here.
+   // });
+   // }
 
    //
    // Definitions
    //
-   definition(id) {
-      var errDepreciated = new Error(
-         "ABFactory.definition() is Depreciated.  Use .definitionForID() instead."
-      );
-      console.error(errDepreciated);
-
-      return this.definitionForID(id);
-   }
 
    /**
     * definiitonCreate(def)
@@ -421,39 +297,6 @@ class ABFactory extends EventEmitter {
    }
 
    /**
-    * definitionForID(id)
-    * return an ABDefinition.json value ready for our objects to use.
-    * @param {string} id
-    *        the uuid of the ABDefinition to delete
-    * @param {bool} isRaw
-    *        indicates if we want the full ABDefinition, or the .json param
-    *        true : returns full ABDefinition value.
-    *        false: returns the .json parameter used by most ABObjects.
-    * @return {Promise}
-    */
-   definitionForID(id, isRaw = false) {
-      if (this._definitions[id]) {
-         if (isRaw) {
-            return this._definitions[id];
-         } else {
-            return this._definitions[id].json;
-         }
-      }
-      return null;
-   }
-
-   /**
-    * definitionNew(values)
-    * return an ABDefinition object tied to this Tenant.
-    * @param {obj} values
-    *        The value hash of the ABDefinition object to create.
-    * @return {ABDefinition}
-    */
-   definitionNew(values) {
-      return new ABDefinition(values, this);
-   }
-
-   /**
     * definitionUpdate(id, def)
     * update an existing ABDefinition
     * @param {string} id
@@ -472,236 +315,6 @@ class ABFactory extends EventEmitter {
    //
    // ABObjects
    //
-   applications(fn = () => true) {
-      return (this._allApplications || []).filter(fn);
-   }
-
-   applicationNew(values) {
-      return new ABApplication(values, this);
-   }
-
-   /**
-    * @method datacollections()
-    * return an array of all the ABDataCollection for this ABApplication.
-    * @param {fn} filter
-    *        a filter fn to return a set of ABDataCollection that
-    *        this fn returns true for.
-    * @return {array}
-    *        array of ABDataCollection
-    */
-   datacollections(filter = () => true) {
-      return (this._allDatacollections || []).filter(filter);
-   }
-
-   /**
-    * @method datacollectionByID()
-    * returns a single ABDatacollection that matches the given ID.
-    * @param {string} ID
-    *        the .id/.name/.label of the ABDatacollection we are searching
-    *        for.
-    * @return {ABDatacollection}
-    *        the matching ABDatacollection object if found
-    *        {null} if not found.
-    */
-   datacollectionByID(ID) {
-      // an undefined or null ID should not match any DC.
-      if (!ID) return null;
-
-      return this.datacollections((dc) => {
-         return dc.id == ID || dc.name == ID || dc.label == ID;
-      })[0];
-   }
-
-   /**
-    * @method datacollectionNew()
-    * create a new instance of ABDataCollection
-    * @param {obj} values
-    *        the initial values for the DC
-    * @return {ABDatacollection}
-    */
-   datacollectionNew(values) {
-      var dc = new ABDataCollection(values, this);
-      dc.on("destroyed", () => {
-         // make sure it is no longer in our internal list
-         this._allDatacollections = this._allDatacollections.filter(
-            (d) => d.id != dc.id
-         );
-      });
-      return dc;
-   }
-
-   /**
-    * @method fieldNew()
-    * return an instance of a new (unsaved) ABField that is tied to a given
-    * ABObject.
-    * NOTE: this new field is not included in our this.fields until a .save()
-    * is performed on the field.
-    * @param {obj} values  the initial values for this field.
-    *                - { key:'{string}'} is required
-    * @param {ABObject} object  the parent object this field belongs to.
-    * @return {ABField}
-    */
-   fieldNew(values, object) {
-      // NOTE: ABFieldManager returns the proper ABFieldXXXX instance.
-      return ABFieldManager.newField(values, object);
-   }
-
-   /**
-    * @method indexNew()
-    * return an instance of a new (unsaved) ABIndex.
-    * @return {ABIndex}
-    */
-   indexNew(values, object) {
-      return new ABIndex(values, object);
-   }
-
-   /**
-    * @method objects()
-    * return an array of all the ABObjects for this ABApplication.
-    * @param {fn} filter
-    *        a filter fn to return a set of ABObjects that this fn
-    *        returns true for.
-    * @return {array}
-    *        array of ABObject
-    */
-   objects(filter = () => true) {
-      return (this._allObjects || []).filter(filter);
-   }
-
-   /**
-    * @method objectByID()
-    * return the specific object requested by the provided id.
-    * @param {string} ID
-    * @return {obj}
-    */
-   objectByID(ID) {
-      return this.objects((o) => {
-         return o.id == ID || o.name == ID || o.label == ID;
-      })[0];
-   }
-
-   /**
-    * @method objectNew()
-    * return an instance of a new (unsaved) ABObject that is tied to this
-    * ABApplication.
-    * NOTE: this new object is not included in our this.objects until a .save()
-    * is performed on the object.
-    * @return {ABObject}
-    */
-   objectNew(values) {
-      if (values.isExternal == true) return new ABObjectExternal(values, this);
-      else if (values.isImported == true)
-         return new ABObjectImport(values, this);
-      else return new ABObject(values, this);
-   }
-
-   objectRole() {
-      return this.objectByID("c33692f3-26b7-4af3-a02e-139fb519296d");
-   }
-
-   objectScope() {
-      return this.objectByID("af10e37c-9b3a-4dc6-a52a-85d52320b659");
-   }
-
-   objectUser() {
-      return this.objectByID("228e3d91-5e42-49ec-b37c-59323ae433a1");
-   }
-
-   processes(filter = () => true) {
-      return (this._allProcesses || []).filter(filter);
-   }
-
-   processNew(id) {
-      var processDef = this.definitionForID(id);
-      if (processDef) {
-         return new ABProcess(processDef, this);
-      }
-      return null;
-   }
-
-   /**
-    * @method processElementNew(id)
-    * return an instance of a new ABProcessOBJ that is tied to a given
-    * ABProcess.
-    * @param {string} id
-    *        the ABDefinition.id of the element we are creating
-    * @param {ABProcess} process
-    *        the process this task is a part of.
-    * @return {ABProcessTask}
-    */
-   processElementNew(id, process) {
-      var taskDef = this.definitionForID(id);
-      if (taskDef) {
-         switch (taskDef.type) {
-            case ABProcessParticipant.defaults().type:
-               return new ABProcessParticipant(taskDef, process, this);
-            // break;
-
-            case ABProcessLane.defaults().type:
-               return new ABProcessLane(taskDef, process, this);
-            // break;
-
-            default:
-               // default to a Task
-               return ABProcessTaskManager.newTask(taskDef, process, this);
-            // break;
-         }
-      }
-      return null;
-   }
-
-   /**
-    * @method queries()
-    * return an array of all the ABObjectQuery(s).
-    * @param {fn} filter
-    *        a filter fn to return a set of ABObjectQuery(s) that this fn
-    *        returns true for.
-    * @return {array}
-    *        array of ABObjectQuery
-    */
-   queries(filter = () => true) {
-      return (this._allQueries || []).filter(filter);
-   }
-   queriesAll() {
-      console.error(
-         "ABFactory.queriesAll() Depreciated! Use .queries() instead. "
-      );
-      return this.queries();
-   }
-
-   /**
-    * @method queryByID()
-    * return the specific query requested by the provided id.
-    * NOTE: this method has been extended to allow .name and .label
-    * as possible lookup values.
-    * @param {string} ID
-    * @return {ABObjectQuery}
-    */
-   queryByID(ID) {
-      return this.queries((q) => {
-         return q.id == ID || q.name == ID || q.label == ID;
-      })[0];
-   }
-
-   /**
-    * @method queryNew()
-    * return an instance of a new (unsaved) ABObjectQuery that is tied to this
-    * ABFactory.
-    * @return {ABObjectQuery}
-    */
-   queryNew(values) {
-      return new ABObjectQuery(values, this);
-   }
-
-   /**
-    * @method rowfilterNew()
-    * return an instance of a new RowFilter that is tied to this
-    * ABFactory.
-    * @return {RowFilter}
-    */
-   rowfilterNew(App, idBase) {
-      return new RowFilter(App, idBase, this);
-   }
 
    //
    // Utilities
@@ -716,6 +329,18 @@ class ABFactory extends EventEmitter {
          console.error(message);
       }
       this.emit("error", message);
+   }
+
+   merge(...params) {
+      return _.merge(...params);
+   }
+
+   orderBy(...params) {
+      return _.orderBy(...params);
+   }
+
+   uniq(...params) {
+      return _.uniq(...params);
    }
 
    uuid() {
