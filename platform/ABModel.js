@@ -5,7 +5,8 @@ const ABFieldDateTime = require("../core/dataFields/ABFieldDateTimeCore");
 
 const _ = require("lodash");
 
-var __ModelPool = {}; // reuse any previously created Model connections
+var __ModelPool = {};
+// reuse any previously created Model connections
 // to minimize .knex bindings (and connection pools!)
 
 var conditionFields = ["sort", "offset", "limit", "populate"];
@@ -371,7 +372,9 @@ module.exports = class ABModel extends ABModelCore {
          var connectionName = this.object.isExternal
             ? this.object.connName
             : undefined;
-         var knex = ABMigration.connection(connectionName);
+         // var knex = ABMigration.connection(connectionName);
+         // TODO: expand connections for External Objects
+         var knex = this.AB.Knex.connection(connectionName);
 
          // Compile our jsonSchema from our DataFields
          // jsonSchema is only used by Objection.js to validate data before
@@ -454,7 +457,7 @@ module.exports = class ABModel extends ABModelCore {
          var linkField = f.fieldLink;
          if (linkField == null) return;
 
-         var linkModel = linkObject.modelAPI().modelKnex();
+         var linkModel = linkObject.model().modelKnex();
          var relationName = f.relationName();
 
          // 1:1
@@ -687,7 +690,7 @@ module.exports = class ABModel extends ABModelCore {
                            field.dbPrefix().replace(/`/g, "")
                         );
 
-                        condition.key = ABMigration.connection().raw(
+                        condition.key = this.AB.Knex.connection(/* connectionName */).raw(
                            'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({transCol}, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({transCol}, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
                               .replace(/{transCol}/g, transCol)
                               .replace(/{languageCode}/g, userData.languageCode)
@@ -1055,7 +1058,7 @@ module.exports = class ABModel extends ABModelCore {
 
    queryPopulate(query, populate) {
       // query relation data
-      if (query.eager) {
+      if (query.withGraphFetched) {
          var relationNames = [],
             excludeIds = [];
 
@@ -1072,7 +1075,7 @@ module.exports = class ABModel extends ABModelCore {
                .forEach((f) => {
                   let relationName = f.relationName();
 
-                  // Exclude .id column by adding (unselectId) function name to .eager()
+                  // Exclude .id column by adding (unselectId) function name to .withGraphFetched()
                   if (f.datasourceLink && f.datasourceLink.PK() === "uuid") {
                      relationName += "(unselectId)";
                   }
@@ -1100,7 +1103,7 @@ module.exports = class ABModel extends ABModelCore {
          }
 
          // if (relationNames.length > 0) console.log(relationNames);
-         query.eager(`[${relationNames.join(", ")}]`, {
+         query.withGraphFetched(`[${relationNames.join(", ")}]`, {
             // if the linked object's PK is uuid, then exclude .id
             unselectId: (builder) => {
                builder.omit(["id"]);

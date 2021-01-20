@@ -80,7 +80,7 @@ module.exports = class ABClassApplication extends ABApplicationCore {
       this.datacollectionIDs.forEach((dID) => {
          if (ids.indexOf(dID) > -1) return;
 
-         var def = this.AB.definitionForID(dID);
+         var def = this.AB.definitionByID(dID);
          if (def) {
             ids.push(dID);
             if (def.settings.datasourceID) {
@@ -106,14 +106,14 @@ module.exports = class ABClassApplication extends ABApplicationCore {
          if (ids.indexOf(view.id) > -1) return;
          ids.push(view.id);
          (view.pageIDs || []).forEach((pid) => {
-            var pdef = this.AB.definitionForID(pid);
+            var pdef = this.AB.definitionByID(pid);
             if (pdef) {
                parseView(pdef);
             }
          });
 
          (view.viewIDs || []).forEach((vid) => {
-            var vdef = this.AB.definitionForID(vid);
+            var vdef = this.AB.definitionByID(vid);
             if (vdef) {
                parseView(vdef);
             }
@@ -122,7 +122,7 @@ module.exports = class ABClassApplication extends ABApplicationCore {
 
       var pageIDs = this._pages.map((p) => p.id);
       (pageIDs || []).forEach((pid) => {
-         var pdef = this.AB.definitionForID(pid);
+         var pdef = this.AB.definitionByID(pid);
          if (pdef) {
             parseView(pdef);
          }

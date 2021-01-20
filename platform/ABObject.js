@@ -172,8 +172,9 @@ module.exports = class ABClassObject extends ABObjectCore {
    ///
 
    dbSchemaName() {
-      // return sails.config.connections["appBuilder"].database;
-      return sails.config.connections[this.connName || "appBuilder"].database;
+      // NOTE: .tenantDB() returns the db name enclosed with ` `
+      // our KNEX/Objection.js tools perform their own quoting:
+      return this.AB.req.tenantDB().replaceAll("`", "");
    }
 
    dbTableName(prefixSchema = false) {
@@ -344,18 +345,22 @@ module.exports = class ABClassObject extends ABObjectCore {
       // return this.tableName.replace(/[^a-zA-Z0-9]/g, ""); // remove special characters to allow model name to be class name
    }
 
-   // TODO: this should become model(), and current model() should become
-   // modelKnex();
-   modelAPI() {
-      return super.model();
-   }
+   /**
+    * model()
+    * return an instance of ABModel that can operate the data for this ABObject
+    * @return {ABModel}
+    */
+   // model() {
+   //    return super.model();
+   // }
 
    /**
     * @method model
     * return an objection.js model for working with the data in this Object.
     * @return {Objection.Model}
     */
-   model() {
+   /*
+   modelKnex() {
       var modelName = this.modelName(),
          tableName = this.dbTableName(true);
 
@@ -417,6 +422,7 @@ module.exports = class ABClassObject extends ABObjectCore {
 
       return __ModelPool[modelName];
    }
+   */
 
    modelRelation() {
       var tableName = this.dbTableName(true);
@@ -919,7 +925,11 @@ module.exports = class ABClassObject extends ABObjectCore {
                               return next(false);
                            }
                            // Anonymous
-                           else if (scopeWhere.rules.length == 0) {
+                           else if (
+                              // It has to be ABObject (not ABObjectQuery)
+                              !this.viewName &&
+                              scopeWhere.rules.length == 0
+                           ) {
                               return next(true);
                            }
                            // Process filter policies
@@ -1694,7 +1704,7 @@ module.exports = class ABClassObject extends ABObjectCore {
          // let ABObjectScope = ABObjectCache.get(SCOPE_OBJECT_ID);
 
          // ABObjectRole.queryFind({
-         ABObjectRole.modelAPI()
+         ABObjectRole.model()
             .findAll({
                where: {
                   glue: "and",
