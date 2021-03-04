@@ -20,16 +20,23 @@ module.exports = class ABModel extends ABModelCore {
     * @param {obj} values
     *    A hash of the new values for this entry.
     * @param {Knex.Transaction?} trx - [optional]
-    *
+    * @param {ABUtil.reqAB} req
+    *    The request object associated with the current tenant/request
     * @return {Promise} resolved with the result of the find()
     */
-   create(values, trx = null) {
+   create(values, trx = null, condDefaults = null, req = null) {
       values = this.object.requestParams(values);
 
+      // make sure a UUID is set
       var PK = this.object.PK();
       if (PK === "uuid" && values[PK] == null) {
          values[PK] = this.AB.uuid();
       }
+
+      // created_at & updated_at
+      var date = this.AB.rules.toSQLDateTime(new Date());
+      values["created_at"] = values["created_at"] || date;
+      values["updated_at"] = values["updated_at"] || date;
 
       let validationErrors = this.object.isValidData(values);
       if (validationErrors.length > 0) {
@@ -48,30 +55,79 @@ module.exports = class ABModel extends ABModelCore {
          query
             .insert(values)
             .then((returnVals) => {
+               if (req) {
+                  req.log("Create successful. Now loading full value from DB.");
+               }
+
                // make sure we get a fully updated value for
                // the return value
-               this.findAll({
-                  where: {
-                     glue: "and",
-                     rules: [
-                        {
-                           key: PK,
-                           rule: "equals",
-                           value: returnVals[PK],
-                        },
-                     ],
+               this.findAll(
+                  {
+                     where: {
+                        glue: "and",
+                        rules: [
+                           {
+                              key: PK,
+                              rule: "equals",
+                              value: returnVals[PK],
+                           },
+                        ],
+                     },
+                     offset: 0,
+                     limit: 1,
+                     populate: true,
                   },
-                  offset: 0,
-                  limit: 1,
-                  populate: true,
-               })
+                  condDefaults,
+                  req
+               )
                   .then((rows) => {
                      // this returns an [] so pull 1st value:
                      resolve(rows[0]);
                   })
                   .catch(reject);
             })
-            .catch(reject);
+            .catch((error) => {
+               // populate any error messages with the SQL of this
+               // query:
+               error._sql = query.toString();
+               reject(error);
+            });
+      });
+   }
+
+   /**
+    * @method delete
+    * performs a delete operation
+    * @param {string} id
+    *    the primary key for this update operation.
+    * @param {Knex.Transaction?} trx - [optional]
+    *
+    * @return {Promise} resolved with {int} numRows : the # rows affected
+    */
+   delete(id, trx = null) {
+      return new Promise((resolve, reject) => {
+         // get a Knex Query Object
+         let query = this.modelKnex().query();
+
+         // Used by knex.transaction, the transacting method may be chained to any query and
+         // passed the object you wish to join the query as part of the transaction for.
+         if (trx) query = query.transacting(trx);
+
+         var PK = this.object.PK();
+
+         // update our value
+         query
+            .delete()
+            .where(PK, "=", id)
+            .then((countRows) => {
+               resolve(countRows);
+            })
+            .catch((error) => {
+               // populate any error messages with the SQL of this
+               // query:
+               error._sql = query.toString();
+               reject(error);
+            });
       });
    }
 
@@ -79,30 +135,30 @@ module.exports = class ABModel extends ABModelCore {
     * @method findAll
     * performs a data find with the provided condition.
     * @param {obj} cond
-    *		A set of optional conditions to add to the find():
+    *    A set of optional conditions to add to the find():
     * @param {obj} conditionDefaults
-    *		A hash of default condition values.
-    *		conditionDefaults.languageCode {string} the default language of
-    *			the multilingual data to return.
-    *		conditionDefaults.username {string} the username of the user
-    *			we should reference on any user based condition
+    *    A hash of default condition values.
+    *    conditionDefaults.languageCode {string} the default language of
+    *       the multilingual data to return.
+    *    conditionDefaults.username {string} the username of the user
+    *       we should reference on any user based condition
     * @return {Promise} resolved with the result of the find()
     */
-   findAll(cond, conditionDefaults) {
+   findAll(cond, conditionDefaults, req) {
       // make sure cond is defined, and in the EXPANDED format:
-      //	cond.where : {obj}
-      //		 queryBuilder condition format. This must ALREADY be reduced to
-      //		 the actual conditions.  No placeholders at this point.
-      //	cond.sort : {array}
-      //		 an array of { key:{field.id}, dir:["ASC", "DESC"] } sort
-      //		 definitions
+      // cond.where : {obj}
+      //     queryBuilder condition format. This must ALREADY be reduced to
+      //     the actual conditions.  No placeholders at this point.
+      // cond.sort : {array}
+      //     an array of { key:{field.id}, dir:["ASC", "DESC"] } sort
+      //     definitions
       //  cond.offset: {int}
-      //		 the offset into the data set to start returning data.
+      //     the offset into the data set to start returning data.
       //  cond.limit: {int}
-      //		 the # of entries to return in this query
-      //	cond.populate: {bool}
-      //		 should we populate the connected fields of the entries
-      //		 returned?
+      //     the # of entries to return in this query
+      // cond.populate: {bool}
+      //     should we populate the connected fields of the entries
+      //     returned?
       cond = cond || {};
       var defaultCond = {
          // where: cond,
@@ -151,6 +207,12 @@ module.exports = class ABModel extends ABModelCore {
 
          // compile the conditions into the Knex Query
          this.queryConditions(query, cond.where, conditionDefaults);
+         this.querySelectFormulaFields(query, conditionDefaults);
+         this.queryIncludeExternalMultilingualFields(
+            query,
+            cond.where,
+            cond.sort
+         );
 
          // add sort into into Query
          if (cond.sort) {
@@ -168,6 +230,10 @@ module.exports = class ABModel extends ABModelCore {
          // populate the data?
          this.queryPopulate(query, cond.populate);
 
+         // TODO: test to see if we can pull the query.toString()
+         // during the .catch() handler. Otherwise we movie it here.
+         // var sql = query.toString();
+
          // perform the operation
          query
             .then((data) => {
@@ -175,7 +241,73 @@ module.exports = class ABModel extends ABModelCore {
                this.normalizeData(data);
                resolve(data);
             })
-            .catch(reject);
+            .catch((error) => {
+               // populate any error messages with the SQL of this
+               // query:
+               error._sql = query.toString();
+               reject(error);
+            });
+      });
+   }
+
+   /**
+    * @method findCount
+    * performs a data find to get the total Count of a given condition.
+    * @param {obj} cond
+    *    A set of optional conditions to add to the find():
+    * @param {obj} conditionDefaults
+    *    A hash of default condition values.
+    *    conditionDefaults.languageCode {string} the default language of
+    *       the multilingual data to return.
+    *    conditionDefaults.username {string} the username of the user
+    *       we should reference on any user based condition
+    * @return {Promise} resolved with the result of the find()
+    */
+   findCount(cond, conditionDefaults, req) {
+      // make sure cond is defined, and in the EXPANDED format:
+      // cond.where : {obj}
+      //     queryBuilder condition format. This must ALREADY be reduced to
+      //     the actual conditions.  No placeholders at this point.
+      cond = cond || {};
+
+      // conditionDefaults is optional.  Some system tasks wont provide this.
+      // but we need to provide some defaults to the queryConditions() to
+      // process
+      conditionDefaults = conditionDefaults || {};
+      conditionDefaults.languageCode =
+         conditionDefaults.languageCode ||
+         // sails.config.appdev["lang.default"] ||
+         "en";
+      conditionDefaults.username = conditionDefaults.username || "_system_";
+
+      var tableName = this.object.dbTableName(true);
+
+      return new Promise((resolve, reject) => {
+         // get a Knex Query Object
+         let query = this.modelKnex().query();
+
+         // compile the conditions into the Knex Query
+         this.queryConditions(query, cond.where, conditionDefaults);
+
+         let pkField = `${tableName}.${this.object.PK()}`;
+
+         query
+            .eager("")
+            .clearSelect()
+            .countDistinct(`${pkField} as count`)
+            .whereNotNull(pkField)
+            .first()
+            .then((data) => {
+               // data = { count: 0 }
+               // we just want to return the #
+               resolve(data.count);
+            })
+            .catch((error) => {
+               // populate any error messages with the SQL of this
+               // query:
+               error._sql = query.toString();
+               reject(error);
+            });
       });
    }
 
@@ -190,7 +322,21 @@ module.exports = class ABModel extends ABModelCore {
     *
     * @return {Promise} resolved with the result of the find()
     */
-   update(id, values, trx = null) {
+   update(id, values, userData, trx = null) {
+      let updateParams = this.object.requestParams(values);
+      // {valueHash} updateParams
+      // return the parameters from the input params that relate to this object
+      // exclude connectObject data field values
+
+      let updateRelationParams = this.object.requestRelationParams(values);
+      // {valueHash} updateRelationParams
+      // return the parameters of connectObject data field values
+
+      let transParams = this.AB.cloneDeep(updateParams.translations);
+      // {array} transParams
+      // get translations values for the external object
+      // it will update to translations table after model values updated
+
       return new Promise((resolve, reject) => {
          // get a Knex Query Object
          let query = this.modelKnex().query();
@@ -203,33 +349,82 @@ module.exports = class ABModel extends ABModelCore {
 
          // update our value
          query
-            .patch(values)
+            .patch(updateParams)
             .where(PK, id)
             .then((returnVals) => {
-               // make sure we get a fully updated value for
-               // the return value
-               this.findAll({
-                  where: {
-                     glue: "and",
-                     rules: [
+               // track logging
+               /*
+//// TODO: transaction Logging:
+            ABTrack.logUpdate({
+               objectId: this.object.id,
+               rowId: id,
+               username: userData.username,
+               data: Object.assign(
+                  updateParams,
+                  updateRelationParams,
+                  transParams
+               ),
+            });
+            */
+
+               // create a new query when use same query, then new data are created duplicate
+               let updateTasks = updateRelationValues(
+                  this.AB,
+                  this.object,
+                  id,
+                  updateRelationParams
+               );
+
+               // update translation of the external table
+               if (this.object.isExternal || this.object.isImported)
+                  updateTasks.push(
+                     updateTranslationsValues(
+                        this.AB,
+                        this.object,
+                        id,
+                        transParams
+                     )
+                  );
+
+               // updateTasks
+               //    .reduce((promiseChain, currTask) => {
+               //       return promiseChain.then(currTask);
+               //    }, Promise.resolve([]))
+               Promise.all(updateTasks)
+                  // Query the new row to response to client
+                  .then((values) => {
+                     return this.findAll(
                         {
-                           key: PK,
-                           rule: "equals",
-                           value: id,
+                           where: {
+                              glue: "and",
+                              rules: [
+                                 {
+                                    key: PK,
+                                    rule: "equals",
+                                    value: id,
+                                 },
+                              ],
+                           },
+                           offset: 0,
+                           limit: 1,
+                           populate: true,
                         },
-                     ],
-                  },
-                  offset: 0,
-                  limit: 1,
-                  populate: true,
-               })
-                  .then((rows) => {
-                     // this returns an [] so pull 1st value:
-                     resolve(rows[0]);
+                        userData
+                     ).then((newItem) => {
+                        let result = newItem[0];
+                        resolve(result);
+                     });
                   })
-                  .catch(reject);
+                  .catch((err) => {
+                     reject(err);
+                  });
             })
-            .catch(reject);
+            .catch((error) => {
+               // populate any error messages with the SQL of this
+               // query:
+               error._sql = query.toString();
+               reject(error);
+            });
       });
    }
 
@@ -460,8 +655,13 @@ module.exports = class ABModel extends ABModelCore {
          var linkModel = linkObject.model().modelKnex();
          var relationName = f.relationName();
 
+         var LinkType = `${f.settings.linkType}:${f.settings.linkViaType}`;
+         // {string} LinkType
+         // represent the connection type as a string:
+         // values: [ "one:one", "many:one", "one:many", "many:many" ]
+
          // 1:1
-         if (f.settings.linkType == "one" && f.settings.linkViaType == "one") {
+         if (LinkType == "one:one") {
             var sourceTable, targetTable, targetPkName, relation, columnName;
 
             if (f.settings.isSource == true) {
@@ -491,10 +691,7 @@ module.exports = class ABModel extends ABModelCore {
             };
          }
          // M:N
-         else if (
-            f.settings.linkType == "many" &&
-            f.settings.linkViaType == "many"
-         ) {
+         else if (LinkType == "many:many") {
             // get join table name
             var joinTablename = f.joinTableName(true),
                joinColumnNames = f.joinColumnNames(),
@@ -542,10 +739,7 @@ module.exports = class ABModel extends ABModelCore {
             };
          }
          // 1:M
-         else if (
-            f.settings.linkType == "one" &&
-            f.settings.linkViaType == "many"
-         ) {
+         else if (LinkType == "one:many") {
             relationMappings[relationName] = {
                relation: Model.BelongsToOneRelation,
                modelClass: linkModel,
@@ -559,10 +753,7 @@ module.exports = class ABModel extends ABModelCore {
             };
          }
          // M:1
-         else if (
-            f.settings.linkType == "many" &&
-            f.settings.linkViaType == "one"
-         ) {
+         else if (LinkType == "many:one") {
             relationMappings[relationName] = {
                relation: Model.HasManyRelation,
                modelClass: linkModel,
@@ -580,22 +771,36 @@ module.exports = class ABModel extends ABModelCore {
       return relationMappings;
    }
 
-   queryConditions(query, where, userData) {
+   /**
+    * queryConditions()
+    * Step through each of our where conditions and register the proper
+    * Knex query condition.
+    * @param {Knex} query
+    * @param {obj} where
+    *    a QueryBuilder compatible condition object
+    * @param {obj} userData
+    *    The included user data for this request.
+    */
+   queryConditions(query, where, userData, req) {
       // Apply filters
       if (!_.isEmpty(where)) {
-         sails.log.info(
-            "ABModel.queryConditions(): .where condition:",
-            JSON.stringify(where, null, 4)
-         );
+         if (req) {
+            req.log(
+               "ABModel.queryConditions(): .where condition:",
+               JSON.stringify(where, null, 4)
+            );
+         }
 
          // @function parseCondition
          // recursive fn() to step through each of our provided conditions and
          // translate them into query.XXXX() operations.
          // @param {obj} condition  a QueryBuilder compatible condition object
          // @param {ObjectionJS Query} Query the query object to perform the operations.
-         var parseCondition = (condition, Query) => {
+         // @param {string} glue ["and" || "or"]- needs to set .orWhere or .where inside Grouping query of knex. https://github.com/knex/knex/issues/1254
+         var parseCondition = (condition, Query, glue = "and") => {
             // 'have_no_relation' condition will be applied later
-            if (condition.rule == "have_no_relation") return;
+            if (condition == null || condition.rule == "have_no_relation")
+               return;
 
             // FIX: some improper inputs:
             // if they didn't provide a .glue, then default to 'and'
@@ -608,30 +813,22 @@ module.exports = class ABModel extends ABModelCore {
             // if this is a grouping condition, then decide how to group and
             // process our sub rules:
             if (condition.glue) {
-               var nextCombineKey = "where";
+               var nextCombineKey = "andWhere";
                if (condition.glue == "or") {
                   nextCombineKey = "orWhere";
                }
-               (condition.rules || []).forEach((r) => {
-                  if (r && r.rules) {
-                     parseCondition(r, Query);
-                  } else {
-                     Query[nextCombineKey](function () {
-                        // NOTE: pass 'this' as the Query object
-                        // so we can perform embedded queries:
-                        // parseCondition(r, this);
 
-                        // 'this' is changed type QueryBuilder to QueryBuilderBase
-                        parseCondition(r, this); // Query
-                     });
-                  }
+               Query[nextCombineKey](function () {
+                  (condition.rules || []).forEach((r) => {
+                     parseCondition(r, this, condition.glue || "and");
+                  });
                });
 
                return;
             }
 
             // Convert field id to column name
-            if (this.AB.rules.isUuid(condition.key)) {
+            if (this.AB.rules.isUUID(condition.key)) {
                var field = this.object.fields((f) => {
                   return (
                      f.id == condition.key &&
@@ -677,7 +874,8 @@ module.exports = class ABModel extends ABModelCore {
                            .replace("{prefix}", prefix)
                            .replace("{languageCode}", userData.languageCode);
 
-                        Query.whereRaw(languageWhere);
+                        if (glue == "or") Query.orWhereRaw(languageWhere);
+                        else Query.whereRaw(languageWhere);
                      } else {
                         let transCol;
                         // If it is a query
@@ -716,9 +914,24 @@ module.exports = class ABModel extends ABModelCore {
                   }
 
                   // DATE (not DATETIME)
-                  else if (field.key == "date") {
+                  else if (
+                     field.key == "date" &&
+                     condition.rule != "last_days" &&
+                     condition.rule != "next_days"
+                  ) {
                      condition.key = `DATE(${condition.key})`;
                      condition.value = `DATE("${condition.value}")`;
+                  }
+
+                  // Search string value of FK column
+                  else if (
+                     field.key == "connectObject" &&
+                     (condition.rule == "contains" ||
+                        condition.rule == "not_contains" ||
+                        condition.rule == "equals" ||
+                        condition.rule == "not_equal")
+                  ) {
+                     this.convertConnectFieldCondition(field, condition);
                   }
                }
             }
@@ -787,9 +1000,11 @@ module.exports = class ABModel extends ABModelCore {
 
             // remove the field type from the rule
             var rule = condition.rule;
-            fieldTypes.forEach((f) => {
-               rule = rule.replace(f, "");
-            });
+            if (rule) {
+               fieldTypes.forEach((f) => {
+                  rule = rule.replace(f, "");
+               });
+            }
             condition.rule = rule;
             // basic case:  simple conversion
             var operator = conversionHash[condition.rule];
@@ -851,59 +1066,22 @@ module.exports = class ABModel extends ABModelCore {
                   break;
 
                case "is_current_user":
-                  if (userData.username == "_system_") {
-                     var systemUserError = new Error(
-                        'ABModel.queryConditions(): is_current_user condition being resolved with "_system_" user.'
-                     );
-                     systemUserError.objectID = this.object.id;
-                     systemUserError.code = "ESYSTEMUSERCONDITION";
-                     throw systemUserError;
-                     return;
-                  }
                   operator = "=";
                   value = quoteMe(userData.username);
-
                   break;
 
                case "is_not_current_user":
-                  if (userData.username == "_system_") {
-                     var systemUserError = new Error(
-                        'ABModel.queryConditions(): is_not_current_user condition being resolved with "_system_" user.'
-                     );
-                     systemUserError.objectID = this.object.id;
-                     systemUserError.code = "ESYSTEMUSERCONDITION";
-                     throw systemUserError;
-                     return;
-                  }
                   operator = "<>";
                   value = quoteMe(userData.username);
                   break;
 
                case "contain_current_user":
-                  if (userData.username == "_system_") {
-                     var systemUserError = new Error(
-                        'ABModel.queryConditions(): contain_current_user condition being resolved with "_system_" user.'
-                     );
-                     systemUserError.objectID = this.object.id;
-                     systemUserError.code = "ESYSTEMUSERCONDITION";
-                     throw systemUserError;
-                     return;
-                  }
                   columnName = `JSON_SEARCH(JSON_EXTRACT(${columnName}, '$[*].id'), 'one', '${userData.username}')`;
                   operator = "IS NOT";
                   value = "NULL";
                   break;
 
                case "not_contain_current_user":
-                  if (userData.username == "_system_") {
-                     var systemUserError = new Error(
-                        'ABModel.queryConditions(): not_contain_current_user condition being resolved with "_system_" user.'
-                     );
-                     systemUserError.objectID = this.object.id;
-                     systemUserError.code = "ESYSTEMUSERCONDITION";
-                     throw systemUserError;
-                     return;
-                  }
                   columnName = `JSON_SEARCH(JSON_EXTRACT(${columnName}, '$[*].id'), 'one', '${userData.username}')`;
                   operator = "IS";
                   value = "NULL";
@@ -922,9 +1100,16 @@ module.exports = class ABModel extends ABModelCore {
                case "in":
                   operator = "IN";
 
+                  // If condition.value is MySQL query command - (SELECT .. FROM ?)
+                  if (
+                     typeof condition.value == "string" &&
+                     RegExp("^[(].*[)]$").test(condition.value)
+                  ) {
+                     value = condition.value;
+                  }
                   // if we wanted an IN clause, but there were no values sent, then we
                   // want to make sure this condition doesn't return anything
-                  if (
+                  else if (
                      Array.isArray(condition.value) &&
                      condition.value.length > 0
                   ) {
@@ -946,9 +1131,16 @@ module.exports = class ABModel extends ABModelCore {
                case "not_in":
                   operator = "NOT IN";
 
+                  // If condition.value is MySQL query command - (SELECT .. FROM ?)
+                  if (
+                     typeof condition.value == "string" &&
+                     RegExp("^[(].*[)]$").test(condition.value)
+                  ) {
+                     value = condition.value;
+                  }
                   // if we wanted a NOT IN clause, but there were no values sent, then we
                   // want to make sure this condition returns everything (not filtered)
-                  if (
+                  else if (
                      Array.isArray(condition.value) &&
                      condition.value.length > 0
                   ) {
@@ -1008,7 +1200,8 @@ module.exports = class ABModel extends ABModelCore {
                   .replace("{input}", value != null ? value : "");
 
                // Now we add in our where
-               Query.whereRaw(whereRaw);
+               if (glue == "or") Query.orWhereRaw(whereRaw);
+               else Query.whereRaw(whereRaw);
             }
          };
 
@@ -1039,7 +1232,7 @@ module.exports = class ABModel extends ABModelCore {
 
             var field = this.object.fields((f) => f.id == r.key)[0];
 
-            var relation_name = AppBuilder.rules.toFieldRelationFormat(
+            var relation_name = this.AB.rules.toFieldRelationFormat(
                field.columnName
             );
 
@@ -1056,12 +1249,20 @@ module.exports = class ABModel extends ABModelCore {
       }
    } // queryConditions()
 
+   /**
+    * queryPopulate();
+    * tell our populate our connected fields.
+    * @param {Knex} query
+    * @param {bool | array} populate
+    *    Are we supposed to populate the connected fields?
+    *    false : to not populate any fields
+    *    true  : to populate all fields
+    *    [ field.columnName, ... ]: to populate specific fields
+    */
    queryPopulate(query, populate) {
       // query relation data
       if (query.withGraphFetched) {
-         var relationNames = [],
-            excludeIds = [];
-
+         var relationNames = [];
          if (populate) {
             this.object
                .connectFields()
@@ -1093,7 +1294,7 @@ module.exports = class ABModel extends ABModelCore {
                });
          }
 
-         // TODO: Move to ABObjectExternal
+         // Include any translations connections from external/imported objects
          if (
             !this.object.viewName &&
             (this.object.isExternal || this.object.isImported) &&
@@ -1103,7 +1304,7 @@ module.exports = class ABModel extends ABModelCore {
          }
 
          // if (relationNames.length > 0) console.log(relationNames);
-         query.withGraphFetched(`[${relationNames.join(", ")}]`, {
+         query.withGraphFetched(`[${relationNames.join(", ")}]`).modifiers({
             // if the linked object's PK is uuid, then exclude .id
             unselectId: (builder) => {
                builder.omit(["id"]);
@@ -1115,6 +1316,15 @@ module.exports = class ABModel extends ABModelCore {
       }
    }
 
+   /**
+    * querySort();
+    * tell our query to sort according to the provided .sort fields.
+    * @param {Knex} query
+    * @param {array} sort
+    *    Any included sort parameters that might include a multilingual field.
+    * @param {obj} userData
+    *    The included user data for this request.
+    */
    querySort(query, sort, userData) {
       if (!_.isEmpty(sort)) {
          sort.forEach((o) => {
@@ -1166,4 +1376,667 @@ module.exports = class ABModel extends ABModelCore {
          });
       }
    }
+
+   /**
+    * queryIncludeExternalMultilingualFields();
+    * helper to ensure multilingual data from external tables are also included
+    * in our results.
+    * @param {Knex} query
+    * @param {obj} where
+    *    The where condition in QueryBuilder format. eg:
+    *    {
+    *      glue:"xxx",
+    *      rules:[]
+    *    }
+    * @param {array} sort
+    *    Any included sort parameters that might include a multilingual field.
+    */
+   queryIncludeExternalMultilingualFields(query, where, sort) {
+      // Special case
+      if (!this.object.viewName) {
+         // NOTE: check if this object is a query, then it includes .translations already
+         var multilingualFields = this.object.fields(
+            (f) =>
+               f.isMultilingual && (f.object.isExternal || f.object.isImported)
+         );
+         multilingualFields.forEach((f) => {
+            let whereRules = where.rules || [];
+            let sortRules = sort || [];
+
+            if (
+               whereRules.filter((r) => r.key == f.id)[0] ||
+               (sortRules.filter && sortRules.filter((o) => o.key == f.id)[0])
+            ) {
+               let transTable = f.object.dbTransTableName();
+
+               let prefix = "";
+               let prefixTran = "";
+               let tableTran = "";
+               if (f.alias) {
+                  prefix = "{alias}".replace("{alias}", f.alias);
+                  prefixTran = "{alias}_Trans".replace("{alias}", f.alias);
+                  tableTran = "{tableName} AS {alias}"
+                     .replace("{tableName}", f.object.dbTransTableName(true))
+                     .replace("{alias}", prefixTran);
+               } else {
+                  prefix = "{databaseName}.{tableName}"
+                     .replace("{databaseName}", f.object.dbSchemaName())
+                     .replace("{tableName}", f.object.dbTableName());
+                  prefixTran = "{databaseName}.{tableName}"
+                     .replace("{databaseName}", f.object.dbSchemaName())
+                     .replace("{tableName}", transTable);
+                  tableTran = f.object.dbTransTableName(true);
+               }
+
+               let baseClause = "{prefix}.{columnName}"
+                     .replace("{prefix}", prefix)
+                     .replace("{columnName}", f.object.PK()),
+                  connectedClause = "{prefix}.{columnName}"
+                     .replace("{prefix}", prefixTran)
+                     .replace("{columnName}", f.object.transColumnName);
+
+               if (
+                  !(query._statements || []).filter(
+                     (s) => s.table == transTable
+                  ).length
+               )
+                  // prevent join duplicate
+                  query.innerJoin(tableTran, baseClause, "=", connectedClause);
+            }
+         });
+      }
+   }
+
+   /**
+    * querySelectFormulaFields()
+    * Make sure our query properly selects any Formulas for our fomula fields.
+    *
+    * Formula selects should look like:
+    * (SELECT SUM(field) FROM table WHERE table.column = this.value) AS columnName
+    *
+    * @param {Knex} query
+    *    the KenxQueryBuilder that is building our sql query.  We add the selects
+    *    onto this query builder using query.select()
+    */
+   querySelectFormulaFields(query, userData) {
+      let raw = this.AB.Knex.connection().raw;
+
+      // Formula fields
+      let formulaFields = this.object.fields((f) => f.key == "formula");
+      (formulaFields || []).forEach((f) => {
+         let selectSQL = this.convertFormulaField(f, userData);
+         if (selectSQL) {
+            // selectSQL += ` AS ${this.dbTableName(true)}.${f.columnName}`;
+            selectSQL += ` AS \`${f.columnName}\``;
+            query = query.select(raw(selectSQL));
+         }
+      });
+
+      // NOTE: select all columns
+      if (formulaFields.length)
+         query = query.select(`${this.object.dbTableName(true)}.*`);
+   }
+
+   /**
+    * convertFormulaField()
+    * Helper function to build the SELECT .. FROM ... WHERE ...  portion
+    * of our Formula Field selects.
+    *
+    * @param {ABFieldFormula} formulaField
+    *    the formula field we need to represent in the query
+    * @return {string}
+    *    the SQL select statement for the formula
+    */
+   convertFormulaField(formulaField, userData) {
+      if (formulaField == null || formulaField.key != "formula") return "";
+
+      let settings = formulaField.settings || {};
+
+      let connectedField = this.object.fields((f) => f.id == settings.field)[0];
+      if (!connectedField) return;
+
+      let linkField = connectedField.fieldLink;
+      if (!linkField) return;
+
+      let connectedObj = this.AB.objectByID(settings.object);
+      if (!connectedObj) return;
+
+      let numberField = connectedObj.fields(
+         (f) => f.id == settings.fieldLink
+      )[0];
+      if (!numberField) return;
+
+      let selectSQL = "";
+      let type = {
+         sum: "SUM",
+         average: "AVG",
+         max: "MAX",
+         min: "MIN",
+         count: "COUNT",
+      };
+
+      // Generate where clause of formula field
+      let whereClause = "";
+      if (
+         formulaField &&
+         formulaField.settings &&
+         formulaField.settings.where &&
+         formulaField.settings.where.rules &&
+         formulaField.settings.where.rules.length
+      ) {
+         let formulaFieldQuery = connectedObj.model().modelKnex().query();
+
+         this.queryConditions(
+            formulaFieldQuery,
+            formulaField.settings.where,
+            userData
+         );
+
+         let whereString = "";
+         try {
+            whereString = formulaFieldQuery.toString(); // select `DB_NAME`.`AB_TABLE_NAME`.* from `DB_NAME`.`AB_TABLE_NAME` where (`DB_NAME`.`AB_TABLE_NAME`.`COLUMN` LIKE '%VALUE%')
+
+            // get only where clause
+            let wherePosition = whereString.indexOf("where");
+            whereString = whereString.substring(
+               wherePosition + 5,
+               whereString.length
+            ); // It should be (`DB_NAME`.`AB_TABLE_NAME`.`COLUMN` LIKE '%VALUE%')
+
+            if (whereString) whereClause = ` AND ${whereString}`;
+         } catch (e) {}
+      }
+
+      var LinkType = `${connectedField.settings.linkType}:${connectedField.settings.linkViaType}`;
+      // {string} LinkType
+      // represent the connection type as a string:
+      // values: [ "one:one", "many:one", "one:many", "many:many" ]
+
+      // M:1 or ( 1:1 & ! source)
+      if (
+         LinkType == "many:one" ||
+         (LinkType == "one:one" && !connectedField.settings.isSource)
+      ) {
+         selectSQL = `(SELECT IFNULL(${type[settings.type]}(\`${
+            numberField.columnName
+         }\`), 0)
+                  FROM ${connectedObj.dbTableName(true)}
+                  WHERE ${connectedObj.dbTableName(true)}.\`${
+            linkField.columnName
+         }\` = ${this.object.dbTableName(true)}.\`${
+            connectedField.indexField
+               ? connectedField.indexField.columnName
+               : this.object.PK()
+         }\` ${whereClause})`;
+      }
+      // 1:M , 1:1 & source
+      else if (
+         LinkType == "one:many" ||
+         (LinkType == "one:one" && connectedField.settings.isSource)
+      ) {
+         selectSQL = `(SELECT IFNULL(${type[settings.type]}(\`${
+            numberField.columnName
+         }\`), 0)
+                  FROM ${connectedObj.dbTableName(true)}
+                  WHERE ${connectedObj.dbTableName(true)}.\`${
+            connectedField.indexField
+               ? connectedField.indexField.columnName
+               : connectedObj.PK()
+         }\` = ${this.object.dbTableName(true)}.\`${
+            connectedField.columnName
+         }\` ${whereClause})`;
+      }
+      // M:N
+      else if (LinkType == "many:many") {
+         let joinTable = connectedField.joinTableName(true),
+            joinColumnNames = connectedField.joinColumnNames();
+
+         selectSQL = `(SELECT IFNULL(${type[settings.type]}(\`${
+            numberField.columnName
+         }\`), 0)
+               FROM ${connectedObj.dbTableName(true)}
+               INNER JOIN ${joinTable}
+               ON ${joinTable}.\`${
+            joinColumnNames.targetColumnName
+         }\` = ${connectedObj.dbTableName(true)}.${connectedObj.PK()}
+               WHERE ${joinTable}.\`${
+            joinColumnNames.sourceColumnName
+         }\` = ${this.object.dbTableName(
+            true
+         )}.\`${this.object.PK()}\` ${whereClause})`;
+      }
+
+      return selectSQL;
+   }
+
+   /**
+    * convertConnectFieldCondition()
+    * A helper function to decode a condition that attempts to see if a
+    * connected field either contains/not contains/equals/not equals a given
+    * value.
+    * @param {ABDataFieldConnect} field
+    *    The connection this condition is based upon.
+    * @param {obj} condition
+    *    The condition rule we are updating:
+    *    condition.key : {string} needs to contain the sql field reference
+    *    condition.rule: {string} needs to contain the sql comparison value
+    *    condition.value: {string} needs to contain the sql value check
+    */
+   convertConnectFieldCondition(field, condition) {
+      let getCustomKey = (f, fCustomIndex) => {
+         return "{prefix}.`{columnName}`"
+            .replace("{prefix}", f.dbPrefix())
+            .replace(
+               "{columnName}",
+               fCustomIndex ? fCustomIndex.columnName : f.object.PK()
+            );
+      };
+
+      var LinkType = `${field.settings.linkType}:${field.settings.linkViaType}`;
+      // {string} LinkType
+      // represent the connection type as a string:
+      // values: [ "one:one", "many:one", "one:many", "many:many" ]
+
+      // M:1 or 1:1 (isSource == false)
+      if (
+         LinkType === "many:one" ||
+         (LinkType === "one:one" && !field.settings.isSource)
+      ) {
+         condition.key = getCustomKey(field, field.indexField);
+      }
+      // M:N
+      else if (LinkType === "many:many") {
+         // find custom index field
+         let customIndexField;
+         if (
+            field.indexField &&
+            field.indexField.object.id == field.object.id
+         ) {
+            customIndexField = field.indexField;
+         } else if (
+            field.indexField2 &&
+            field.indexField2.object.id == field.object.id
+         ) {
+            customIndexField = field.indexField2;
+         }
+
+         // update condition.key is PK or CustomFK
+         condition.key = getCustomKey(field, customIndexField);
+
+         let fieldLink = field.fieldLink;
+         let joinTable = field.joinTableName();
+         let sourceFkName = field.object.name;
+         let targetFkName = fieldLink.object.name;
+
+         let mnOperators = {
+            contains: "LIKE",
+            not_contains: "LIKE", // not NOT LIKE because we will use IN or NOT IN at condition.rule instead
+            equals: "=",
+            not_equal: "=", // same .not_contains
+         };
+
+         // create sub-query to get values from MN table
+         condition.value = "(SELECT `{sourceFkName}` FROM `{joinTable}` WHERE `{targetFkName}` {ops} '{percent}{value}{percent}')"
+            .replace("{sourceFkName}", sourceFkName)
+            .replace("{joinTable}", joinTable)
+            .replace("{targetFkName}", targetFkName)
+            .replace("{ops}", mnOperators[condition.rule])
+            .replace("{value}", condition.value);
+
+         condition.value =
+            condition.rule == "contains" || condition.rule == "not_contains"
+               ? condition.value.replace(/{percent}/g, "%")
+               : condition.value.replace(/{percent}/g, "");
+
+         condition.rule =
+            condition.rule == "contains" || condition.rule == "equals"
+               ? "in"
+               : "not_in";
+      }
+   }
 };
+
+/************************
+ *** Update() Helpers ***
+ ************************/
+
+/**
+ * clearRelate()
+ * clear the relations on the provided obj[columnName]
+ * @param {ABObject} obj
+ * @param {string} columnName
+ *        the column name of the relations we are clearing.
+ * @param {string} rowId
+ *        the .uuid of the row we are working on.
+ * @return {Promise}
+ */
+function clearRelate(obj, columnName, rowId) {
+   return new Promise((resolve, reject) => {
+      // WORKAROUND : HRIS tables have non null columns
+      if (obj.isExternal) return resolve();
+
+      // create a new query to update relation data
+      // NOTE: when use same query, it will have a "created duplicate" error
+      let query = obj.model().modelKnex().query();
+
+      let clearRelationName = AB.rules.toFieldRelationFormat(columnName);
+
+      query
+         .where(obj.PK(), rowId)
+         .first()
+         .then((record) => {
+            if (record == null) return resolve();
+
+            let fieldLink = obj.fields((f) => f.columnName == columnName)[0];
+            if (fieldLink == null) return resolve();
+
+            let objectLink = fieldLink.object;
+            if (objectLink == null) return resolve();
+
+            record
+               .$relatedQuery(clearRelationName)
+               .alias(`${columnName}_${clearRelationName}`)
+               .unrelate()
+               .then(() => {
+                  resolve();
+               })
+               .catch((err) => reject(err));
+         })
+         .catch((err) => reject(err));
+   });
+}
+
+/**
+ * setRelate()
+ * set a relationship between obj[columnName] and value
+ * @param {ABObject} obj
+ * @param {string} columnName
+ *        the column name of the relations we are clearing.
+ * @param {string} rowId
+ *        the .uuid of the row we are working on.
+ * @param {valueHash} value
+ *        the new value we are establishing a relation to.
+ * @return {Promise}
+ */
+function setRelate(obj, columnName, rowId, value) {
+   return new Promise((resolve, reject) => {
+      // create a new query to update relation data
+      // NOTE: when use same query, it will have a "created duplicate" error
+      let query = obj.model().modelKnex().query();
+
+      let relationName = AB.rules.toFieldRelationFormat(columnName);
+
+      query
+         .where(obj.PK(), rowId)
+         .first()
+         .then((record) => {
+            if (record == null) return resolve();
+
+            record
+               .$relatedQuery(relationName)
+               .alias(`${columnName}_${relationName}`)
+               .relate(value)
+               .then(() => {
+                  resolve();
+               })
+               .catch((err) => reject(err));
+         })
+         .catch((err) => reject(err));
+   });
+}
+
+/**
+ * @function updateRelationValues()
+ * Make sure an object's relationships are properly updated.
+ * We expect that when a create or update happens, that the data in the
+ * related fields represent the CURRENT STATE of all it's relations. Any
+ * field not in the relation value is no longer part of the related data.
+ * @param {ABFactory} AB
+ * @param {ABObject} object
+ * @param {integer} id
+ *        the .id of the base object we are working with
+ * @param {obj} updateRelationParams
+ *        "key"=>"value" hash of the related fields and current state of
+ *        values.
+ * @return {array}  array of update operations to perform the relations.
+ */
+function updateRelationValues(AB, object, id, updateRelationParams) {
+   var updateTasks = [];
+   // {array} updateTasks
+   // an array of the {Promise}s that are performing the updates.
+
+   ////
+   //// We are given a current state of values that should be related to our object.
+   //// It is not clear if these are new relations or existing ones, so we first
+   //// remove any existing relation and then go back and add in the one we have been
+   //// told to keep.
+   ////
+
+   // NOTE : There is a error when update values and foreign keys at same time
+   // - Error: Double call to a write method. You can only call one of the write methods
+   // - (insert, update, patch, delete, relate, unrelate, increment, decrement)
+   //    and only once per query builder
+   if (
+      updateRelationParams != null &&
+      Object.keys(updateRelationParams).length > 0
+   ) {
+      // update relative values
+      Object.keys(updateRelationParams).forEach((colName) => {
+         // SPECIAL CASE: 1-to-1 relation self join,
+         // Need to update linked data
+         let field = object.fields((f) => f.columnName == colName)[0];
+         if (
+            field &&
+            field.settings.linkObject == object.id &&
+            field.settings.linkType == "one" &&
+            field.settings.linkViaType == "one" &&
+            !object.isExternal
+         ) {
+            let sourceField = field.settings.isSource ? field : field.fieldLink;
+            if (sourceField == null) return resolve();
+
+            let relateRowId = null;
+            if (updateRelationParams[colName])
+               // convert to int
+               relateRowId = parseInt(updateRelationParams[colName]);
+
+            // clear linked data
+            updateTasks.push(() => {
+               return new Promise((resolve, reject) => {
+                  let update = {};
+                  update[sourceField.columnName] = null;
+
+                  let query = object.model().modelKnex().query();
+                  query
+                     .update(update)
+                     .clearWhere()
+                     .where(object.PK(), id)
+                     .orWhere(object.PK(), relateRowId)
+                     .orWhere(sourceField.columnName, id)
+                     .orWhere(sourceField.columnName, relateRowId)
+                     .then(() => {
+                        resolve();
+                     })
+                     .catch((err) => reject(err));
+               });
+            });
+
+            // set linked data
+            if (updateRelationParams[colName]) {
+               updateTasks.push(() => {
+                  return new Promise((resolve, reject) => {
+                     let update = {};
+                     update[sourceField.columnName] = relateRowId;
+
+                     let query = object.model().modelKnex().query();
+                     query
+                        .update(update)
+                        .clearWhere()
+                        .where(object.PK(), id)
+                        .then(() => {
+                           resolve();
+                        })
+                        .catch((err) => reject(err));
+                  });
+               });
+
+               updateTasks.push(() => {
+                  return new Promise((resolve, reject) => {
+                     let update = {};
+                     update[sourceField.columnName] = id;
+
+                     let query = object.model().modelKnex().query();
+                     query
+                        .update(update)
+                        .clearWhere()
+                        .where(object.PK(), relateRowId)
+                        .then(() => {
+                           resolve();
+                        })
+                        .catch((err) => reject(err));
+                  });
+               });
+            }
+         }
+
+         // Normal relations
+         else {
+            let needToClear = true;
+
+            // If link column is in the table, then will not need to clear connect data
+            if (
+               updateRelationParams[colName] &&
+               field &&
+               field.settings &&
+               // 1:M
+               ((field.settings.linkType == "one" &&
+                  field.settings.linkViaType == "many") ||
+                  // 1:1 isSource = true
+                  (field.settings.linkType == "one" &&
+                     field.settings.linkViaType == "one" &&
+                     field.settings.isSource))
+            ) {
+               needToClear = false;
+            }
+
+            // Clear relations
+            if (needToClear) {
+               updateTasks.push(() => clearRelate(object, colName, id));
+            }
+
+            // convert relation data to array
+            if (!Array.isArray(updateRelationParams[colName])) {
+               updateRelationParams[colName] = [updateRelationParams[colName]];
+            }
+
+            // We could not insert many relation values at same time
+            // NOTE : Error: batch insert only works with Postgresql
+            updateRelationParams[colName].forEach((val) => {
+               // insert relation values of relation
+               updateTasks.push(() => {
+                  return setRelate(object, colName, id, val);
+               });
+            });
+         }
+      });
+   }
+
+   return updateTasks;
+}
+
+/**
+ * @function updateTranslationsValues
+ * Update translations value of the external table.  These are a legacy table
+ * structure that allowed tables to track their multilingual fields in a
+ * separate translation table.
+ * @param {ABFactory} AB
+ * @param {ABObject} object
+ * @param {int} id
+ * @param {Array} translations - translations data
+ * @param {boolean} isInsert
+ *
+ */
+function updateTranslationsValues(AB, object, id, translations, isInsert) {
+   if (!object.isExternal || !object.isImported) return Promise.resolve();
+
+   let transModel = object.model().modelKnex().relationMappings()[
+      "translations"
+   ];
+   if (!transModel) return Promise.resolve();
+
+   let tasks = [],
+      transTableName = transModel.modelClass.tableName;
+   multilingualFields = object.fields((f) => f.settings.supportMultilingual);
+
+   (translations || []).forEach((trans) => {
+      tasks.push(
+         new Promise((next, err) => {
+            let transKnex = AB.Knex.connection()(transTableName);
+
+            // values
+            let vals = {};
+            vals[object.transColumnName] = id;
+            vals["language_code"] = trans["language_code"];
+
+            multilingualFields.forEach((f) => {
+               vals[f.columnName] = trans[f.columnName];
+            });
+
+            // where clause
+            let where = {};
+            where[object.transColumnName] = id;
+            where["language_code"] = trans["language_code"];
+
+            // insert
+            if (isInsert) {
+               transKnex
+                  .insert(vals)
+                  .then(function () {
+                     next();
+                  })
+                  .catch(err);
+            }
+            // update
+            else {
+               Promise.resolve()
+                  .then(() => {
+                     // NOTE: There is a bug to update TEXT column of federated table
+                     // https://bugs.mysql.com/bug.php?id=63446
+                     // WORKAROUND: first update the cell to NULL and then update it again
+                     return new Promise((resolve, reject) => {
+                        var longTextFields = multilingualFields.filter(
+                           (f) => f.key == "LongText"
+                        );
+                        if (longTextFields.length < 1) return resolve();
+
+                        var clearVals = {};
+
+                        longTextFields.forEach((f) => {
+                           clearVals[f.columnName] = null;
+                        });
+
+                        transKnex
+                           .update(clearVals)
+                           .where(where)
+                           .then(resolve)
+                           .catch(reject);
+                     });
+                  })
+                  .then(() => {
+                     return new Promise((resolve, reject) => {
+                        transKnex
+                           .update(vals)
+                           .where(where)
+                           .then(resolve)
+                           .catch(reject);
+                     });
+                  })
+                  .then(next)
+                  .catch(err);
+            }
+         })
+      );
+   });
+
+   return Promise.all(tasks);
+}

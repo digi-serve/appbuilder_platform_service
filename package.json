@@ -17,6 +17,7 @@
   },
   "homepage": "https://github.com/appdevdesigns/appbuilder_platform_service#readme",
   "dependencies": {
+    "moment": "^2.29.1",
     "objection": "^2.2.3",
     "xml-js": "^1.6.11"
   }

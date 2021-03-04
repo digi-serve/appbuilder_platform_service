@@ -1,10 +1,6 @@
-const path = require("path");
 const _ = require("lodash");
 
-// prettier-ignore
-const ABObjectQueryCore = require(path.join(__dirname, "..", "core", "ABObjectQueryCore"));
-
-const Model = require("objection").Model;
+const ABObjectQueryCore = require("../core/ABObjectQueryCore");
 
 module.exports = class ABClassQuery extends ABObjectQueryCore {
    ///
@@ -47,13 +43,12 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
     * @param {Knex} knex the knex sql library manager for manipulating the DB.
     * @return {Promise}
     */
-   migrateCreate(knex) {
-      sails.log.verbose("ABClassQuery.migrateCreate()");
-      sails.log.debug(
-         "ABClassQuery.migrateCreate() called, but no migrations allowed."
-      );
+   migrateCreate(knex, req) {
+      if (req) {
+         req.log("ABObjectQuery.migrateCreate()");
+      }
 
-      let query = ABMigration.connection().queryBuilder();
+      let query = this.AB.Knex.connection().queryBuilder();
 
       //// Now compile our joins:
 
@@ -260,7 +255,9 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
       };
 
       let makeLink = (object, link, joinTable, alias, A, op, B) => {
-         console.log("link.type:" + link.type);
+         if (req) {
+            req.log("link.type:" + link.type);
+         }
 
          // try to correct some type mistakes:
          let type = link.type.toLowerCase();
@@ -452,16 +449,22 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
             let baseColumnName = obj.PK();
 
             if (!objLink) {
-               sails.log.error(
+               var errObj = this.AB.toError(
                   `!!! connected.field[${f.id}] did not have an objLink`,
-                  f
+                  f.toObj()
                );
+               if (req) {
+                  req.log(errObj);
+               }
             }
             if (!fieldLink) {
-               sails.log.error(
+               var errObj = this.AB.toError(
                   `!!! connected.field[${f.id}] did not have a fieldLink`,
-                  f
+                  f.toObj()
                );
+               if (req) {
+                  req.log(errObj);
+               }
             }
 
             // custom index
@@ -571,7 +574,7 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
             }
 
             if (selectField)
-               selects.push(ABMigration.connection().raw(selectField));
+               selects.push(this.AB.Knex.connection().raw(selectField));
          }
          // Aggregate fields
          else if (f.key == "formula") {
@@ -694,7 +697,7 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
                .replace(/{displayPrefix}/g, f.alias ? f.alias : obj.name)
                .replace(/{displayName}/g, f.columnName);
 
-            selects.push(ABMigration.connection().raw(colFormat));
+            selects.push(this.AB.Knex.connection().raw(colFormat));
          }
          // Normal fields
          else {
@@ -777,7 +780,7 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
             .replace("{displayPrefix}", prefix.replace(/`/g, ""))
             .replace("{displayName}", "translations");
 
-         selects.push(ABMigration.connection().raw(transField));
+         selects.push(this.AB.Knex.connection().raw(transField));
       });
 
       // when empty columns, then add default id
@@ -811,13 +814,13 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
       query.select(selects);
       query.distinct();
 
-      let sqlCommand = query.toString();
       let viewName = this.dbViewName();
+      let sqlCommand = `CREATE OR REPLACE VIEW ${viewName} AS (${query.toString()})`;
 
-      sails.log.debug("ABClassQuery.migrateCreate - SQL:", sqlCommand);
-      return knex.schema.raw(
-         `CREATE OR REPLACE VIEW ${viewName} AS (${sqlCommand})`
-      );
+      if (req) {
+         req.log("ABObjectQuery.migrateCreate - SQL:", sqlCommand);
+      }
+      return knex.schema.raw(sqlCommand);
    }
 
    /**
@@ -826,27 +829,21 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
     * @param {Knex} knex the knex sql library manager for manipulating the DB.
     * @return {Promise}
     */
-   migrateDrop(knex) {
-      sails.log.verbose("ABObjectQuery.migrateDrop()");
+   migrateDrop(knex, req) {
+      // console.log("ABObjectQuery.migrateDrop()");
 
       let viewName = this.dbViewName();
+      let sqlCommand = `DROP VIEW IF EXISTS ${viewName}`;
 
-      // just continue gracefully:
-      return knex.schema.raw(`DROP VIEW IF EXISTS ${viewName}`);
+      if (req) {
+         req.log("ABObjectQuery.migrateCreate - SQL:", sqlCommand);
+      }
+      return knex.schema.raw(sqlCommand);
    }
 
    ///
    /// DB Model Services
    ///
-
-   /**
-    * @method model
-    * return an objection.js model for working with the data in this Object.
-    * @return {Objection.Model}
-    */
-   model() {
-      return Model;
-   }
 
    /**
     * @method queryFind
@@ -869,6 +866,7 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
     * 		The current user's data (which can be used in our conditions.)
     * @return {QueryBuilder}
     */
+   /*    
    queryFind(options = {}, userData) {
       let raw = ABMigration.connection().raw,
          query = ABMigration.connection().queryBuilder();
@@ -959,14 +957,15 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
                   }
 
                   if (options) {
-                     this.processFilterPolicy(options.where, userData)
-                        .catch(bad)
+                     this.reduceConditions(options.where, userData)
+
                         .then(() => {
                            // when finished populate our Find Conditions
                            this.populateFindConditions(query, options, userData)
                               .catch(bad)
                               .then(() => next());
-                        });
+                        })
+                        .catch(bad);
                   }
                });
             })
@@ -1062,7 +1061,7 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
             })
       );
    }
-
+*/
    /**
     * @method queryCount
     * return an Objection.js QueryBuilder that is already setup for this object.
@@ -1075,6 +1074,7 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
     * 		[optional] the table name to use for the count
     * @return {QueryBuilder}
     */
+   /*
    queryCount(options, userData, tableName) {
       // options = options || {};
 
@@ -1106,7 +1106,7 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
          // return result[0]['count'];
       });
    }
-
+*/
    /**
     * @method isValidData
     * Parse through the given data and return an array of any invalid

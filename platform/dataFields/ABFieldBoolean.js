@@ -9,24 +9,24 @@ var path = require("path");
 var ABFieldBooleanCore = require(path.join(__dirname, "..", "..", "core", "dataFields", "ABFieldBooleanCore.js"));
 
 module.exports = class ABFieldBoolean extends ABFieldBooleanCore {
-   constructor(values, object) {
-      super(values, object);
-   }
+   // constructor(values, object) {
+   //    super(values, object);
+   // }
 
    ///
    /// Instance Methods
    ///
 
-   isValid() {
-      var errors = super.isValid();
+   // isValid() {
+   //    var errors = super.isValid();
 
-      // errors = OP.Form.validationError({
-      // 	name:'columnName',
-      // 	message:L('ab.validation.object.name.unique', 'Field columnName must be unique (#name# already used in this Application)').replace('#name#', this.name),
-      // }, errors);
+   //    // errors = OP.Form.validationError({
+   //    // 	name:'columnName',
+   //    // 	message:L('ab.validation.object.name.unique', 'Field columnName must be unique (#name# already used in this Application)').replace('#name#', this.name),
+   //    // }, errors);
 
-      return errors;
-   }
+   //    return errors;
+   // }
 
    ///
    /// DB Migrations
@@ -124,7 +124,7 @@ module.exports = class ABFieldBoolean extends ABFieldBooleanCore {
    requestParam(allParameters) {
       var myParameter = super.requestParam(allParameters);
       if (myParameter) {
-         if (!_.isUndefined(myParameter[this.columnName])) {
+         if (!this.AB.isUndefined(myParameter[this.columnName])) {
             myParameter[this.columnName] = myParameter[this.columnName] == 1;
          }
       }

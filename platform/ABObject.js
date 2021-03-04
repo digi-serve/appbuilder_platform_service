@@ -10,8 +10,23 @@ const ABObjectCore = require(path.join(
 const Model = require("objection").Model;
 const ABModel = require(path.join(__dirname, "ABModel.js"));
 
-// const ABGraphScope = require("../../graphModels/ABScope");
-// const ABObjectScope = require("../../systemObjects/scope");
+const ConversionList = [
+   require("../policies/ABModelConvertSailsCondition"),
+   require("../policies/ABModelConvertFilterCondition"),
+];
+// {array} ConversionList
+// an array of policies for converting our condition formats into
+// our standard QueryBuilder format
+
+const PolicyList = [
+   require("../policies/ABModelConvertDataCollectionCondition"),
+   require("../policies/ABModelConvertSameAsUserConditions"),
+   require("../policies/ABModelConvertQueryConditions"),
+   require("../policies/ABModelConvertQueryFieldConditions"),
+];
+// {array} PolicyList
+// an array of the conversion policies we run on our conditions to
+// prepare them for running.
 
 // var __ObjectPool = {};
 var __ModelPool = {}; // reuse any previously created Model connections
@@ -660,7 +675,7 @@ module.exports = class ABClassObject extends ABObjectCore {
             try {
                // sails.log.debug(
                //    "ABClassObject.queryFind - SQL:",
-               query.toString();
+               // query.toString();
                // );
             } catch (e) {
                // sails.log.debug('ABClassObject.queryFind - SQL:', query.debug() );
@@ -810,6 +825,114 @@ module.exports = class ABClassObject extends ABObjectCore {
       });
    }
 
+   convertToQueryBuilderConditions(cond, indx = 0) {
+      if (indx < ConversionList.length) {
+         // load the policy
+         let policy = ConversionList[indx];
+
+         policy(this.AB, cond, () => {
+            // try the next one
+            this.convertToQueryBuilderConditions(cond, indx + 1);
+         });
+      }
+   }
+
+   /**
+    * reduceConditions()
+    * update a given condition object and reduce the embedded queries
+    * into actual results.  For example, if one of the conditions was
+    * Object NOT IN Query(X), we would perform the query and translate
+    * that to OBJECT ID NOT IN [x, y, z].
+    * @param {obj} _where
+    *       The condition hash that contains the details of our lookup:
+    *       {
+    *          where : {Array}
+    *          sort :  {Array}
+    *          offset: {Integer}
+    *          limit:  {Integer}
+    *          populate: {Boolean}
+    *       }
+    * @param {obj} userData
+    *       many of our queries need to know some info about the User
+    *       this request is running under.
+    *       {
+    *          username: {string},
+    *          guid: {string},
+    *          languageCode: {string}, - 'en', 'th'
+    *          ...
+    *       }
+    * @return {Promise}
+    */
+   reduceConditions(_where, userData) {
+      // run the options.where through our existing policy filters
+      // get array of policies to run through
+      let processPolicy = (indx, cb) => {
+         if (indx >= PolicyList.length) {
+            cb();
+         } else {
+            // load the policy
+            let policy = PolicyList[indx];
+
+            policy(this.AB, _where, this, userData, (err) => {
+               if (err) {
+                  cb(err);
+               } else {
+                  // try the next one
+                  processPolicy(indx + 1, cb);
+               }
+            });
+            /*
+             * OLD FORMAT:
+             *
+            // run the policy on my data
+            // policy(req, res, cb)
+            //    req.options._where
+            //  req.user.data
+            let myReq = {
+               AB: this.AB,
+               options: {
+                  _where: _where,
+               },
+               user: {
+                  data: userData,
+               },
+               param: (id) => {
+                  if (id == "appID") {
+                     console.error(
+                        "appID being requested from processPolicy: WHY?"
+                     );
+                     return this.application.id;
+                  } else if (id == "objID") {
+                     return this.id;
+                  }
+               },
+            };
+
+            policy(myReq, {}, (err) => {
+               if (err) {
+                  cb(err);
+               } else {
+                  // try the next one
+                  processPolicy(indx + 1, cb);
+               }
+            });
+            */
+         }
+      };
+
+      return new Promise((resolve, reject) => {
+         // run each One
+         processPolicy(0, (err) => {
+            // now that I'm through with updating our Conditions
+            if (err) {
+               reject(err);
+            } else {
+               resolve();
+            }
+         });
+      });
+   }
+
    /**
     * @function populateFindConditions
     * Add find conditions and include relation data to Knex.query
@@ -853,7 +976,7 @@ module.exports = class ABClassObject extends ABObjectCore {
 
                      let objectIds = [];
 
-                     // ABObjectQuery
+                     // if this is ABObjectQuery then return all ids
                      if (this.viewName) {
                         objectIds = this.objects().map((obj) => obj.id);
                      }
@@ -874,7 +997,7 @@ module.exports = class ABClassObject extends ABObjectCore {
                            if (!scopes || scopes.length < 1) return next(true);
 
                            let scopeWhere = {
-                              glue: "or",
+                              glue: "and",
                               rules: [],
                            };
 
@@ -1700,8 +1823,7 @@ module.exports = class ABClassObject extends ABObjectCore {
     */
    pullScopes(options = {}) {
       return new Promise((resolve, reject) => {
-         let ABObjectRole = ABObjectCache.get(ABSystemObject.getObjectRoleId());
-         // let ABObjectScope = ABObjectCache.get(SCOPE_OBJECT_ID);
+         let ABObjectRole = this.AB.objectRole();
 
          // ABObjectRole.queryFind({
          ABObjectRole.model()
@@ -1718,7 +1840,6 @@ module.exports = class ABClassObject extends ABObjectCore {
                },
                populate: true,
             })
-            .catch(reject)
             .then((roles) => {
                let scopes = [];
 
@@ -1768,7 +1889,8 @@ module.exports = class ABClassObject extends ABObjectCore {
                }
 
                resolve(scopes);
-            });
+            })
+            .catch(reject);
       });
    }
 

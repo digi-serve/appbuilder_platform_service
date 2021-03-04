@@ -7,9 +7,31 @@
 
 const _ = require("lodash");
 const Knex = require("knex");
-const uuidv4 = require("uuid");
+const moment = require("moment");
+const { serializeError, deserializeError } = require("serialize-error");
+const uuid = require("uuid");
 
 var ABFactoryCore = require("./core/ABFactoryCore");
+
+function stringifyErrors(param) {
+   if (param instanceof Error) {
+      return serializeError(param);
+   }
+
+   // traverse given data structure:
+   if (typeof param == "array") {
+      for (var i = 0; i < param.length; i++) {
+         param[i] = stringifyErrors(param[i]);
+      }
+   } else if (typeof param == "object") {
+      // maybe one of my Keys are an Error Object:
+      Object.keys(param).forEach((k) => {
+         param[k] = stringifyErrors(param[k]);
+      });
+   }
+
+   return param;
+}
 
 class ABFactory extends ABFactoryCore {
    constructor(definitions, DefinitionManager, req) {
@@ -153,7 +175,7 @@ class ABFactory extends ABFactoryCore {
          },
 
          /**
-          * AB.rules.nameFilter
+          * AB.rules.nameFilter()
           * return a properly formatted name for an AppBuilder object.
           * @param {string} name
           *        The name of the object we are conditioning.
@@ -164,7 +186,7 @@ class ABFactory extends ABFactoryCore {
          },
 
          /**
-          * AB.rules.toApplicationNameFormat
+          * AB.rules.toApplicationNameFormat()
           * return a properly formatted Application Name
           * @param {string} name
           *        The name of the Application we are conditioning.
@@ -175,7 +197,20 @@ class ABFactory extends ABFactoryCore {
          },
 
          /**
-          * AB.rules.toJunctionTableFK
+          * AB.rules.toFieldRelationFormat()
+          *
+          * This function uses for define relation name of Knex Objection
+          * return a relation name of column
+          *
+          * @param {string} colName  The name of the Column
+          * @return {string}
+          */
+         toFieldRelationFormat: function (colName) {
+            return this.nameFilter(colName) + "__relation";
+         },
+
+         /**
+          * AB.rules.toJunctionTableFK()
           * return foriegnkey (FK) column name for a junction table name
           * @param {string} objectName
           *        The name of the Object with a connection
@@ -192,7 +227,7 @@ class ABFactory extends ABFactoryCore {
          },
 
          /**
-          * AB.rules.toJunctionTableNameFormat
+          * AB.rules.toJunctionTableNameFormat()
           * return many-to-many junction table name
           * @param {string} appName
           *        The name of the Application for this object
@@ -324,11 +359,31 @@ class ABFactory extends ABFactoryCore {
    }
 
    error(message) {
+      message = deserializeError(message);
       console.error(`ABFactory[${this.req.tenantID()}]:${message.toString()}`);
       if (message instanceof Error) {
          console.error(message);
       }
       this.emit("error", message);
+   }
+
+   toError(...params) {
+      var error = new Error(params.shift() || "Error:");
+      if (params.length > 0) {
+         // replace Error objects with a string that can be passed over the
+         // wire and deserialize later.
+         stringifyErrors(params);
+         error._context = JSON.stringify(params);
+      }
+      return error;
+   }
+
+   isEmpty(...params) {
+      return _.isEmpty(...params);
+   }
+
+   isUndefined(...params) {
+      return _.isUndefined(...params);
    }
 
    merge(...params) {
@@ -344,7 +399,7 @@ class ABFactory extends ABFactoryCore {
    }
 
    uuid() {
-      return uuidv4();
+      return uuid.v4();
    }
 
    toJSON() {

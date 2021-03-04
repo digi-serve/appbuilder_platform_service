@@ -1,4 +1,9 @@
 const InsertRecordTaskCore = require("../../../core/process/tasks/ABProcessTaskServiceInsertRecordCore.js");
+const ABProcessTaskServiceQuery = require("./ABProcessTaskServiceQuery.js");
+
+const AB = require("ab-utils");
+const reqAB = AB.reqAB({}, {});
+reqAB.jobID = "InsertRecord";
 
 module.exports = class InsertRecord extends InsertRecordTaskCore {
    ////
@@ -10,61 +15,106 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
     * this method actually performs the action for this task.
     * @param {obj} instance  the instance data of the running process
     * @param {Knex.Transaction?} trx - [optional]
+    *
     * @return {Promise}
     *      resolve(true/false) : true if the task is completed.
     *                            false if task is still waiting
     */
    do(instance, trx) {
-      this.object = this.AB.objects((o) => o.id == this.objectID)[0];
+      this.object = this.AB.objectByID(this.objectID);
       if (!this.object) {
          let errorMessage = "Could not find the object to insert record task";
          this.log(instance, errorMessage);
          return Promise.reject(new Error(errorMessage));
       }
 
-      let startElement = this.startElement;
-      if (startElement)
-         this.objectOfStartElem = this.AB.objects(
-            (o) => o.id == startElement.objectID
-         )[0];
+      let tasks = [];
+      let pullDataTasks = [];
+      let results = [];
 
-      let previousElement = this.previousElement;
-      if (previousElement)
-         this.objectOfPrevElem = this.AB.objects(
-            (o) => o.id == previousElement.objectID
-         )[0];
+      // Create tasks to pull data for repeat insert rows
+      if (this.isRepeat) {
+         let fieldRepeat = this.fieldRepeat;
+         if (fieldRepeat) {
+            let startData = this.processDataStart(instance);
+            let repeatDatas = startData[fieldRepeat.relationName()] || [];
+            if (repeatDatas && !Array.isArray(repeatDatas))
+               repeatDatas = [repeatDatas];
 
-      let values = this.getDataValue(instance);
+            repeatDatas.forEach((rData) => {
+               pullDataTasks.push(
+                  () =>
+                     new Promise((next, bad) => {
+                        fieldRepeat.datasourceLink
+                           .model()
+                           .findAll({
+                              where: {
+                                 glue: "and",
+                                 rules: [
+                                    {
+                                       key: fieldRepeat.datasourceLink.PK(),
+                                       rule: "equals",
+                                       value:
+                                          rData[
+                                             fieldRepeat.datasourceLink.PK()
+                                          ],
+                                    },
+                                 ],
+                              },
+                              populate: true,
+                           })
 
-      return Promise.resolve()
-         .then(() => this.object.model().create(values))
-         .then((record) => {
-            return new Promise((next, bad) => {
-               this.object
-                  .model()
-                  .findAll({
+                           .then((result) => {
+                              next(this.getDataValue(instance, result[0]));
+                           })
+                           .catch(bad);
+                     })
+               );
+            });
+         }
+      }
+      // Pull a data to insert
+      else {
+         pullDataTasks.push(() => Promise.resolve(this.getDataValue(instance)));
+      }
+
+      (pullDataTasks || []).forEach((pullTask) => {
+         tasks.push(
+            Promise.resolve()
+               .then(() => pullTask())
+               .then((val) => this.object.model().create(val))
+               .then((record) =>
+                  this.object.model().findAll({
                      where: {
                         glue: "and",
                         rules: [
                            {
                               key: this.object.PK(),
                               rule: "equals",
-                              value: record.uuid,
+                              value: record[this.object.PK()],
                            },
                         ],
                      },
                      populate: true,
                   })
-                  .then((result) => {
-                     this.stateUpdate(instance, {
-                        data: result[0],
-                     });
-                     this.stateCompleted(instance);
-                     next(true);
-                  })
-                  .catch(bad);
-            });
-         });
+               )
+               .then((result) => {
+                  results.push(result[0]);
+                  return Promise.resolve();
+               })
+         );
+      });
+
+      return Promise.all(tasks).then(
+         () =>
+            new Promise((next, bad) => {
+               this.stateUpdate(instance, {
+                  data: results,
+               });
+               this.stateCompleted(instance);
+               next(true);
+            })
+      );
    }
 
    /**
@@ -104,9 +154,15 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
       let prevElem = this.process.connectionPreviousTask(this)[0];
       if (!prevElem) return null;
 
-      if (!(prevElem instanceof InsertRecord)) return null;
+      let result = null;
 
-      let result = prevElem.processData(instance);
+      if (
+         prevElem instanceof InsertRecord ||
+         prevElem instanceof ABProcessTaskServiceQuery
+      ) {
+         result = prevElem.processData(instance);
+      }
+
       return result;
    }
 
@@ -114,9 +170,12 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
     * @method getDataValue()
     * return the value to insert.
     * @param {obj} instance
+    * @param {obj} rawData - when the insert record task has multi-instance maker
+    *                        pass multi-raw data to this
+    *                        https://github.com/appdevdesigns/planning/issues/109
     * @return {mixed} | null
     */
-   getDataValue(instance) {
+   getDataValue(instance, rawData) {
       let result = {};
       let startData = this.processDataStart(instance);
       let previousData = this.processDataPrevious(instance);
@@ -180,14 +239,14 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                break;
             case "2": // update with root data
                result[field.columnName] = getFieldValue(
-                  this.objectOfStartElem,
+                  this.objectOfStartElement,
                   item.value,
                   startData
                );
                break;
             case "3": // update with previous data step
                result[field.columnName] = getFieldValue(
-                  this.objectOfPrevElem,
+                  this.objectOfPrevElement,
                   item.value,
                   previousData
                );
@@ -205,6 +264,15 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
 
                   result[field.columnName] = evalValue;
                }
+               break;
+            case "5": // pull data from multiple instances
+               var fieldRepeat = this.fieldRepeat;
+               if (!fieldRepeat || !fieldRepeat.datasourceLink) break;
+               result[field.columnName] = getFieldValue(
+                  fieldRepeat.datasourceLink,
+                  item.value,
+                  rawData
+               );
                break;
          }
       });
