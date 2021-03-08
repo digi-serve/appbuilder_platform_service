@@ -7,7 +7,7 @@ module.exports = class ABModelQuery extends ABModel {
     * @param {obj} values
     *    A hash of the new values for this entry.
     * @param {Knex.Transaction?} trx - [optional]
-    * @param {ABUtil.reqAB} req
+    * @param {ABUtil.reqApi} req
     *    The request object associated with the current tenant/request
     * @return {Promise} resolved with the result of the find()
     */

@@ -7,7 +7,7 @@ const ABProcessTaskEmailCore = require(path.join(__dirname, "..", "..", "..", "c
 const ABProcessParticipant = require(path.join(__dirname, "..", "ABProcessParticipant"));
 
 const AB = require("ab-utils");
-const reqAB = AB.reqAB({}, {});
+const reqAB = AB.reqApi({}, {});
 reqAB.jobID = "ABProcessTaskEmail";
 // reqAB {ABUtils.request}
 // a micro service request object used to send requests to other services.

@@ -6,7 +6,7 @@ const path = require("path");
 const ABProcessTaskUserApprovalCore = require(path.join(__dirname, "..", "..", "..", "core", "process", "tasks", "ABProcessTaskUserApprovalCore.js"));
 
 const AB = require("ab-utils");
-const reqAB = AB.reqAB({}, {});
+const reqAB = AB.reqApi({}, {});
 reqAB.jobID = "ABProcessTaskUserApproval";
 // reqAB {ABUtils.request}
 // a micro service request object used to send requests to other services.

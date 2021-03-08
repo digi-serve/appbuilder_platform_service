@@ -4,10 +4,6 @@ const ABProcessTaskServiceCore = require(path.join(__dirname, "..", "..", "..", 
 // prettier-ignore
 const ABProcessParticipant = require(path.join(__dirname, "..", "ABProcessParticipant"));
 
-const AB = require("ab-utils");
-const reqAB = AB.reqAB({}, {});
-reqAB.jobID = "ABProcessTaskService";
-
 module.exports = class ABProcessTaskService extends ABProcessTaskServiceCore {
    ////
    //// Process Instance Methods

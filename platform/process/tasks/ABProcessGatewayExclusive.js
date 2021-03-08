@@ -4,9 +4,11 @@ const ABProcessGatewayExclusiveCore = require(path.join(__dirname, "..", "..", "
 
 const RowFilter = require(path.join(__dirname, "..", "..", "RowFilter.js"));
 
+/* Do we need this?
 const AB = require("ab-utils");
-const reqAB = AB.reqAB({}, {});
+const reqAB = AB.reqApi({}, {});
 reqAB.jobID = "ABProcessGatewayExclusive";
+*/
 
 module.exports = class ABProcessGatewayExclusive extends ABProcessGatewayExclusiveCore {
    ////

@@ -1,10 +1,6 @@
 const InsertRecordTaskCore = require("../../../core/process/tasks/ABProcessTaskServiceInsertRecordCore.js");
 const ABProcessTaskServiceQuery = require("./ABProcessTaskServiceQuery.js");
 
-const AB = require("ab-utils");
-const reqAB = AB.reqAB({}, {});
-reqAB.jobID = "InsertRecord";
-
 module.exports = class InsertRecord extends InsertRecordTaskCore {
    ////
    //// Process Instance Methods
