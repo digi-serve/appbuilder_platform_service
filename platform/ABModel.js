@@ -1664,6 +1664,15 @@ module.exports = class ABModel extends ABModelCore {
          condition.key = getCustomKey(field, customIndexField);
 
          let fieldLink = field.fieldLink;
+         if (!fieldLink) {
+            // Already Notifid by here, so:
+            // if unable to resolve fieldLink how do we exit gracefully?
+            condition.key = "1";
+            condition.value = "0";
+            condition.rule = "equals";
+            return;
+         }
+
          let joinTable = field.joinTableName();
          let sourceFkName = field.object.name;
          let targetFkName = fieldLink.object.name;
