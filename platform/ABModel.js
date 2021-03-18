@@ -56,7 +56,11 @@ module.exports = class ABModel extends ABModelCore {
             .insert(values)
             .then((returnVals) => {
                if (req) {
-                  req.log("Create successful. Now loading full value from DB.");
+                  req.log(
+                     `${
+                        this.object.label || this.object.name
+                     }.create() successful. Now loading full value from DB.`
+                  );
                }
 
                // make sure we get a fully updated value for
@@ -129,6 +133,43 @@ module.exports = class ABModel extends ABModelCore {
                reject(error);
             });
       });
+   }
+
+   /**
+    * @method find()
+    * a sails-like shorthand for the findAll() operations. This is a convienience
+    * method for developers working directly with the object.model().find()
+    * api.
+    *
+    * @param {obj} cond
+    *        The provided condition can be in either a simple condition:
+    *           { uuid: value}
+    *        or in an expaned format:
+    *           {
+    *              where: {uuid: value},
+    *              populate: false,
+    *              offset: #,
+    *              limit: #,
+    *              sort: []
+    *           }
+    *
+    * @param {abutils.reqService} req
+    * @return {Promise}
+    */
+   find(cond, req) {
+      console.log(".find() incoming condition:", cond);
+      var where = cond;
+      if (!cond.where) {
+         cond = {
+            where: cond,
+         };
+      }
+
+      this.object.convertToQueryBuilderConditions(cond);
+
+      console.log("updated condition: ", cond);
+
+      return this.findAll(cond, req.userDefaults(), req);
    }
 
    /**
