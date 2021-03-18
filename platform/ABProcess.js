@@ -91,11 +91,14 @@ module.exports = class ABProcess extends ABProcessCore {
    /**
     * instanceNew()
     * create a new running Instance of a process.
-    * @param {obj} data the context data to send to the process.
+    * @param {obj} data
+    *        the context data to send to the process.
     * @param {Knex.Transaction} dbTransaction
+    * @param {abutil.reqService} req
+    *        the current request object for the api call.
     * @return {Promise}
     */
-   instanceNew(data, dbTransaction) {
+   instanceNew(data, dbTransaction, req) {
       var context = data;
 
       this.elements().forEach((t) => {
@@ -110,18 +113,31 @@ module.exports = class ABProcess extends ABProcessCore {
          context: context,
          status: "created",
          log: ["created"],
+         jobID: req ? req.jobID : "??",
+         triggeredBy: req ? req.username() : "??",
       };
 
       return Promise.resolve()
          .then(
             () =>
                new Promise((next, bad) =>
-                  ABProcessInstance.create(newInstance)
+                  this.AB.objectProcessInstance()
+                     .model()
+                     .create(
+                        newInstance,
+                        dbTransaction,
+                        req.userDefaults(),
+                        req
+                     )
                      .then((newInstance) => {
                         next(newInstance);
                      })
                      .catch((error) => {
-                        console.error(error);
+                        this.AB.notify.developer(error, {
+                           process: this,
+                           newInstance,
+                           req,
+                        });
                         bad(error);
                      })
                )
@@ -153,10 +169,13 @@ module.exports = class ABProcess extends ABProcessCore {
     * @return {Promise}
     */
    instanceUpdate(instance) {
-      return ABProcessInstance.update(instance.id, instance).then((data) => {
-         // console.log("after Update: ", data);
-         return data;
-      });
+      return this.AB.objectProcessInstance()
+         .model()
+         .update(instance.id, instance)
+         .then((data) => {
+            // console.log("after Update: ", data);
+            return data;
+         });
    }
 
    /**
@@ -290,7 +309,7 @@ module.exports = class ABProcess extends ABProcessCore {
 
    isValid() {
       var isValid =
-         this.application.processes((o) => {
+         this.AB.processes((o) => {
             return o.name.toLowerCase() == this.name.toLowerCase();
          }).length == 0;
       return isValid;

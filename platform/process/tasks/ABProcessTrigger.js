@@ -3,9 +3,11 @@ const path = require("path");
 const ABProcessTriggerCore = require(path.join(__dirname, "..", "..", "..", "core", "process", "tasks", "ABProcessTriggerCore.js"));
 
 module.exports = class ABProcessTaskTrigger extends ABProcessTriggerCore {
-   trigger(data) {
+   trigger(data, req) {
       // call my process.newInstance with
       if (!this.process) {
+         var error = new Error("ABProcessTaskTrigger with a missing process?");
+         this.AB.notify.builder(error, { task: this });
          return Promise.resolve();
       }
       var context = this.process.context(data);
@@ -34,9 +36,11 @@ module.exports = class ABProcessTaskTrigger extends ABProcessTriggerCore {
             })
             // cancel changes
             .catch((error) => {
+               this.AB.notify.developer(error, { task: this });
                dbTransaction.rollback();
                this.AB.error(error);
-               // throw error;
+               // propogate the error
+               throw error;
             })
       );
    }
