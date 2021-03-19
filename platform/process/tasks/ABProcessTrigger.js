@@ -29,7 +29,7 @@ module.exports = class ABProcessTaskTrigger extends ABProcessTriggerCore {
                   })
             )
             // modify data in any appropriate way then:
-            .then(() => this.process.instanceNew(context, dbTransaction))
+            .then(() => this.process.instanceNew(context, dbTransaction, req))
             // save changes to DB
             .then(() => {
                dbTransaction.commit();
