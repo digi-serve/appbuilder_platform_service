@@ -93,7 +93,7 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
                   // get the lanes associated with these tasks
                   tasks.forEach((t) => {
                      myLanes.push(
-                        this.process.elementForDiagramID(tasks[0].laneDiagramID)
+                        this.process.elementForDiagramID(t.laneDiagramID)
                      );
                   });
                } else {
