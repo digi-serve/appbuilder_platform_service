@@ -136,6 +136,70 @@ module.exports = class ABModel extends ABModelCore {
    }
 
    /**
+    * convertToFieldKeys()
+    * when receiving condition statements in the .find() method, we can receive
+    * conditions as [colName] : value.  For our .findAll() to process them, we
+    * need to convert them to [field.id] : value entries.
+    *
+    * This method replaces the condition values in place.
+    * @param {obj} cond
+    *        The incoming { where:{cond} } clause for our .find()
+    */
+   convertToFieldKeys(cond) {
+      var hashColumnNames = {
+         /* .columnName : .id */
+      };
+      // {obj}
+      // a quick lookup of any fields this object has
+
+      // create lookup hash
+      this.object.fields().forEach((f) => {
+         hashColumnNames[f.columnName] = f.id;
+      });
+
+      var parseCondition = (where) => {
+         var typeOf = typeof where;
+         switch (typeOf) {
+            case "string":
+            case "number":
+               return where;
+               break;
+            case "object":
+               if (Array.isArray(where)) {
+                  var newVals = [];
+                  where.forEach((w) => {
+                     newVals.push(parseCondition(w));
+                  });
+                  return newVals;
+               }
+               break;
+         }
+
+         // if we get to here, then this is an { col:value } format.
+         Object.keys(where).forEach((k) => {
+            if (k != "and" && k != "or") {
+               // replace current entry if a match is found
+               if (hashColumnNames[k]) {
+                  where[hashColumnNames[k]] = parseCondition(where[k]);
+                  delete where[k];
+               }
+            } else {
+               //// here:
+               var newCond = [];
+               where[k].forEach((w) => {
+                  newCond.push(parseCondition(w));
+               });
+               where[k] = newCond;
+            }
+         });
+
+         return where;
+      };
+
+      parseCondition(cond.where);
+   }
+
+   /**
     * @method find()
     * a sails-like shorthand for the findAll() operations. This is a convienience
     * method for developers working directly with the object.model().find()
@@ -157,7 +221,6 @@ module.exports = class ABModel extends ABModelCore {
     * @return {Promise}
     */
    find(cond, req) {
-      console.log(".find() incoming condition:", cond);
       var where = cond;
       if (!cond.where) {
          cond = {
@@ -165,11 +228,23 @@ module.exports = class ABModel extends ABModelCore {
          };
       }
 
+      var userDefaults = req;
+      if (req && req.userDefaults) {
+         userDefaults = req.userDefaults();
+      }
+
+      // incoming conditions use column names of fields, but we need to use
+      // field.id(s) instead.
+      this.convertToFieldKeys(cond);
+
+      // convert cond into our expanded format:
       this.object.convertToQueryBuilderConditions(cond);
 
-      console.log("updated condition: ", cond);
-
-      return this.findAll(cond, req.userDefaults(), req);
+      // make sure any embedded conditions are properly reduced
+      return this.object.reduceConditions(cond.where, userDefaults).then(() => {
+         // perform the findAll()
+         return this.findAll(cond, userDefaults, req);
+      });
    }
 
    /**
@@ -967,10 +1042,14 @@ module.exports = class ABModel extends ABModelCore {
                   // Search string value of FK column
                   else if (
                      field.key == "connectObject" &&
-                     (condition.rule == "contains" ||
-                        condition.rule == "not_contains" ||
-                        condition.rule == "equals" ||
-                        condition.rule == "not_equal")
+                     [
+                        "contains",
+                        "not_contains",
+                        "equals",
+                        "not_equal",
+                        "in",
+                        "not_in",
+                     ].indexOf(condition.rule) != -1
                   ) {
                      this.convertConnectFieldCondition(field, condition);
                   }
@@ -1723,10 +1802,32 @@ module.exports = class ABModel extends ABModelCore {
             not_contains: "LIKE", // not NOT LIKE because we will use IN or NOT IN at condition.rule instead
             equals: "=",
             not_equal: "=", // same .not_contains
+            in: "IN",
+            not_in: "NOT IN",
          };
 
+         var rawSelect =
+            "(SELECT `{sourceFkName}` FROM `{joinTable}` WHERE `{targetFkName}` {ops} {quote}{percent}{value}{percent}{quote})";
+
+         // if this is an IN statement, repackage our [values] to proper SQL form:
+         if (condition.rule == "in" || condition.rule == "not_in") {
+            if (Array.isArray(condition.value)) {
+               var sqlVal = condition.value
+                  .map((v) => (isNaN(v) ? `'${v}'` : v))
+                  .join(", ");
+
+               condition.value = `( ${sqlVal} )`;
+            }
+
+            // we don't quote the IN series
+            rawSelect = rawSelect.replaceAll("{quote}", "");
+         } else {
+            // all others get quoted
+            rawSelect = rawSelect.replaceAll("{quote}", "'");
+         }
+
          // create sub-query to get values from MN table
-         condition.value = "(SELECT `{sourceFkName}` FROM `{joinTable}` WHERE `{targetFkName}` {ops} '{percent}{value}{percent}')"
+         condition.value = rawSelect
             .replace("{sourceFkName}", sourceFkName)
             .replace("{joinTable}", joinTable)
             .replace("{targetFkName}", targetFkName)
@@ -1739,7 +1840,7 @@ module.exports = class ABModel extends ABModelCore {
                : condition.value.replace(/{percent}/g, "");
 
          condition.rule =
-            condition.rule == "contains" || condition.rule == "equals"
+            ["contains", "equals", "in"].indexOf(condition.rule) == -1
                ? "in"
                : "not_in";
       }
