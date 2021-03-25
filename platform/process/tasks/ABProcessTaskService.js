@@ -17,7 +17,7 @@ module.exports = class ABProcessTaskService extends ABProcessTaskServiceCore {
     *      resolve(true/false) : true if the task is completed.
     *                            false if task is still waiting
     */
-   do(instance) {
+   do(instance /* , dbTransaction, req */) {
       return new Promise((resolve, reject) => {
          var myState = this.myState(instance);
 

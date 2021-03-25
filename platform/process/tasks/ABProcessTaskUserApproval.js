@@ -5,12 +5,12 @@ const path = require("path");
 // prettier-ignore
 const ABProcessTaskUserApprovalCore = require(path.join(__dirname, "..", "..", "..", "core", "process", "tasks", "ABProcessTaskUserApprovalCore.js"));
 
-const AB = require("ab-utils");
-const reqAB = AB.reqApi({}, {});
-reqAB.jobID = "ABProcessTaskUserApproval";
-// reqAB {ABUtils.request}
-// a micro service request object used to send requests to other services.
-// This one is used to initiate emails to our process_manager service.
+// const AB = require("ab-utils");
+// const reqAB = AB.reqApi({}, {});
+// reqAB.jobID = "ABProcessTaskUserApproval";
+// // reqAB {ABUtils.request}
+// // a micro service request object used to send requests to other services.
+// // This one is used to initiate emails to our process_manager service.
 
 module.exports = class ABProcessTaskUserApproval extends ABProcessTaskUserApprovalCore {
    ////
@@ -21,11 +21,16 @@ module.exports = class ABProcessTaskUserApproval extends ABProcessTaskUserApprov
     * do()
     * this method actually performs the action for this task.
     * @param {obj} instance  the instance data of the running process
+    * @param {Knex.Transaction?} trx - [optional]
+    * @param {ABUtil.reqService} req
+    *        an instance of the current request object for performing tenant
+    *        based operations.
     * @return {Promise}
     *      resolve(true/false) : true if the task is completed.
     *                            false if task is still waiting
     */
-   do(instance) {
+   do(instance, trx, req) {
+      this._req = req;
       return new Promise((resolve, reject) => {
          var myState = this.myState(instance);
          // if we haven't created a form entry yet, then do that:
@@ -70,11 +75,11 @@ module.exports = class ABProcessTaskUserApproval extends ABProcessTaskUserApprov
 
             var myLane = this.myLane();
             if (!myLane) {
-               var configError = new Error(
-                  `Misconfiguration: no lane found for id:[${this.laneDiagramID}]`
+               return this.errorConfig(
+                  instance,
+                  `no lane found for id:[${this.laneDiagramID}]`,
+                  "laneDiagramID"
                );
-               reject(configError);
-               return;
             }
             if (myLane.useRole) {
                jobData.roles = myLane.role;
@@ -84,7 +89,7 @@ module.exports = class ABProcessTaskUserApproval extends ABProcessTaskUserApprov
             }
          }
 
-         reqAB.serviceRequest(
+         this._req.serviceRequest(
             "process_manager.userform.create",
             jobData,
             (err, userForm) => {
@@ -111,8 +116,8 @@ module.exports = class ABProcessTaskUserApproval extends ABProcessTaskUserApprov
          var jobData = {
             formID: myState.userFormID,
          };
-         reqAB.log(`checking status on user form [${myState.userFormID}]`);
-         reqAB.serviceRequest(
+         this._req.log(`checking status on user form [${myState.userFormID}]`);
+         this._req.serviceRequest(
             "process_manager.userform.status",
             jobData,
             (err, userForm) => {

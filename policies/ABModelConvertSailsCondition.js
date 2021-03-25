@@ -336,7 +336,7 @@ module.exports = function (AB, cond, next) {
 
    DebugWhere = JSON.stringify(cond.where);
 
-   // Must be a Sails compatibal condition:
+   // Must be a Sails compatible condition:
    cond.where = processCondition(cond.where);
    next();
 };

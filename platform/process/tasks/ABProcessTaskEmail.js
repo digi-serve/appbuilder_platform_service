@@ -6,12 +6,12 @@ const ABProcessTaskEmailCore = require(path.join(__dirname, "..", "..", "..", "c
 // prettier-ignore
 const ABProcessParticipant = require(path.join(__dirname, "..", "ABProcessParticipant"));
 
-const AB = require("ab-utils");
-const reqAB = AB.reqApi({}, {});
-reqAB.jobID = "ABProcessTaskEmail";
-// reqAB {ABUtils.request}
-// a micro service request object used to send requests to other services.
-// This one is used to initiate emails to our notification_email service.
+// const AB = require("ab-utils");
+// const reqAB = AB.reqApi({}, {});
+// reqAB.jobID = "ABProcessTaskEmail";
+// // reqAB {ABUtils.request}
+// // a micro service request object used to send requests to other services.
+// // This one is used to initiate emails to our notification_email service.
 
 module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
    ////
@@ -53,6 +53,7 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
                   text += missingEmails.join(", ");
                   var error = new Error(text);
                   error.accounts = missingEmails;
+                  this.AB.notify.builder(error, { task: this });
                   reject(error);
                } else {
                   resolve(_.uniq(emails));
@@ -105,6 +106,7 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
                      field == "to" ? "Next" : "Current"
                   } Participant", but no lanes found.`;
                   var error = new Error(msg);
+                  this.AB.notify.builder(error, { task: this });
                   reject(error);
                   return;
                }
@@ -176,11 +178,15 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
     * do()
     * this method actually performs the action for this task.
     * @param {obj} instance  the instance data of the running process
+    * @param {Knex.Transaction} dbTransaction
+    * @param {ABUtil.reqService} req
+    *        an instance of the current request object for performing tenant
+    *        based operations.
     * @return {Promise}
     *      resolve(true/false) : true if the task is completed.
     *                            false if task is still waiting
     */
-   do(instance) {
+   do(instance, dbTransaction, req) {
       return new Promise((resolve, reject) => {
          var tasks = [];
          tasks.push(this.resolveToAddresses(instance));
@@ -212,29 +218,41 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
                   },
                };
 
-               reqAB.serviceRequest(
-                  "notification_email.email",
-                  jobData,
-                  (err, results) => {
-                     if (err) {
-                        // err objects are returned as simple {} not instances of {Error}
-                        var error = new Error(
-                           `NotificationEmail responded with an error (${
-                              err.code || err.toString()
-                           })`
+               req.serviceRequest("notification_email.email", jobData, (
+                  err /*, results */
+               ) => {
+                  if (err) {
+                     var error = null;
+
+                     // if ECONNREFUSED
+                     var eStr = err.toString();
+                     if (eStr.indexOf("ECONNREFUSED")) {
+                        error = this.AB.toError(
+                           "NotificationEmail: The server specified in config.local is refusing to connect.",
+                           err
                         );
-                        for (var v in err) {
-                           error[v] = err[v];
-                        }
-                        reject(error);
-                        return;
+                        this.AB.notify.builder(error, { task: this });
                      }
 
-                     this.stateCompleted(instance);
-                     this.log(instance, "Email Sent successfully");
-                     resolve(true);
+                     // err objects are returned as simple {} not instances of {Error}
+                     if (!error) {
+                        error = this.AB.toError(
+                           `NotificationEmail responded with an error (${
+                              err.code || err.toString()
+                           })`,
+                           err
+                        );
+                        this.AB.notify.developer(error, { task: this });
+                     }
+
+                     reject(error);
+                     return;
                   }
-               );
+
+                  this.stateCompleted(instance);
+                  this.log(instance, "Email Sent successfully");
+                  resolve(true);
+               });
             })
             .catch((error) => {
                console.error(error);

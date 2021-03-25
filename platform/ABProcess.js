@@ -1,18 +1,10 @@
 // import ABApplication from "./ABApplication"
 // const ABApplication = require("./ABApplication"); // NOTE: change to require()
-const path = require("path");
-const ABProcessCore = require(path.join(
-   __dirname,
-   "..",
-   "core",
-   "ABProcessCore.js"
-));
+const ABProcessCore = require("../core/ABProcessCore.js");
 
-const ABProcessEngine = require(path.join(
-   __dirname,
-   "process",
-   "ABProcessEngine"
-));
+const ABProcessEngine = require("./process/ABProcessEngine");
+
+const async = require("async");
 const convert = require("xml-js");
 
 module.exports = class ABProcess extends ABProcessCore {
@@ -107,7 +99,7 @@ module.exports = class ABProcess extends ABProcessCore {
          }
       });
 
-      var newInstance = {
+      var newValues = {
          processID: this.id,
          xmlDefinition: this.xmlDefinition,
          context: context,
@@ -121,28 +113,22 @@ module.exports = class ABProcess extends ABProcessCore {
          .then(
             () =>
                new Promise((next, bad) =>
+                  // Do NOT pass the dbTransaction to the ProcessInstance.create()
                   this.AB.objectProcessInstance()
                      .model()
-                     .create(
-                        newInstance,
-                        dbTransaction,
-                        req.userDefaults(),
-                        req
-                     )
-                     .then((newInstance) => {
-                        next(newInstance);
-                     })
+                     .create(newValues, null, req.userDefaults(), req)
+                     .then(next)
                      .catch((error) => {
                         this.AB.notify.developer(error, {
                            process: this,
-                           newInstance,
+                           newValues,
                            req,
                         });
                         bad(error);
                      })
                )
          )
-         .then((newInstance) => this.run(newInstance, dbTransaction));
+         .then((newInstance) => this.run(newInstance, dbTransaction, req));
    }
 
    /**
@@ -150,16 +136,19 @@ module.exports = class ABProcess extends ABProcessCore {
     * Reset the given instance.
     * @param {obj} instance the instance we are working with.
     * @param {string} taskID the diagramID of the task we are resetting
+    * @param {ABUtil.reqService} req
+    *        an instance of the current request object for performing tenant
+    *        based operations.
     * @return {Promise}
     */
-   instanceReset(instance, taskID) {
+   instanceReset(instance, taskID, req) {
       instance.status = "running";
       var task = this.elementForDiagramID(taskID);
       if (task) {
          task.reset(instance);
       }
 
-      return this.run(instance);
+      return this.run(instance, null, req);
    }
 
    /**
@@ -184,9 +173,12 @@ module.exports = class ABProcess extends ABProcessCore {
     * perform their actions.
     * @param {obj} instance the instance we are working with.
     * @param {Knex.Transaction} dbTransaction
+    * @param {ABUtil.reqService} req
+    *        an instance of the current request object for performing tenant
+    *        based operations.
     * @return {Promise}
     */
-   run(instance, dbTransaction) {
+   run(instance, dbTransaction, req) {
       // make sure the current instance is runnable:
       if (instance.status != "error" && instance.status != "completed") {
          var Engine = new ABProcessEngine(instance, this);
@@ -207,7 +199,7 @@ module.exports = class ABProcess extends ABProcessCore {
                      listOfPendingTasks,
                      (task, cb) => {
                         task
-                           .do(instance, dbTransaction)
+                           .do(instance, dbTransaction, req)
                            .then((isDone) => {
                               // if the task returns it is done,
                               // pass that along
@@ -259,7 +251,7 @@ module.exports = class ABProcess extends ABProcessCore {
                         }
                         if (hasProgress) {
                            // repeat this process allowing new tasks to .do()
-                           this.run(instance, dbTransaction)
+                           this.run(instance, dbTransaction, req)
                               .catch(bad)
                               .then(() => next());
                         } else {

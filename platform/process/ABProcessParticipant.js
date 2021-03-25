@@ -5,11 +5,8 @@
  * Participants manage users in the system (when there are no lanes defined)
  * and provide a way to lookup a SiteUser.
  */
-const path = require("path");
-// prettier-ignore
-const ABProcessParticipantCore = require(path.join(__dirname, "..", "..", "core", "process", "ABProcessParticipantCore.js"));
-
 const _ = require("lodash");
+const ABProcessParticipantCore = require("../../core/process/ABProcessParticipantCore.js");
 
 module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
    // constructor(attributes, process, application) {
@@ -56,7 +53,9 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
             this.account = [this.account];
          }
 
-         SiteUser.find({ uuid: this.account })
+         this.AB.objectUser()
+            .model()
+            .find({ uuid: this.account })
             .then((listUsers) => {
                resolve(listUsers);
             })
@@ -71,28 +70,35 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
             return;
          }
 
+         // console.log(
+         //    "TODO: ABProcessParticipant.usersForRoles():  after User Field revamp"
+         // );
+         // resolve([]);
+         // return;
+
          if (!Array.isArray(this.role)) {
             this.role = [this.role];
          }
 
          // lookup the current list of Roles we are defined to use.
-         let RoleModel = this.AB.objectRole();
-         RoleModel.queryFind(
-            {
-               where: {
-                  glue: "and",
-                  rules: [
-                     {
-                        key: RoleModel.PK(),
-                        rule: "in",
-                        value: this.role,
-                     },
-                  ],
-               },
-               populate: true,
-            },
-            {} // <-- user data isn't used in our condition
-         )
+         this.AB.objectRole()
+            .find(
+               { where: { uuid: this.role }, populate: true },
+               // {
+               //    where: {
+               //       glue: "and",
+               //       rules: [
+               //          {
+               //             key: RoleModel.PK(),
+               //             rule: "in",
+               //             value: this.role,
+               //          },
+               //       ],
+               //    },
+               //    populate: true,
+               // },
+               {} // <-- user data isn't used in our condition
+            )
 
             .then((result = []) => {
                // for each role, compile a list of Users->usernames
@@ -115,23 +121,24 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
                allUsers = _.uniq(allUsers);
 
                // now return our SiteUsers based upon these usernames
-               let SiteUser = this.AB.objectUser();
-               SiteUser.queryFind(
-                  {
-                     where: {
-                        glue: "and",
-                        rules: [
-                           {
-                              key: "username",
-                              rule: "in",
-                              value: allUsers,
-                           },
-                        ],
-                     },
-                     populate: true,
-                  },
-                  {} // <-- user data isn't used in our condition
-               )
+               this.AB.objectUser()
+                  .find(
+                     { where: { username: allUsers }, populate: true }
+                     // {
+                     //    where: {
+                     //       glue: "and",
+                     //       rules: [
+                     //          {
+                     //             key: "username",
+                     //             rule: "in",
+                     //             value: allUsers,
+                     //          },
+                     //       ],
+                     //    },
+                     //    populate: true,
+                     // },
+                     // {} // <-- user data isn't used in our condition
+                  )
                   .then(resolve)
                   .catch(reject);
 

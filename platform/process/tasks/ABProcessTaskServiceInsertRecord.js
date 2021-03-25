@@ -11,17 +11,21 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
     * this method actually performs the action for this task.
     * @param {obj} instance  the instance data of the running process
     * @param {Knex.Transaction?} trx - [optional]
-    *
+    * @param {ABUtil.reqService} req
+    *        an instance of the current request object for performing tenant
+    *        based operations.
     * @return {Promise}
     *      resolve(true/false) : true if the task is completed.
     *                            false if task is still waiting
     */
-   do(instance, trx) {
+   do(instance, trx, req) {
       this.object = this.AB.objectByID(this.objectID);
       if (!this.object) {
-         let errorMessage = "Could not find the object to insert record task";
-         this.log(instance, errorMessage);
-         return Promise.reject(new Error(errorMessage));
+         return this.errorConfig(
+            instance,
+            "Could not find the object to insert record task",
+            "objectID"
+         );
       }
 
       let tasks = [];
@@ -43,23 +47,26 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                      new Promise((next, bad) => {
                         fieldRepeat.datasourceLink
                            .model()
-                           .findAll({
-                              where: {
-                                 glue: "and",
-                                 rules: [
-                                    {
-                                       key: fieldRepeat.datasourceLink.PK(),
-                                       rule: "equals",
-                                       value:
-                                          rData[
-                                             fieldRepeat.datasourceLink.PK()
-                                          ],
-                                    },
-                                 ],
+                           .findAll(
+                              {
+                                 where: {
+                                    glue: "and",
+                                    rules: [
+                                       {
+                                          key: fieldRepeat.datasourceLink.PK(),
+                                          rule: "equals",
+                                          value:
+                                             rData[
+                                                fieldRepeat.datasourceLink.PK()
+                                             ],
+                                       },
+                                    ],
+                                 },
+                                 populate: true,
                               },
-                              populate: true,
-                           })
-
+                              null,
+                              req
+                           )
                            .then((result) => {
                               next(this.getDataValue(instance, result[0]));
                            })
@@ -79,23 +86,24 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
             Promise.resolve()
                .then(() => pullTask())
                .then((val) => this.object.model().create(val))
-               .then((record) =>
-                  this.object.model().findAll({
-                     where: {
-                        glue: "and",
-                        rules: [
-                           {
-                              key: this.object.PK(),
-                              rule: "equals",
-                              value: record[this.object.PK()],
-                           },
-                        ],
-                     },
-                     populate: true,
-                  })
-               )
+               // NOTE: .create() returns the fully populated instance already.
+               // .then((record) =>
+               //    this.object.model().findAll({
+               //       where: {
+               //          glue: "and",
+               //          rules: [
+               //             {
+               //                key: this.object.PK(),
+               //                rule: "equals",
+               //                value: record[this.object.PK()],
+               //             },
+               //          ],
+               //       },
+               //       populate: true,
+               //    }, null, req)
+               // )
                .then((result) => {
-                  results.push(result[0]);
+                  results.push(result);
                   return Promise.resolve();
                })
          );

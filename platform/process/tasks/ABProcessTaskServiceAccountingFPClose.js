@@ -12,14 +12,18 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
     * this method actually performs the action for this task.
     * @param {obj} instance  the instance data of the running process
     * @param {Knex.Transaction?} trx - [optional]
+    * @param {ABUtil.reqService} req
+    *        an instance of the current request object for performing tenant
+    *        based operations.
     * @return {Promise}
     *      resolve(true/false) : true if the task is completed.
     *                            false if task is still waiting
     */
-   do(instance, trx) {
+   do(instance, trx, req) {
       this.fpObject = this.AB.objects((o) => o.id == this.objectFP)[0];
       this.glObject = this.AB.objects((o) => o.id == this.objectGL)[0];
       this.accObject = this.AB.objects((o) => o.id == this.objectAcc)[0];
+      this._req = req;
 
       return new Promise((resolve, reject) => {
          var myState = this.myState(instance);
@@ -54,7 +58,7 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
             .then(() => {
                return this.fpObject
                   .model()
-                  .findAll(cond)
+                  .findAll(cond, null, req)
                   .then((rows) => {
                      this.currentFP = rows[0];
                      this.log(instance, "Found FPObj");
@@ -109,24 +113,28 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
                   }
                   this.fpObject
                      .model()
-                     .findAll({
-                        where: {
-                           glue: "and",
-                           rules: [
-                              {
-                                 key: startField.id,
-                                 rule: "equals",
-                                 value: startDate,
-                              },
-                              {
-                                 key: openField.id,
-                                 rule: "equals",
-                                 value: 1,
-                              },
-                           ],
+                     .findAll(
+                        {
+                           where: {
+                              glue: "and",
+                              rules: [
+                                 {
+                                    key: startField.id,
+                                    rule: "equals",
+                                    value: startDate,
+                                 },
+                                 {
+                                    key: openField.id,
+                                    rule: "equals",
+                                    value: 1,
+                                 },
+                              ],
+                           },
+                           populate: true,
                         },
-                        populate: true,
-                     })
+                        null,
+                        req
+                     )
                      .then((rows) => {
                         this.nextFP = rows[0];
                         this.log(instance, "Found the next FPObj");
@@ -224,22 +232,26 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
                                  tasks.push(
                                     Promise.resolve()
                                        .then(() =>
-                                          this.glObject.model().findAll({
-                                             where: {
-                                                glue: "and",
-                                                rules: [
-                                                   {
-                                                      key: this.glObject.PK(),
-                                                      rule: "equals",
-                                                      value:
-                                                         nextGlSegment[
-                                                            this.glObject.PK()
-                                                         ],
-                                                   },
-                                                ],
+                                          this.glObject.model().findAll(
+                                             {
+                                                where: {
+                                                   glue: "and",
+                                                   rules: [
+                                                      {
+                                                         key: this.glObject.PK(),
+                                                         rule: "equals",
+                                                         value:
+                                                            nextGlSegment[
+                                                               this.glObject.PK()
+                                                            ],
+                                                      },
+                                                   ],
+                                                },
+                                                populate: true,
                                              },
-                                             populate: true,
-                                          })
+                                             null,
+                                             req
+                                          )
                                        )
                                        .then((nextGlInfo) => {
                                           // array to a object
@@ -324,24 +336,25 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
                                                    this.glObject.PK()
                                                 ],
                                                 updateExistsVals,
+                                                null,
                                                 trx
                                              )
                                              .then((updatedExistsGl) => {
-                                                console.error(
-                                                   "FIX sails.sockets.broadcast()"
+                                                // sails.sockets.broadcast(
+                                                //    this.glObject.id,
+                                                //    "ab.datacollection.update",
+                                                //    {
+                                                //       objectId: this.glObject
+                                                //          .id,
+                                                //       data: updatedExistsGl,
+                                                //    }
+                                                // );
+
+                                                this._req.broadcast.dcUpdate(
+                                                   this.glObject.id,
+                                                   updatedExistsGl
                                                 );
-                                                if (false) {
-                                                   // Broadcast
-                                                   sails.sockets.broadcast(
-                                                      this.glObject.id,
-                                                      "ab.datacollection.update",
-                                                      {
-                                                         objectId: this.glObject
-                                                            .id,
-                                                         data: updatedExistsGl,
-                                                      }
-                                                   );
-                                                }
+
                                                 return Promise.resolve();
                                              })
                                              .catch(fail);
@@ -397,18 +410,20 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
                                              this.nextFP[linkName].push(
                                                 newGLResult
                                              );
-                                             console.error(
-                                                "FIX sails.sockets.broadcast()"
-                                             );
-                                             if (false) {
-                                                // Broadcast the create
-                                                sails.sockets.broadcast(
+
+                                             // Broadcast the create
+                                             // sails.sockets.broadcast(
+                                             //    this.glObject.id,
+                                             //    "ab.datacollection.create",
+                                             //    newGLResult
+                                             // );
+                                             this._req.broadcast
+                                                .dcCreate(
                                                    this.glObject.id,
-                                                   "ab.datacollection.create",
                                                    newGLResult
-                                                );
-                                             }
-                                             ok();
+                                                )
+                                                .then(ok)
+                                                .catch(bad);
                                           })
                                           .catch(bad);
                                     })
@@ -465,21 +480,26 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
 
                      this.fpObject
                         .model()
-                        .update(nextFpID, values, trx)
+                        .update(nextFpID, values, null, trx)
                         .then((updatedNextFP) => {
-                           console.error("FIX sails.sockets.broadcast()");
-                           if (false) {
-                              // Broadcast
-                              sails.sockets.broadcast(
+                           // Broadcast
+                           // sails.sockets.broadcast(
+                           //    this.fpObject.id,
+                           //    "ab.datacollection.update",
+                           //    {
+                           //       objectId: this.fpObject.id,
+                           //       data: updatedNextFP,
+                           //    }
+                           // );
+
+                           this._req.broadcast
+                              .dcUpdate(
                                  this.fpObject.id,
-                                 "ab.datacollection.update",
-                                 {
-                                    objectId: this.fpObject.id,
-                                    data: updatedNextFP,
-                                 }
-                              );
-                           }
-                           next();
+                                 updatedNextFP,
+                                 "broadcast.fp.update"
+                              )
+                              .then(next)
+                              .catch(fail);
                         })
                         .catch(fail);
                   })

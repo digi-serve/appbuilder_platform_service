@@ -15,12 +15,16 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
     * this method actually performs the action for this task.
     * @param {obj} instance  the instance data of the running process
     * @param {Knex.Transaction?} trx - [optional]
+    * @param {ABUtil.reqService} req
+    *        an instance of the current request object for performing tenant
+    *        based operations.
     * @return {Promise}
     *      resolve(true/false) : true if the task is completed.
     *                            false if task is still waiting
     */
-   do(instance, trx) {
+   do(instance, trx, req) {
       this._dbTransaction = trx;
+      this._req = req;
 
       // Setup references to the ABObject and Fields that we will use in our
       // operations.
@@ -59,7 +63,7 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
       // and clean up the code.
 
       return new Promise((resolve, reject) => {
-         var myState = this.myState(instance);
+         // var myState = this.myState(instance);
          this.balanceRecordsProcessed = {};
          // { balanceRecord.id : [{ JournalEntry, ..., }] }
          // a hash of the balance records that were updated from this batch of
@@ -80,8 +84,8 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
          if (!this.batchObj) {
             var msg = `unable to find relevant Batch Object from our .objectBatch[${this.objectBatch}] configuration`;
             this.log(instance, msg);
-            var error = new Error("AccountBatchProcessing.do(): " + msg);
-            reject(error);
+            var errNoBO = new Error("AccountBatchProcessing.do(): " + msg);
+            reject(errNoBO);
             return;
          }
 
@@ -112,7 +116,7 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
 
                return accountObject
                   .model()
-                  .findAll({ where: {}, populate: true })
+                  .findAll({ where: {}, populate: true }, null, req)
                   .then((list) => {
                      this.allAccountRecords = list;
                   });
@@ -120,7 +124,7 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
             .then(() => {
                return this.batchObj
                   .model()
-                  .findAll(cond)
+                  .findAll(cond, null, req)
                   .then((rows) => {
                      if (!rows || rows.length != 1) {
                         var msg = `unable to find Batch data for batchID[${currentBatchID}]`;
@@ -215,20 +219,23 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
                   .update(
                      journalEntry[this.jeObject.PK()],
                      updateValue,
+                     null,
                      this._dbTransaction
                   )
-                  .then((updatedJE) => {
+                  .then((/* updatedJE */) => {
                      // Broadcast
-                     sails.sockets.broadcast(
-                        this.jeObject.id,
-                        "ab.datacollection.update",
-                        {
-                           objectId: this.jeObject.id,
-                           data: updateValue,
-                        }
-                     );
-
-                     resolve();
+                     // sails.sockets.broadcast(
+                     //    this.jeObject.id,
+                     //    "ab.datacollection.update",
+                     //    {
+                     //       objectId: this.jeObject.id,
+                     //       data: updateValue,
+                     //    }
+                     // );
+                     this._req.broadcast
+                        .dcUpdate(this.jeObject.id, updateValue)
+                        .then(resolve)
+                        .catch(reject);
                   })
                   .catch(reject);
             })
@@ -288,7 +295,11 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
                   // try to find existing BalanceRecord matching our balCond
                   this.brObject
                      .model()
-                     .findAll({ where: balCond, populate: true })
+                     .findAll(
+                        { where: balCond, populate: true },
+                        null,
+                        this._req
+                     )
                      .then((rows) => {
                         balanceRecord = rows[0];
                         done();
@@ -443,25 +454,24 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
             this.brObject
                .model()
                // .create(balValues, this._dbTransaction)
-               .create(balValues) // NOTE: Ignore MySQL transaction because client needs id of entry.
+               .create(balValues, null, null, this._req) // NOTE: Ignore MySQL transaction because client needs id of entry.
                .then((newEntry) => {
                   // Broadcast
-                  if (false) {
-                     sails.sockets.broadcast(
-                        this.brObject.id,
-                        "ab.datacollection.create",
-                        {
-                           objectId: this.brObject.id,
-                           data: newEntry,
-                        }
-                     );
-                  } else {
-                     console.error(
-                        "!!! gotta fix sails.sockets.broadcast with tenants"
-                     );
-                  }
 
-                  resolve(newEntry);
+                  // sails.sockets.broadcast(
+                  //    this.brObject.id,
+                  //    "ab.datacollection.create",
+                  //    {
+                  //       objectId: this.brObject.id,
+                  //       data: newEntry,
+                  //    }
+                  // );
+                  this._req.broadcast
+                     .dcCreate(this.brObject.id, newEntry)
+                     .then(() => {
+                        resolve(newEntry);
+                     })
+                     .catch(reject);
                })
                .catch((err) => {
                   // TODO: need to pass in .instance so we can do a this.log()
@@ -503,7 +513,7 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
             };
             return this.brObject
                .model()
-               .findAll(cond)
+               .findAll(cond, null, this._req)
                .then((list) => {
                   allBalanceRecords = list;
                });
@@ -613,27 +623,24 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
                   new Promise((next, bad) => {
                      this.brObject
                         .model()
-                        .update(brID, balanceRecord, this._dbTransaction)
-                        .catch(bad)
+                        .update(brID, balanceRecord, null, this._dbTransaction)
                         .then(() => {
                            // Broadcast
-                           if (false) {
-                              sails.sockets.broadcast(
-                                 this.brObject.id,
-                                 "ab.datacollection.update",
-                                 {
-                                    objectId: this.brObject.id,
-                                    data: balanceRecord,
-                                 }
-                              );
-                           } else {
-                              console.error(
-                                 "Gotta fix sails.sockets.broadcast"
-                              );
-                           }
 
-                           next();
-                        });
+                           // sails.sockets.broadcast(
+                           //    this.brObject.id,
+                           //    "ab.datacollection.update",
+                           //    {
+                           //       objectId: this.brObject.id,
+                           //       data: balanceRecord,
+                           //    }
+                           // );
+                           this._req.broadcast
+                              .dcUpdate(this.brObject.id, balanceRecord)
+                              .then(next)
+                              .catch(bad);
+                        })
+                        .catch(bad);
                   })
                );
             });

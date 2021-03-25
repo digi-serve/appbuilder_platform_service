@@ -12,26 +12,34 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
     * this method actually performs the action for this task.
     * @param {obj} instance  the instance data of the running process
     * @param {Knex.Transaction?} trx - [optional]
+    * @param {ABUtil.reqService} req
+    *        an instance of the current request object for performing tenant
+    *        based operations.
     * @return {Promise}
     *      resolve(true/false) : true if the task is completed.
     *                            false if task is still waiting
     */
-   do(instance, trx) {
+   do(instance, trx, req) {
       this._dbTransaction = trx;
+      this._req = req;
 
       this.batchObject = this.AB.objects((o) => o.id == this.objectBatch)[0];
       if (!this.batchObject) {
-         this.log(instance, "Could not found Batch object");
-         return Promise.reject(new Error("Could not found Batch object"));
+         return this.errorConfig(
+            instance,
+            "Could not find Batch object",
+            "objectBatch"
+         );
       }
 
       this.batchFiscalMonthField = this.batchObject.fields(
          (f) => f.id == this.fieldBatchFiscalMonth
       )[0];
       if (!this.batchFiscalMonthField) {
-         this.log(instance, "Could not found Batch: Fiscal Month field");
-         return Promise.reject(
-            new Error("Could not found Batch: Fiscal Month field")
+         return this.errorConfig(
+            instance,
+            "Could not find Batch->Fiscal Month field",
+            "fieldBatchFiscalMonth"
          );
       }
 
@@ -39,17 +47,21 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
          (o) => o.id == this.objectBalance
       )[0];
       if (!this.balanceObject) {
-         this.log(instance, "Could not found Balance object");
-         return Promise.reject(new Error("Could not found Balance object"));
+         return this.errorConfig(
+            instance,
+            "Could not found Balance object",
+            "objectBalance"
+         );
       }
 
       this.balanceAccountField = this.balanceObject.fields(
          (f) => f.id == this.fieldBrAccount
       )[0];
       if (!this.balanceAccountField) {
-         this.log(instance, "Could not found Batch: Account field");
-         return Promise.reject(
-            new Error("Could not found Batch: Account field")
+         return this.errorConfig(
+            instance,
+            "Could not found Batch->Account field",
+            "fieldBrAccount"
          );
       }
 
@@ -57,22 +69,31 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
          (f) => f.id == this.fieldBrRC
       )[0];
       if (!this.balanceRcField) {
-         this.log(instance, "Could not found Batch: RC field");
-         return Promise.reject(new Error("Could not found Batch: RC field"));
+         return this.errorConfig(
+            instance,
+            "Could not found Batch->RC field",
+            "fieldBrRC"
+         );
       }
 
       this.jeObject = this.AB.objects((o) => o.id == this.objectJE)[0];
       if (!this.jeObject) {
-         this.log(instance, "Could not found JE object");
-         return Promise.reject(new Error("Could not found JE object"));
+         return this.errorConfig(
+            instance,
+            "Could not found JE object",
+            "objectJE"
+         );
       }
 
       this.jeArchiveObject = this.AB.objects(
          (o) => o.id == this.objectJEArchive
       )[0];
       if (!this.jeArchiveObject) {
-         this.log(instance, "Could not found JE Archive object");
-         return Promise.reject(new Error("Could not found JE Archive object"));
+         return this.errorConfig(
+            instance,
+            "Could not found JE Archive object",
+            "objectJEArchive"
+         );
       }
 
       this.jeBatchField = this.jeObject.fields(
@@ -82,9 +103,10 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
             f.settings.linkObject == this.objectBatch
       )[0];
       if (!this.jeBatchField) {
-         this.log(instance, "Could not found the connect JE to Batch field");
-         return Promise.reject(
-            new Error("Could not found the connect JE to Batch field")
+         return this.errorConfig(
+            instance,
+            "Could not found the connect JE to Batch field",
+            "objectBatch"
          );
       }
 
@@ -92,9 +114,10 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
          (f) => f && f.id == this.fieldJeAccount
       )[0];
       if (!this.jeAccountField) {
-         this.log(instance, "Could not found the connect JE to Account field");
-         return Promise.reject(
-            new Error("Could not found the connect JE to Account field")
+         return this.errorConfig(
+            instance,
+            "Could not found the connect JE to Account field",
+            "fieldJeAccount"
          );
       }
 
@@ -102,9 +125,10 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
          (f) => f && f.id == this.fieldJeRC
       )[0];
       if (!this.jeRcField) {
-         this.log(instance, "Could not found the connect JE to RC field");
-         return Promise.reject(
-            new Error("Could not found the connect JE to RC field")
+         return this.errorConfig(
+            instance,
+            "Could not found the connect JE to RC field",
+            "fieldJeRC"
          );
       }
 
@@ -112,23 +136,21 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
          (f) => f && f.id == this.fieldJeArchiveBalance
       )[0];
       if (!this.jeArchiveBalanceField) {
-         this.log(
+         return this.errorConfig(
             instance,
-            "Could not found the connect JE Archive to BR field"
-         );
-         return Promise.reject(
-            new Error("Could not found the connect JE Archive to BR field")
+            "Could not found the connect JE Archive to BR field",
+            "fieldJeArchiveBalance"
          );
       }
 
       var currentProcessValues = this.hashProcessDataValues(instance);
       var currentBatchID = currentProcessValues[this.processBatchValue];
       if (!currentBatchID) {
-         this.log(instance, "unable to find relevant Batch ID");
-         var error = new Error(
-            "AccountingJEArchive.do(): unable to find relevant Batch ID"
+         return this.errorConfig(
+            instance,
+            "AccountingJEArchive.do(): unable to find relevant Batch ID",
+            "processBatchValue"
          );
-         return Promise.reject(error);
       }
 
       return (
@@ -139,19 +161,23 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
                   new Promise((next, bad) => {
                      this.batchObject
                         .model()
-                        .findAll({
-                           where: {
-                              glue: "and",
-                              rules: [
-                                 {
-                                    key: this.batchObject.PK(),
-                                    rule: "equals",
-                                    value: currentBatchID,
-                                 },
-                              ],
+                        .findAll(
+                           {
+                              where: {
+                                 glue: "and",
+                                 rules: [
+                                    {
+                                       key: this.batchObject.PK(),
+                                       rule: "equals",
+                                       value: currentBatchID,
+                                    },
+                                 ],
+                              },
+                              populate: false,
                            },
-                           populate: false,
-                        })
+                           null,
+                           req
+                        )
                         .then((batch) => {
                            this.batch = batch[0];
 
@@ -195,7 +221,7 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
 
                      this.jeObject
                         .model()
-                        .findAll(cond)
+                        .findAll(cond, null, req)
                         .then((journals) => {
                            this.journals = journals || [];
                            next();
@@ -255,7 +281,7 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
                            new Promise((ok, no) => {
                               this.balanceObject
                                  .model()
-                                 .findAll(cond)
+                                 .findAll(cond, null, req)
                                  .then((balances) => {
                                     this.balances = this.balances.concat(
                                        balances || []
@@ -270,8 +296,8 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
                      });
 
                      Promise.all(tasks)
-                        .catch(bad)
-                        .then(() => next());
+                        .then(() => next())
+                        .catch(bad);
                   })
             )
             // Copy JE to JE Archive
@@ -352,27 +378,26 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
                                        .model()
                                        // .create(jeArchiveValues, trx)
                                        .create(jeArchiveValues) // NOTE: Ignore MySQL transaction because client needs id of entry.
-                                       .catch(no)
+
                                        .then((newJeArchive) => {
-                                          if (false) {
-                                             // Broadcast
-                                             sails.sockets.broadcast(
-                                                this.jeArchiveObject.id,
-                                                "ab.datacollection.create",
-                                                {
-                                                   objectId: this
-                                                      .jeArchiveObject.id,
-                                                   data: newJeArchive,
-                                                }
-                                             );
-                                          } else {
-                                             console.error(
-                                                "!!! fix sails.sockets "
-                                             );
-                                          }
+                                          // Broadcast
+                                          // sails.sockets.broadcast(
+                                          //    this.jeArchiveObject.id,
+                                          //    "ab.datacollection.create",
+                                          //    {
+                                          //       objectId: this
+                                          //          .jeArchiveObject.id,
+                                          //       data: newJeArchive,
+                                          //    }
+                                          // );
+                                          this._req.broadcast.dcCreate(
+                                             this.jeArchiveObject.id,
+                                             newJeArchive
+                                          );
 
                                           ok();
-                                       });
+                                       })
+                                       .catch(no);
                                  })
                            );
                         }
@@ -408,26 +433,27 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
                         .query(trx)
                         .delete()
                         .where("uuid", "IN", jeIds)
-                        .catch(bad)
                         .then(() => {
                            // Broadcast
                            (jeIds || []).forEach((jeId) => {
-                              if (false) {
-                                 sails.sockets.broadcast(
-                                    this.jeObject.id,
-                                    "ab.datacollection.delete",
-                                    {
-                                       objectId: this.jeObject.id,
-                                       id: jeId,
-                                    }
-                                 );
-                              } else {
-                                 console.error("!!! fix sails.sockets");
-                              }
+                              // sails.sockets.broadcast(
+                              //    this.jeObject.id,
+                              //    "ab.datacollection.delete",
+                              //    {
+                              //       objectId: this.jeObject.id,
+                              //       id: jeId,
+                              //    }
+                              // );
+
+                              this._req.broadcast.dcDelete(
+                                 this.jeObject.id,
+                                 jeId
+                              );
                            });
 
                            next();
-                        });
+                        })
+                        .catch(bad);
                   })
             )
             // finish out the Process Task

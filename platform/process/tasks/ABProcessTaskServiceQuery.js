@@ -29,7 +29,7 @@ module.exports = class ABProcessTaskServiceQuery extends ABProcessTaskServiceQue
     *      resolve(true/false) : true if the task is completed.
     *                            false if task is still waiting
     */
-   do(instance) {
+   do(instance /* , trx, req */) {
       return new Promise((resolve, reject) => {
          // var myState = this.myState(instance);
 
