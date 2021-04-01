@@ -245,7 +245,9 @@ module.exports = class ABModel extends ABModelCore {
          // perform the findAll()
          return this.findAll(cond, userDefaults, req).catch((err) => {
             if (["ECONNRESET", "ETIMEDOUT"].indexOf(err.code) > -1) {
-               req.log(`.find() ${e.code} : retrying ...`);
+               if (req) {
+                  req.log(`.find() ${e.code} : retrying ...`);
+               }
                return this.findAll(cond, userDefaults, req);
             }
             throw err;
