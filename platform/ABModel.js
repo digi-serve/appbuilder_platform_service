@@ -243,7 +243,13 @@ module.exports = class ABModel extends ABModelCore {
       // make sure any embedded conditions are properly reduced
       return this.object.reduceConditions(cond.where, userDefaults).then(() => {
          // perform the findAll()
-         return this.findAll(cond, userDefaults, req);
+         return this.findAll(cond, userDefaults, req).catch((err) => {
+            if (["ECONNRESET", "ETIMEDOUT"].indexOf(err.code) > -1) {
+               req.log(`.find() ${e.code} : retrying ...`);
+               return this.findAll(cond, userDefaults, req);
+            }
+            throw err;
+         });
       });
    }
 
