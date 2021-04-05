@@ -1004,7 +1004,9 @@ module.exports = class ABClassObject extends ABObjectCore {
                            (scopes || []).forEach((s) => {
                               if (
                                  !s ||
-                                 (s.objectIds || []).indexOf(this.id) < 0
+                                 (s.objectIds || []).filter((objId) =>
+                                    objectIds.includes(objId)
+                                 ).length < 1 // intersection values from 2 arrays
                               )
                                  return;
 
@@ -1265,6 +1267,10 @@ module.exports = class ABClassObject extends ABObjectCore {
 
                            // make sure a value is properly Quoted:
                            function quoteMe(value) {
+                              if (value && value.replace) {
+                                 // FIX: You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near '
+                                 value = value.replace(/'/g, "''");
+                              }
                               return "'" + value + "'";
                            }
 
@@ -1788,14 +1794,15 @@ module.exports = class ABClassObject extends ABObjectCore {
                            relationNames.push("translations");
                         }
 
-                        if (relationNames.length > 0)
-                           console.log(relationNames);
-                        query.eager(`[${relationNames.join(", ")}]`, {
-                           // if the linked object's PK is uuid, then exclude .id
-                           unselectId: (builder) => {
-                              builder.omit(["id"]);
-                           },
-                        });
+                        if (relationNames.length > 0) {
+                           // console.log(relationNames);
+                           query.eager(`[${relationNames.join(", ")}]`, {
+                              // if the linked object's PK is uuid, then exclude .id
+                              unselectId: (builder) => {
+                                 builder.omit(["id"]);
+                              }
+                           });
+                        }
 
                         // Exclude .id column
                         if (this.PK() === "uuid")
