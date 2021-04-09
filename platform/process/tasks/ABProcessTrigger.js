@@ -18,14 +18,13 @@ module.exports = class ABProcessTaskTrigger extends ABProcessTriggerCore {
 
       return (
          Promise.resolve()
-            // Create Knex.transactions
             .then(
                () =>
-                  new Promise((next /* , bad */) => {
+                  new Promise((next, bad) => {
                      this.AB.Knex.createTransaction((trx) => {
                         dbTransaction = trx;
                         next();
-                     });
+                     }).catch(bad);
                   })
             )
             // modify data in any appropriate way then:
@@ -36,8 +35,11 @@ module.exports = class ABProcessTaskTrigger extends ABProcessTriggerCore {
             })
             // cancel changes
             .catch((error) => {
-               this.AB.notify.developer(error, { task: this });
-               dbTransaction.rollback();
+               this.AB.notify.developer(error, {
+                  context: `ABProcessTrigger.trigger()`,
+                  task: this,
+               });
+               if (dbTransaction) dbTransaction.rollback();
                this.AB.error(error);
                // propogate the error
                throw error;
