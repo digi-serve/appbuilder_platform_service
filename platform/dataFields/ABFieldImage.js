@@ -9,9 +9,9 @@ const path = require("path");
 const ABFieldImageCore = require(path.join(__dirname, "..", "..", "core", "dataFields", "ABFieldImageCore.js"));
 
 module.exports = class ABFieldImage extends ABFieldImageCore {
-   constructor(values, object) {
-      super(values, object);
-   }
+   // constructor(values, object) {
+   //    super(values, object);
+   // }
 
    ///
    /// Instance Methods
@@ -35,18 +35,22 @@ module.exports = class ABFieldImage extends ABFieldImageCore {
     * @param {obj} allParameters  a key=>value hash of the inputs to parse.
     * @return {array}
     */
-   isValidData(allParameters) {
-      var errors = [];
-
-      return errors;
+   isValidData(/* allParameters */) {
+      return [];
    }
 
    /**
     * @function migrateCreate
     * perform the necessary sql actions to ADD this column to the DB table.
-    * @param {knex} knex the Knex connection.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateCreate().
+    * @param {knex} knex
+    *        the Knex connection.
+    * @return {Promise}
     */
-   migrateCreate(knex) {
+   migrateCreate(req, knex) {
+      knex = knex || this.AB.Knex.connection(this.object.connName);
+
       return new Promise((resolve, reject) => {
          var tableName = this.object.dbTableName();
 
@@ -63,7 +67,8 @@ module.exports = class ABFieldImage extends ABFieldImageCore {
                         t.string(this.columnName).nullable();
                      }
                   })
-                  .then(resolve, reject);
+                  .then(resolve)
+                  .catch(reject);
             } else {
                // if the column already exists, nothing to do:
                resolve();
@@ -75,14 +80,21 @@ module.exports = class ABFieldImage extends ABFieldImageCore {
    /**
     * @function migrateDrop
     * perform the necessary sql actions to drop this column from the DB table.
-    * @param {knex} knex the Knex connection.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateCreate().
+    * @param {knex} knex
+    *        the Knex connection.
+    * @return {Promise}
     */
-   migrateDrop(knex) {
+   migrateDrop(req, knex) {
+      knex = knex || this.AB.Knex.connection(this.object.connName);
+
       return new Promise((resolve, reject) => {
-         this.object.AB.error(
-            "!!! TODO: pay attention to the .removeExistingData setting !!!"
+         req.notify.developer(
+            "!!! TODO: pay attention to the .removeExistingData setting !!!",
+            { field: this }
          );
-         super.migrateDrop(knex).then(resolve).catch(reject);
+         super.migrateDrop(req, knex).then(resolve).catch(reject);
 
          // TODO:
          // implement the ability to remove the existing images referenced by this now-to-be-removed

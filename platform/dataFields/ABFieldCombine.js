@@ -5,7 +5,7 @@ const DELIMITERS = {
    plus: "+",
    dash: "-",
    period: ".",
-   space: " "
+   space: " ",
 };
 
 module.exports = class ABFieldCombine extends ABFieldCombineCore {
@@ -20,16 +20,20 @@ module.exports = class ABFieldCombine extends ABFieldCombineCore {
    /**
     * @function migrateCreate
     * perform the necessary sql actions to ADD this column to the DB table.
-    * @param {knex} knex the Knex connection.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateCreate().
+    * @param {knex} knex
+    *        the Knex connection.
     * @return {Promise}
     */
-   migrateCreate(knex) {
+   migrateCreate(req, knex) {
+      knex = knex || this.AB.Knex.connection(this.object.connName);
       let tableName = this.object.dbTableName();
 
       let combinedFieldIds = (this.settings.combinedFields || "").split(",");
       let columnNames = [];
       (combinedFieldIds || []).forEach((fId) => {
-         let field = this.object.fields((f) => f.id == fId)[0];
+         let field = this.object.fieldByID(fId);
          if (!field) return;
 
          columnNames.push(field.columnName);
@@ -134,15 +138,26 @@ module.exports = class ABFieldCombine extends ABFieldCombineCore {
                         });
                   })
             )
+            .catch((err) => {
+               req.notify.developer(err, {
+                  context: "Error: ABFieldCombine.migrateCreate()",
+                  field: this,
+               });
+               throw err;
+            })
       );
    }
 
    /**
     * @function migrateUpdate
     * perform the necessary sql actions to MODIFY this column to the DB table.
-    * @param {knex} knex the Knex connection.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateCreate().
+    * @param {knex} knex
+    *        the Knex connection.
+    * @return {Promise}
     */
-   migrateUpdate(knex) {
+   migrateUpdate(/* req, knex */) {
       // This field type does not update
       return Promise.resolve();
    }
@@ -150,13 +165,18 @@ module.exports = class ABFieldCombine extends ABFieldCombineCore {
    /**
     * @function migrateDrop
     * perform the necessary sql actions to drop this column from the DB table.
-    * @param {knex} knex the Knex connection.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateCreate().
+    * @param {knex} knex
+    *        the Knex connection.
+    * @return {Promise}
     */
-   migrateDrop(knex) {
+   migrateDrop(req, knex) {
+      knex = knex || this.AB.Knex.connection(this.object.connName);
+
       // validate this index is being FK
-      let linkFields = this.object.fields(
+      let linkFields = this.object.connectFields(
          (f) =>
-            f.key == "connectObject" &&
             f.settings &&
             (f.settings.indexField == this.id ||
                f.settings.indexField2 == this.id)
@@ -191,7 +211,7 @@ module.exports = class ABFieldCombine extends ABFieldCombineCore {
                      .catch(bad);
                })
          )
-         .then(() => super.migrateDrop(knex));
+         .then(() => super.migrateDrop(req, knex));
    }
 
    ///
@@ -260,4 +280,3 @@ module.exports = class ABFieldCombine extends ABFieldCombineCore {
       return `${this.safeTableName}_${this.safeColumnName}_update`;
    }
 };
-

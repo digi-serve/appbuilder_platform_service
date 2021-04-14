@@ -35,9 +35,15 @@ module.exports = class ABFieldTree extends ABFieldTreeCore {
    /**
     * @function migrateCreate
     * perform the necessary sql actions to ADD this column to the DB table.
-    * @param {knex} knex the Knex connection.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateXXX().
+    * @param {knex} knex
+    *        the Knex connection.
+    * @return {Promise}
     */
-   migrateCreate(knex) {
+   migrateCreate(req, knex) {
+      knex = knex || this.AB.Knex.connection(this.object.connName);
+
       return new Promise((resolve, reject) => {
          var tableName = this.object.dbTableName();
 
@@ -76,20 +82,6 @@ module.exports = class ABFieldTree extends ABFieldTreeCore {
          });
       });
    }
-
-   /**
-    * @function migrateDrop
-    * perform the necessary sql actions to drop this column from the DB table.
-    * @param {knex} knex the Knex connection.
-    */
-   // NOTE: ABField.migrateDrop() is pretty good for most cases.
-   // migrateDrop (knex) {
-   // 	return new Promise(
-   // 		(resolve, reject) => {
-   // 			// do your special drop operations here.
-   // 		}
-   // 	)
-   // }
 
    ///
    /// DB Model Services
@@ -149,9 +141,7 @@ module.exports = class ABFieldTree extends ABFieldTreeCore {
     * @param {obj} allParameters  a key=>value hash of the inputs to parse.
     * @return {array}
     */
-   isValidData(allParameters) {
-      var errors = [];
-
-      return errors;
+   isValidData(/* allParameters */) {
+      return [];
    }
 };

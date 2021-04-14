@@ -31,9 +31,15 @@ module.exports = class ABFieldDateTime extends ABFieldDateTimeCore {
    /**
     * @function migrateCreate
     * perform the necessary sql actions to ADD this column to the DB table.
-    * @param {knex} knex the Knex connection.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateCreate().
+    * @param {knex} knex
+    *        the Knex connection.
+    * @return {Promise}
     */
-   migrateCreate(knex) {
+   migrateCreate(req, knex) {
+      knex = knex || this.AB.Knex.connection(this.object.connName);
+
       return new Promise((resolve, reject) => {
          var tableName = this.object.dbTableName();
 
@@ -76,10 +82,14 @@ module.exports = class ABFieldDateTime extends ABFieldDateTimeCore {
    /**
     * @function migrateUpdate
     * perform the necessary sql actions to MODIFY this column to the DB table.
-    * @param {knex} knex the Knex connection.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateCreate().
+    * @param {knex} knex
+    *        the Knex connection.
+    * @return {Promise}
     */
-   migrateUpdate(knex) {
-      return this.migrateCreate(knex);
+   migrateUpdate(...params) {
+      return this.migrateCreate(...params);
    }
 
    ///
@@ -166,10 +176,8 @@ module.exports = class ABFieldDateTime extends ABFieldDateTimeCore {
     * @param {obj} allParameters  a key=>value hash of the inputs to parse.
     * @return {array}
     */
-   isValidData(allParameters) {
-      var errors = [];
-
-      return errors;
+   isValidData(/* allParameters */) {
+      return [];
    }
 
    toSQLFormat(data) {

@@ -19,6 +19,7 @@
   "dependencies": {
     "moment": "^2.29.1",
     "objection": "^2.2.15",
+    "serialize-error": "^8.0.1",
     "xml-js": "^1.6.11"
   }
 }

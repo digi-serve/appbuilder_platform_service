@@ -1,9 +1,11 @@
 /**
  * definitionCreate.js
  * insert a value into the appbuilder_definition table.
- * @param {ABUtil.request} req
- *        a tenant aware request object used to assist in building the
- *        sql data.
+ * @param {ABFactory} AB
+ *        The ABFactory that manages the Tenant Data this request should
+ *        operate under.
+ * @param {ABUtils.reqService} req
+ *        The service request object that is driving this operation.
  * @param {obj} values
  *        a value hash representing the data for the operation.
  * @return {Promise}
@@ -12,7 +14,7 @@
 const uuidv4 = require("uuid");
 const queryDefinitionFind = require("./definitionFind");
 
-module.exports = function (req, values) {
+module.exports = function (AB, req, values, options = {}) {
    return new Promise((resolve, reject) => {
       let tenantDB = req.queryTenantDB(reject);
       if (!tenantDB) {
@@ -25,15 +27,22 @@ module.exports = function (req, values) {
       let sqlInsert = `INSERT INTO ${tenantDB}\`appbuilder_definition\` SET ?`;
 
       // prepare values
-      var now = new Date();
+      var now = AB.rules.toSQLDateTime(new Date());
       let usefulValues = {
          id: values.id || uuidv4(),
          createdAt: now,
          updatedAt: now,
       };
 
+      var dateKeys = ["updatedAt", "createdAt"];
       Object.keys(values).forEach((k) => {
-         usefulValues[k] = values[k];
+         if (dateKeys.indexOf(k) == -1) {
+            usefulValues[k] = values[k];
+         } else {
+            if (values[k]) {
+               usefulValues[k] = AB.rules.toSQLDateTime(values[k]);
+            }
+         }
       });
 
       // make sure we store our .json as a string:
@@ -47,12 +56,17 @@ module.exports = function (req, values) {
 
       req.query(sqlInsert, usefulValues, (error /* results, fields */) => {
          if (error) {
-            req.log(sqlInsert);
+            if (
+               !options.silenceErrors ||
+               options.silenceErrors.indexOf(error.code) == -1
+            ) {
+               req.log(error);
+            }
             reject(error);
          } else {
             // We want to return a fully populated entry back:
             let cond = { id: usefulValues.id };
-            queryDefinitionFind(req, cond)
+            queryDefinitionFind(AB, req, cond)
                .then((rows) => {
                   resolve(rows[0]);
                })

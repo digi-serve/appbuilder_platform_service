@@ -73,27 +73,34 @@ module.exports = class ABField extends ABFieldCore {
    /**
     * @function migrateCreate
     * perform the necessary sql actions to ADD this column to the DB table.
-    * @param {knex} knex the Knex connection.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateCreate().
+    * @param {knex} knex
+    *        the Knex connection.
+    * @return {Promise}
     */
-   migrateCreate(knex) {
-      sails.log.error(
-         "!!! Field [" +
-            this.fieldKey() +
-            "] has not implemented migrateCreate()!!! "
+   migrateCreate(req /*, knex */) {
+      var error = new Error(
+         `!!! Field [${this.fieldKey()}] has not implemented migrateCreate()!!! `
       );
+      req.logError(error);
+      return Promise.reject(error);
    }
 
    /**
     * @function migrateUpdate
     * perform the necessary sql actions to MODIFY this column to the DB table.
-    * @param {knex} knex the Knex connection.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateUpdate().
+    * @param {knex} knex
+    *        the Knex connection.
+    * @return {Promise}
     */
-   migrateUpdate(knex) {
-      sails.log.error(
-         "!!! Field [" +
-            this.fieldKey() +
-            "] has not implemented migrateUpdate()!!! "
+   migrateUpdate(req /* , knex */) {
+      var error = new Error(
+         `!!! Field [${this.fieldKey()}] has not implemented migrateUpdate()!!! `
       );
+      req.logError(error);
 
       return new Promise((resolve, reject) => {
          // skip to MODIFY exists column
@@ -104,10 +111,14 @@ module.exports = class ABField extends ABFieldCore {
    /**
     * @function migrateDrop
     * perform the necessary sql actions to drop this column from the DB table.
-    * @param {knex} knex the Knex connection.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateDrop().
+    * @param {knex} knex
+    *        the Knex connection.
+    * @return {Promise}
     */
-   migrateDrop(knex) {
-      sails.log.info("" + this.fieldKey() + ".migrateDrop() ");
+   migrateDrop(req, knex) {
+      knex = knex || this.AB.Knex.connection(this.object.connName);
 
       // if column name is empty, then .hasColumn function always returns true
       if (
@@ -196,7 +207,7 @@ module.exports = class ABField extends ABFieldCore {
                return new Promise((next, err) => {
                   let tasks = [];
 
-                  let queries = ABObjectCache.list(
+                  let queries = this.AB.queries(
                      (obj) =>
                         obj && obj.canFilterField && obj.canFilterField(this)
                   );
@@ -207,7 +218,7 @@ module.exports = class ABField extends ABFieldCore {
                      });
 
                      // Update MySql view of the query
-                     tasks.push(ABMigration.createQuery(q));
+                     tasks.push(q.migrateCreate(req));
                   });
 
                   Promise.all(tasks)
@@ -219,7 +230,7 @@ module.exports = class ABField extends ABFieldCore {
 
             // have the Model refresh it's objection/knex definitions:
             .then(() => {
-               this.object.modelRefresh();
+               this.object.model().modelKnexRefresh();
             })
       );
    }

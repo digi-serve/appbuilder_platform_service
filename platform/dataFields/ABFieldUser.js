@@ -41,9 +41,15 @@ module.exports = class ABFieldUser extends ABFieldUserCore {
    /**
     * @function migrateCreate
     * perform the necessary sql actions to ADD this column to the DB table.
-    * @param {knex} knex the Knex connection.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateXXX().
+    * @param {knex} knex
+    *        the Knex connection.
+    * @return {Promise}
     */
-   migrateCreate(knex) {
+   migrateCreate(req, knex) {
+      knex = knex || this.AB.Knex.connection(this.object.connName);
+
       return new Promise((resolve, reject) => {
          var tableName = this.object.dbTableName();
 
@@ -75,20 +81,6 @@ module.exports = class ABFieldUser extends ABFieldUserCore {
       });
    }
 
-   /**
-    * @function migrateDrop
-    * perform the necessary sql actions to drop this column from the DB table.
-    * @param {knex} knex the Knex connection.
-    */
-   // NOTE: ABField.migrateDrop() is pretty good for most cases.
-   // migrateDrop (knex) {
-   // 	return new Promise(
-   // 		(resolve, reject) => {
-   // 			// do your special drop operations here.
-   // 		}
-   // 	)
-   // }
-
    ///
    /// DB Model Services
    ///
@@ -111,14 +103,14 @@ module.exports = class ABFieldUser extends ABFieldUserCore {
                   {
                      // allow empty string because it could not put empty array in REST api
                      type: "string",
-                     maxLength: 0
-                  }
-               ]
+                     maxLength: 0,
+                  },
+               ],
             };
          } else {
             // storing the uuid as a string.
             obj[this.columnName] = {
-               type: ["string", "null"]
+               type: ["string", "null"],
             };
          }
       }
@@ -145,10 +137,8 @@ module.exports = class ABFieldUser extends ABFieldUserCore {
     * @param {obj} allParameters  a key=>value hash of the inputs to parse.
     * @return {array}
     */
-   isValidData(allParameters) {
-      var errors = [];
-
-      return errors;
+   isValidData(/* allParameters */) {
+      return [];
    }
 
    /**

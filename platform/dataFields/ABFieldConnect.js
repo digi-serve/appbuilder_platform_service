@@ -141,31 +141,33 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
    /**
     * @function migrateCreate
     * perform the necessary sql actions to ADD this column to the DB table.
-    * @param {knex} knex the Knex connection.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateCreate().
+    * @param {knex} knex
+    *        the Knex connection.
     */
-   migrateCreate(knex) {
+   migrateCreate(req, knex) {
+      knex = knex || this.AB.Knex.connection(this.object.connName);
       return new Promise((resolve, reject) => {
          let tableName = this.object.dbTableName(true);
 
          // find linked object
          let linkObject = this.datasourceLink;
          if (!linkObject) {
-            this.AB.error(
-               `ABFieldConnect.migrateCreate(): could not resolve .datasourceLink for Object[${
-                  this.object.name
-               }][${this.object.id}].Field[${this.label}][${
-                  this.id
-               }] : settings[${JSON.stringify(this.settings, null, 4)}]`
+            // Builder Notification already published in this.datasourceLink
+            var err = new Error(
+               `Error: ABFieldConnect.migrateCreate(): Unable to find datasourceLink for object[${this.object.label}]->field[${this.label}][${this.id}]`
             );
+            return reject(err);
          }
          let linkKnex = this.AB.Knex.connection(linkObject.connName);
 
          let linkTableName = linkObject.dbTableName(true);
          let linkField = this.fieldLink;
          if (!linkField) {
-            // !!! This is an internal Error that is our fault:
+            // Builder Notification already published in this.fieldLink
             var missingFieldLink = new Error(
-               `MigrateCreate():Unable to find linked field for object[${
+               `Error: ABFieldConnect.migrateCreate(): Unable to find linked field for object[${
                   this.object.label
                }]->field[${this.label}][${this.id}] : settings[${JSON.stringify(
                   this.settings,
@@ -223,7 +225,6 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                   // create a column
                   (exists, next) => {
                      if (exists) return next();
-
                      knex.schema
                         .table(tableName, (t) => {
                            let linkCol = this.setNewColumnSchema(
@@ -249,7 +250,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                                     )
                                  );
                            } else {
-                              console.error(
+                              req.log(
                                  `[1:M] object[${this.object.label}]->Field[${this.label}][${this.id}] skipping reference column creation: !linkObject.isExternal[${linkObject.isExternal}] && this.connName[${this.connName}] == linkObject.connName[${linkObject.connName}]`
                               );
                            }
@@ -261,8 +262,14 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                   },
                ],
                (err) => {
-                  if (err) reject(err);
-                  else resolve();
+                  if (err) {
+                     req.notify.developer(err, {
+                        context: "ABFieldConnect.migrateCreate()",
+                        field: this,
+                        AB: this.AB,
+                     });
+                     reject(err);
+                  } else resolve();
                }
             );
          }
@@ -328,7 +335,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                                     )
                                  );
                            } else {
-                              console.error(
+                              req.log(
                                  `[1:1] object[${this.object.label}]->Field[${this.label}][${this.id}] skipping reference column creation: !linkObject.isExternal[${linkObject.isExternal}] && this.connName[${this.connName}] == linkObject.connName[${linkObject.connName}]`
                               );
                            }
@@ -373,7 +380,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                      // linkColumnName might be undefined.
                      // if so, then skip this process.
                      if (!linkColumnName) {
-                        console.error(
+                        req.log(
                            "ABFieldConnect:migrateCreate(): could not resolve linkColumnName. This is unexpected.",
                            this.toObj()
                         );
@@ -432,7 +439,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                                     )
                                  );
                            } else {
-                              console.error(
+                              req.log(
                                  `[M:1] object[${this.object.label}]->Field[${this.label}][${this.id}] skipping linkCol creation: !isExternal[${this.object.isExternal}]  && connName[${this.connName}] == linkObj.connName[${linkObject.connName}]`
                               );
                            }
@@ -443,7 +450,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                         // .catch(next);
                         .catch((err) => {
                            if (err.code != "ER_DUP_FIELDNAME") {
-                              console.error("[M:1]", err);
+                              req.log("[M:1]", err);
                            }
                            next(err);
                         });
@@ -501,11 +508,11 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                               indexField.object.tableName,
                               indexField.columnName
                            )
-                              .catch(bad)
                               .then((result) => {
                                  indexType = result;
                                  next();
-                              });
+                              })
+                              .catch(bad);
                         })
                   )
                   .then(
@@ -519,11 +526,11 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                               indexField2.object.tableName,
                               indexField2.columnName
                            )
-                              .catch(bad)
                               .then((result) => {
                                  indexType2 = result;
                                  next();
-                              });
+                              })
+                              .catch(bad);
                         })
                   )
                   .then(() =>
@@ -594,7 +601,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                               .withKeyName(targetFkName)
                               .onDelete("SET NULL");
                         } else {
-                           console.error(
+                           req.log(
                               `[M:N] object[${this.object.label}]->Field[${this.label}][${this.id}] skipping linkCol creation: !this.object.isExternal[${this.object.isExternal}] && !linkObject.isExternal[${linkObject.isExternal}] && connName[${this.connName}] == linkObj.connName[${linkObject.connName}]`
                            );
                         }
@@ -622,12 +629,19 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                         "ER_TABLE_EXISTS_ERROR",
                      ];
                      if (ignoreCodes.indexOf(err.code) == -1) {
-                        console.error("[M:N]", err);
+                        req.log("[M:N]", err);
                      }
 
                      // If the table exists, skip the error
                      if (err.code == "ER_TABLE_EXISTS_ERROR") resolve();
-                     else reject(err);
+                     else {
+                        req.notify.developer(err, {
+                           context: "ABFieldConnect.migrateCreate()",
+                           field: this,
+                           AB: this.AB,
+                        });
+                        reject(err);
+                     }
                   });
             });
          } else {
@@ -639,9 +653,15 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
    /**
     * @function migrateDrop
     * perform the necessary sql actions to drop this column from the DB table.
-    * @param {knex} knex the Knex connection.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateCreate().
+    * @param {knex} knex
+    *        the Knex connection.
+    * @return {Promise}
     */
-   migrateDrop(knex) {
+   migrateDrop(req, knex) {
+      knex = knex || this.AB.Knex.connection(this.object.connName);
+
       return new Promise((resolve, reject) => {
          // if field is imported, then it will not remove column in table
          if (this.object.isImported || this.isImported) return resolve();
@@ -656,7 +676,9 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
             // If the linked object is removed, it can not find join table name.
             // The join table should be removed already.
             if (!this.datasourceLink)
-               return super.migrateDrop(knex).then(() => resolve(), reject);
+               return super
+                  .migrateDrop(req, knex)
+                  .then(() => resolve(), reject);
 
             // drop join table
             var joinTableName = this.joinTableName();
@@ -670,7 +692,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
             }
 
             sourceKnex.schema.dropTableIfExists(joinTableName).then(() => {
-               super.migrateDrop(knex).then(() => resolve(), reject);
+               super.migrateDrop(req, knex).then(() => resolve(), reject);
             });
          }
          // M:1,  1:M,  1:1
@@ -704,12 +726,12 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
             Promise.all(tasks)
                .then(() => {
                   // Drop column
-                  super.migrateDrop(knex).then(() => resolve(), reject);
+                  super.migrateDrop(req, knex).then(() => resolve(), reject);
                })
                //	always pass, becuase ignore not found index errors.
                .catch((err) => {
                   // Drop column
-                  super.migrateDrop(knex).then(() => resolve(), reject);
+                  super.migrateDrop(req, knex).then(() => resolve(), reject);
                });
          }
       });

@@ -35,28 +35,39 @@ module.exports = class ABFieldTextFormula extends ABFieldTextFormulaCore {
    /**
     * @function migrateCreate
     * perform the necessary sql actions to ADD this column to the DB table.
-    * @param {knex} knex the Knex connection.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateXXX().
+    * @param {knex} knex
+    *        the Knex connection.
     * @return {Promise}
     */
-   migrateCreate(/* knex */) {
+   migrateCreate(/* req, knex */) {
       return Promise.resolve();
    }
 
    /**
     * @function migrateUpdate
     * perform the necessary sql actions to MODIFY this column to the DB table.
-    * @param {knex} knex the Knex connection.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateXXX().
+    * @param {knex} knex
+    *        the Knex connection.
+    * @return {Promise}
     */
-   migrateUpdate(knex) {
-      return this.migrateCreate(knex);
+   migrateUpdate(...params) {
+      return this.migrateCreate(...params);
    }
 
    /**
     * @function migrateDrop
     * perform the necessary sql actions to drop this column from the DB table.
-    * @param {knex} knex the Knex connection.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateXXX().
+    * @param {knex} knex
+    *        the Knex connection.
+    * @return {Promise}
     */
-   migrateDrop(/* knex */) {
+   migrateDrop(/* req, knex */) {
       return Promise.resolve();
    }
 

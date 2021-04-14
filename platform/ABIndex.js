@@ -131,9 +131,19 @@ module.exports = class ABIndex extends ABIndexCore {
          });
    }
 
-   migrateCreate(knex) {
-      if (this.fields == null || !this.fields.length) return Promise.resolve(); // TODO: refactor in v2
-
+   migrateCreate(req, knex) {
+      knex = knex || this.AB.Knex.connection(this.object.connName);
+      if (this.fields == null || !this.fields.length) {
+         req.notify.builder(
+            new Error("ABIndex defined with no fields referenced"),
+            {
+               context: "ABIndex.migrateCreate()",
+               field: this,
+               AB: this.AB,
+            }
+         );
+         return Promise.resolve();
+      }
       let indexName = this.indexName;
       let tableName = this.object.dbTableName();
       let columnNames = this.fields.map((f) => f.columnName);
@@ -165,13 +175,15 @@ module.exports = class ABIndex extends ABIndexCore {
                               .columnize(columnNames)})`
                         )
                         .catch((err) => {
-                           console.error(
-                              `ABIndex.migrateCreate() Unique: Table[${tableName}] Column[${columnNames.join(
+                           req.notify.developer(err, {
+                              context: `ABIndex.migrateCreate() Unique: Table[${tableName}] Column[${columnNames.join(
                                  ", "
                               )}] Index[${indexName}] `,
-                              err
-                           );
-                           // throw err;
+                              field: this,
+                              AB: this.AB,
+                           });
+
+                           throw err;
                         });
                   }
                   // Create new Index
@@ -182,7 +194,17 @@ module.exports = class ABIndex extends ABIndexCore {
                      //    )}] Index[${indexName}] `
                      // );
                      // ALTER TABLE {tableName} ADD INDEX {indexName} ({columnNames})
-                     return table.index(columnNames, indexName);
+                     return table.index(columnNames, indexName).catch((err) => {
+                        req.notify.developer(err, {
+                           context: `ABIndex.migrateCreate(): INDEX : Table[${tableName}] Column[${columnNames.join(
+                              ", "
+                           )}] Index[${indexName}] `,
+                           field: this,
+                           AB: this.AB,
+                        });
+
+                        throw err;
+                     });
 
                      // .catch((err) => {
                      //    console.error(
@@ -199,7 +221,8 @@ module.exports = class ABIndex extends ABIndexCore {
       );
    }
 
-   migrateDrop(knex) {
+   migrateDrop(req, knex) {
+      knex = knex || this.AB.Knex.connection(this.object.connName);
       if (this.fields == null || !this.fields.length) return Promise.resolve(); // TODO: refactor in v2
 
       let indexName = this.indexName;
@@ -213,6 +236,14 @@ module.exports = class ABIndex extends ABIndexCore {
             .catch((err) => {
                // Not exists
                if (err.code == "ER_CANT_DROP_FIELD_OR_KEY") return resolve();
+
+               req.notify.developer(err, {
+                  context: `ABIndex.migrateDrop(): Table[${tableName}] Index[${indexName}] `,
+                  tableName,
+                  indexName,
+                  field: this,
+                  AB: this.AB,
+               });
 
                reject(err);
             });

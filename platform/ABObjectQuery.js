@@ -39,16 +39,17 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
 
    /**
     * migrateCreateTable
-    * verify that a table for this object exists.
-    * @param {Knex} knex the knex sql library manager for manipulating the DB.
+    * verify that a table for this ABObjectQuery exists.
+    * @param {ABUtils.reqService} req
+    *        the request object for this transaction.
     * @return {Promise}
     */
-   migrateCreate(knex, req) {
+   migrateCreate(req) {
       if (req) {
-         req.log("ABObjectQuery.migrateCreate()");
+         req.log(`... recreate Query[${this.name || this.label}][${this.id}]`);
       }
 
-      let query = this.AB.Knex.connection().queryBuilder();
+      let query = this.AB.Knex.connection(/* this.connName */).queryBuilder();
 
       //// Now compile our joins:
 
@@ -372,11 +373,7 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
 
       // register the root object
       let rootObject = this.objectBase(),
-         fromBaseTable = "#table#".replace(
-            "#table#",
-            rootObject.dbTableName(true)
-         );
-
+         fromBaseTable = rootObject.dbTableName(true);
       if (joinSetting.alias)
          fromBaseTable = fromBaseTable + " as " + joinSetting.alias;
 
@@ -585,7 +582,7 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
 
             let fieldCustomIndex = fieldConnect.indexField;
 
-            let objectNumber = ABObjectCache.get(f.settings.object);
+            let objectNumber = this.AB.objectByID(f.settings.object);
             if (!objectNumber) return;
 
             let fieldNumber = objectNumber.fields(
@@ -817,7 +814,7 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
       let viewName = this.dbViewName();
       let sqlCommand = `CREATE OR REPLACE VIEW ${viewName} AS (${query.toString()})`;
 
-      if (req) {
+      if (req && req.config().verbose) {
          req.log("ABObjectQuery.migrateCreate - SQL:", sqlCommand);
       }
       return knex.schema.raw(sqlCommand);
@@ -825,18 +822,21 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
 
    /**
     * migrateDropTable
-    * remove the table for this object if it exists.
-    * @param {Knex} knex the knex sql library manager for manipulating the DB.
+    * remove the table for this ABObjectQuery if it exists.
+    * @param {ABUtils.reqService} req
+    *        the request object for this transaction.
+    * @param {Knex} knex
+    *        the knex sql library manager for manipulating the DB.
     * @return {Promise}
     */
-   migrateDrop(knex, req) {
-      // console.log("ABObjectQuery.migrateDrop()");
+   migrateDrop(req, knex) {
+      knex = knex || this.AB.Knex.connection(/* this.connName */);
 
       let viewName = this.dbViewName();
       let sqlCommand = `DROP VIEW IF EXISTS ${viewName}`;
 
-      if (req) {
-         req.log("ABObjectQuery.migrateCreate - SQL:", sqlCommand);
+      if (req && req.config().verbose) {
+         req.log("ABObjectQuery.migrateDrop - SQL:", sqlCommand);
       }
       return knex.schema.raw(sqlCommand);
    }

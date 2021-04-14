@@ -395,12 +395,14 @@ class ABFactory extends ABFactoryCore {
     * @return {Promise}
     *        resolved with a new {ABDefinition} for the entry.
     */
-   definitionCreate(def) {
-      return this.Definitions.Create(this.req, def).then((fullDef) => {
-         let newDef = this.definitionNew(fullDef);
-         this.emit("definition.created", newDef);
-         return newDef;
-      });
+   definitionCreate(req, def, options = {}) {
+      return this.Definitions.Create(this, req, def, options).then(
+         (fullDef) => {
+            let newDef = this.definitionNew(fullDef);
+            this.emit("definition.created", newDef);
+            return newDef;
+         }
+      );
    }
 
    /**
@@ -410,8 +412,8 @@ class ABFactory extends ABFactoryCore {
     *        the uuid of the ABDefinition to delete
     * @return {Promise}
     */
-   definitionDestroy(id) {
-      return this.Definitions.Destroy(this.req, id).then(() => {
+   definitionDestroy(req, id, options = {}) {
+      return this.Definitions.Destroy(this, req, id, options).then(() => {
          delete this._definitions[id];
          this.emit("definition.destroyed", id);
       });
@@ -427,10 +429,12 @@ class ABFactory extends ABFactoryCore {
     * @return {Promise}
     *        resolved with a new {ABDefinition} for the entry.
     */
-   definitionUpdate(id, values) {
-      return this.Definitions.Update(this.req, { id }, values).then(() => {
-         this.emit("definition.updated", id);
-      });
+   definitionUpdate(req, id, values, options = {}) {
+      return this.Definitions.Update(this, req, { id }, values, options).then(
+         () => {
+            this.emit("definition.updated", id);
+         }
+      );
    }
 
    //

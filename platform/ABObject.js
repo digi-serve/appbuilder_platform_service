@@ -208,14 +208,16 @@ module.exports = class ABClassObject extends ABObjectCore {
    /**
     * migrateCreateTable
     * verify that a table for this object exists.
-    * @param {Knex} knex the knex sql library manager for manipulating the DB.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateCreate().
+    * @param {knex} knex
+    *        the Knex connection.
     * @return {Promise}
     */
-   migrateCreate(knex) {
-      sails.log.verbose("ABClassObject.migrateCreate()");
+   migrateCreate(req, knex) {
+      knex = knex || this.AB.Knex.connection(this.connName);
 
       var tableName = this.dbTableName();
-      sails.log.verbose(".... dbTableName:" + tableName);
 
       return new Promise((resolve, reject) => {
          knex.schema
@@ -223,14 +225,18 @@ module.exports = class ABClassObject extends ABObjectCore {
             .then((exists) => {
                // if it doesn't exist, then create it and any known fields:
                if (!exists) {
-                  sails.log.verbose("... creating!!!");
-
+                  req.log(
+                     `    ... creating -> O[${
+                        this.name || this.label
+                     }]->table[${tableName}]`
+                  );
                   function migrateIt(f) {
-                     return f.migrateCreate(knex).catch((err) => {
-                        console.error(
-                           `field[${f.label}].migrateCreate(): error:`,
-                           err
-                        );
+                     return f.migrateCreate(req, knex).catch((err) => {
+                        req.notify.developer(err, {
+                           context: `field[${f.label}].migrateCreate(): error:`,
+                           field: f,
+                           AB: this.AB,
+                        });
                         throw err;
                      });
                   }
@@ -291,7 +297,11 @@ module.exports = class ABClassObject extends ABObjectCore {
                      .then(resolve)
                      .catch(reject);
                } else {
-                  sails.log.verbose("... already there.");
+                  req.log(
+                     `    ... exists -> O[${
+                        this.name || this.label
+                     }] -> table[${tableName}]`
+                  );
                   resolve();
                }
             })
@@ -302,18 +312,16 @@ module.exports = class ABClassObject extends ABObjectCore {
    /**
     * migrateDropTable
     * remove the table for this object if it exists.
-    * @param {Knex} knex the knex sql library manager for manipulating the DB.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateCreate().
+    * @param {Knex} knex
+    *        the knex sql library manager for manipulating the DB.
     * @return {Promise}
     */
-   migrateDrop(knex) {
-      sails.log.verbose("ABClassObject.migrateDrop()");
-
+   migrateDrop(req, knex) {
       var tableName = this.dbTableName();
-      sails.log.verbose(".... dbTableName:" + tableName);
 
       return new Promise((resolve, reject) => {
-         sails.log.silly(".... .migrateDropTable()  before knex:");
-
          //BEFORE we just go drop the table, let's give each of our
          // fields the chance to perform any clean up actions related
          // to their columns being removed from the system.
@@ -328,7 +336,7 @@ module.exports = class ABClassObject extends ABObjectCore {
          let fieldDrops = [];
 
          this.fields().forEach((f) => {
-            fieldDrops.push(f.migrateDrop(knex));
+            fieldDrops.push(f.migrateDrop(req, knex));
          });
 
          Promise.all(fieldDrops)
@@ -454,7 +462,7 @@ module.exports = class ABClassObject extends ABObjectCore {
       connectFields.forEach((f) => {
          // find linked object name
          // var linkObject = this.application.objects((obj) => { return obj.id == f.settings.linkObject; })[0];
-         let linkObject = ABObjectCache.get(f.settings.linkObject);
+         let linkObject = this.AB.objectByID(f.settings.linkObject);
          if (linkObject == null) return;
 
          var linkField = f.fieldLink;
@@ -2001,7 +2009,7 @@ module.exports = class ABClassObject extends ABObjectCore {
       let linkField = connectedField.fieldLink;
       if (!linkField) return;
 
-      let connectedObj = ABObjectCache.get(settings.object);
+      let connectedObj = this.AB.objectByID(settings.object);
       if (!connectedObj) return;
 
       let numberField = connectedObj.fields(

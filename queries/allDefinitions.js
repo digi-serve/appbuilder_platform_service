@@ -12,6 +12,6 @@
 const queryDefinitionFind = require("./definitionFind");
 
 module.exports = function (req) {
-   return queryDefinitionFind(req, null);
+   return queryDefinitionFind(null, req, null);
    // sending null for the condition results in getting all the entries.
 };

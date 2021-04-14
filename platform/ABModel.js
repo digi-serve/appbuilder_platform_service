@@ -679,6 +679,28 @@ module.exports = class ABModel extends ABModelCore {
    }
 
    /**
+    * @method modelKnexRefresh()
+    * when the definitions of our objects change (dropping a field, adding a field)
+    * we need to change the Knex Objection Model definition for this object.
+    */
+   modelKnexRefresh() {
+      var modelName = this.modelKnexReference();
+      delete __ModelPool[modelName];
+
+      var knex = this.AB.Knex.connection(this.object.connName);
+      var tableName = this.object.dbTableName(true);
+
+      if (knex.$$objection && knex.$$objection.boundModels) {
+         // delete knex.$$objection.boundModels[tableName];
+
+         // FIX : Knex Objection v.1.1.8
+         knex.$$objection.boundModels.delete(
+            tableName + "_" + this.object.modelName()
+         );
+      }
+   }
+
+   /**
     * @method modelKnex()
     * return a Knex Model definition for interacting with the DB.
     * @return {KnexModel}
