@@ -1,6 +1,7 @@
 const _ = require("lodash");
 
 const ABObjectQueryCore = require("../core/ABObjectQueryCore");
+const ABFieldConnect = require("./dataFields/ABFieldConnect");
 
 module.exports = class ABClassQuery extends ABObjectQueryCore {
    ///
@@ -437,7 +438,7 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
          let obj = f.object;
 
          // Connect fields
-         if (f.key == "connectObject") {
+         if (f instanceof ABFieldConnect) {
             let selectField = "";
             let objLink = f.datasourceLink;
             let fieldLink = f.fieldLink;

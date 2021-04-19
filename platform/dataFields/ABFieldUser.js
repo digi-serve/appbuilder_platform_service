@@ -35,86 +35,8 @@ module.exports = class ABFieldUser extends ABFieldUserCore {
    }
 
    ///
-   /// DB Migrations
-   ///
-
-   /**
-    * @function migrateCreate
-    * perform the necessary sql actions to ADD this column to the DB table.
-    * @param {ABUtil.reqService} req
-    *        the request object for the job driving the migrateXXX().
-    * @param {knex} knex
-    *        the Knex connection.
-    * @return {Promise}
-    */
-   migrateCreate(req, knex) {
-      knex = knex || this.AB.Knex.connection(this.object.connName);
-
-      return new Promise((resolve, reject) => {
-         var tableName = this.object.dbTableName();
-
-         // if this column doesn't already exist (you never know)
-         knex.schema.hasColumn(tableName, this.columnName).then((exists) => {
-            // create one if it doesn't exist:
-            if (!exists) {
-               return knex.schema
-                  .table(tableName, (t) => {
-                     var newCol = t.json(this.columnName).nullable();
-
-                     // // field is required (not null)
-                     // if (this.settings.required) {
-                     // 	var newCol = t.json(this.columnName).notNullable();
-                     // }
-                     // else {
-                     // 	var newCol = t.json(this.columnName).nullable();
-                     // }
-                  })
-                  .then(() => {
-                     resolve();
-                  })
-                  .catch(reject);
-            } else {
-               // there is already a column for this, so move along.
-               resolve();
-            }
-         });
-      });
-   }
-
-   ///
    /// DB Model Services
    ///
-
-   /**
-    * @method jsonSchemaProperties
-    * register your current field's properties here:
-    */
-   jsonSchemaProperties(obj) {
-      // take a look here:  http://json-schema.org/example1.html
-
-      // if our field is not already defined:
-      if (!obj[this.columnName]) {
-         if (this.settings.isMultiple == true) {
-            // store array value of selectivity
-            obj[this.columnName] = {
-               anyOf: [
-                  { type: "array" },
-                  { type: "null" },
-                  {
-                     // allow empty string because it could not put empty array in REST api
-                     type: "string",
-                     maxLength: 0,
-                  },
-               ],
-            };
-         } else {
-            // storing the uuid as a string.
-            obj[this.columnName] = {
-               type: ["string", "null"],
-            };
-         }
-      }
-   }
 
    /**
     * @method requestParam
@@ -139,18 +61,5 @@ module.exports = class ABFieldUser extends ABFieldUserCore {
     */
    isValidData(/* allParameters */) {
       return [];
-   }
-
-   /**
-    * @method postGet
-    * Perform any final conditioning of data returned from our DB table before
-    * it is returned to the client.
-    * @param {obj} data  a json object representing the current table row
-    */
-   postGet(data) {
-      return new Promise((resolve, reject) => {
-         //Not doing anything here...yet
-         resolve();
-      });
    }
 };
