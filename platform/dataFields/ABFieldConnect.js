@@ -191,6 +191,11 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
          let indexType = "";
          let indexType2 = "";
 
+         let didExist = false;
+         // {bool}
+         // Temp attempt to debug a certain case where we are trying to
+         // create an existing field.
+
          // 1:M - create a column in the table and references to id of the link table
          if (
             this.settings.linkType == "one" &&
@@ -203,6 +208,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                      knex.schema
                         .hasColumn(tableName, this.columnName)
                         .then((exists) => {
+                           didExist = exists;
                            next(null, exists);
                         })
                         .catch(next);
@@ -263,9 +269,22 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                ],
                (err) => {
                   if (err) {
+                     // if we already had that
+                     if (err.code === "ER_DUP_FIELDNAME") {
+                        req.notify.developer(err, {
+                           context: "ABFieldConnect.migrateCreate()",
+                           didExist,
+                           tablename,
+                           columnName: this.columnName,
+                        });
+                        resolve();
+                        return;
+                     }
                      req.notify.developer(err, {
                         context: "ABFieldConnect.migrateCreate()",
                         field: this,
+                        tablename,
+                        columnName: this.columnName,
                         AB: this.AB,
                      });
                      reject(err);
