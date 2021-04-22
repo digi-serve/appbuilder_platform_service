@@ -447,6 +447,11 @@ module.exports = class ABModel extends ABModelCore {
     * @return {Promise} resolved with the result of the find()
     */
    update(id, values, userData, trx = null) {
+      id = id.id || id.uuid || id;
+      // id should be just the .uuid or .id value of the row we are updating
+      // but in case they sent in a condition obj: { uuid: 'xyz' } lets try to
+      // de-reference it.
+
       let updateParams = this.object.requestParams(values);
       // {valueHash} updateParams
       // return the parameters from the input params that relate to this object
