@@ -274,7 +274,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                         req.notify.developer(err, {
                            context: "ABFieldConnect.migrateCreate()",
                            didExist,
-                           tablename,
+                           tableName,
                            columnName: this.columnName,
                         });
                         resolve();
@@ -283,7 +283,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                      req.notify.developer(err, {
                         context: "ABFieldConnect.migrateCreate()",
                         field: this,
-                        tablename,
+                        tableName,
                         columnName: this.columnName,
                         AB: this.AB,
                      });
