@@ -271,12 +271,12 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                   if (err) {
                      // if we already had that
                      if (err.code === "ER_DUP_FIELDNAME") {
-                        req.notify.developer(err, {
-                           context: "ABFieldConnect.migrateCreate()",
-                           didExist,
-                           tableName,
-                           columnName: this.columnName,
-                        });
+                        // req.notify.developer(err, {
+                        //    context: "ABFieldConnect.migrateCreate()",
+                        //    didExist,
+                        //    tableName,
+                        //    columnName: this.columnName,
+                        // });
                         resolve();
                         return;
                      }
