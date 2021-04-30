@@ -168,12 +168,40 @@ module.exports = class ABIndex extends ABIndexCore {
                      //    )}] Index[${indexName}] `
                      // );
                      // Create Unique & Index
-                     return knex.schema
-                        .raw(
-                           `ALTER TABLE ${tableName} ADD UNIQUE INDEX ${indexName}(${knex.client
-                              .formatter()
-                              .columnize(columnNames)})`
-                        )
+
+                     return Promise.resolve()
+                        .then(() => {
+                           // NOTE: additional Promise.resolve() trying to catch a thrown error
+                           //       with knex.schema.raw()
+                           try {
+                              return knex.schema
+                                 .raw(
+                                    `ALTER TABLE ${tableName} ADD UNIQUE INDEX ${indexName}(${knex.client
+                                       .formatter()
+                                       .columnize(columnNames)})`
+                                 )
+                                 .catch((err) => {
+                                    req.notify.developer(err, {
+                                       context: `ABIndex.migrateCreate() Unique: Table[${tableName}] Column[${columnNames.join(
+                                          ", "
+                                       )}] Index[${indexName}] `,
+                                       field: this,
+                                       AB: this.AB,
+                                    });
+
+                                    throw err;
+                                 });
+                           } catch (err) {
+                              req.notify.developer(err, {
+                                 context: `.CATCH():  ABIndex.migrateCreate() Unique: Table[${tableName}] Column[${columnNames.join(
+                                    ", "
+                                 )}] Index[${indexName}] `,
+                                 field: this,
+                                 AB: this.AB,
+                              });
+                              return Promise.resolve();
+                           }
+                        })
                         .catch((err) => {
                            req.notify.developer(err, {
                               context: `ABIndex.migrateCreate() Unique: Table[${tableName}] Column[${columnNames.join(
