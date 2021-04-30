@@ -5,7 +5,7 @@ const ABFieldDateTime = require("../core/dataFields/ABFieldDateTimeCore");
 
 const _ = require("lodash");
 
-var __ModelPool = {};
+// var __ModelPool = {};
 // reuse any previously created Model connections
 // to minimize .knex bindings (and connection pools!)
 
@@ -439,9 +439,9 @@ module.exports = class ABModel extends ABModelCore {
     * @method update
     * performs an update operation
     * @param {string} id
-    *		the primary key for this update operation.
+    *   the primary key for this update operation.
     * @param {obj} values
-    *		A hash of the new values for this entry.
+    *   A hash of the new values for this entry.
     * @param {Knex.Transaction?} trx - [optional]
     *
     * @return {Promise} resolved with the result of the find()
@@ -690,7 +690,8 @@ module.exports = class ABModel extends ABModelCore {
     */
    modelKnexRefresh() {
       var modelName = this.modelKnexReference();
-      delete __ModelPool[modelName];
+      this.AB.modelPoolDelete(modelName);
+      // delete __ModelPool[modelName];
 
       var knex = this.AB.Knex.connection(this.object.connName);
       var tableName = this.object.dbTableName(true);
@@ -714,7 +715,8 @@ module.exports = class ABModel extends ABModelCore {
       var modelName = this.modelKnexReference(),
          tableName = this.object.dbTableName(true);
 
-      if (!__ModelPool[modelName]) {
+      // if (!__ModelPool[modelName]) {
+      if (!this.AB.modelPool(modelName)) {
          var connectionName = this.object.isExternal
             ? this.object.connName
             : undefined;
@@ -760,20 +762,25 @@ module.exports = class ABModel extends ABModelCore {
          // NOTE: prevent cache same table in difference apps
          Object.defineProperty(MyModel, "name", { value: modelName });
 
-         __ModelPool[modelName] = MyModel;
+         // this.AB.modelPoolSet(modelName, MyModel);
+         // __ModelPool[modelName] = MyModel;
 
          // NOTE : there is relation setup here because prevent circular loop when get linked object.
          // have to define object models to __ModelPool[tableName] first
-         __ModelPool[modelName].relationMappings = () => {
+         // __ModelPool[modelName].relationMappings = () => {
+         MyModel.relationMappings = () => {
             return this.modelKnexRelation();
          };
 
          // bind knex connection to object model
          // NOTE : when model is bound, then relation setup will be executed
-         __ModelPool[modelName] = __ModelPool[modelName].bindKnex(knex);
+         MyModel = MyModel.bindKnex(knex);
+
+         this.AB.modelPoolSet(modelName, MyModel);
       }
 
-      return __ModelPool[modelName];
+      // return __ModelPool[modelName];
+      return this.AB.modelPool(modelName);
    }
 
    modelKnexReference() {
@@ -857,16 +864,16 @@ module.exports = class ABModel extends ABModelCore {
             targetPkName = linkObject.PK();
 
             // if (f.settings.isSource == true) {
-            // 	sourceTableName = f.object.dbTableName(true);
-            // 	sourcePkName = f.object.PK();
-            // 	targetTableName = linkObject.dbTableName(true);
-            // 	targetPkName = linkObject.PK();
+            //  sourceTableName = f.object.dbTableName(true);
+            //  sourcePkName = f.object.PK();
+            //  targetTableName = linkObject.dbTableName(true);
+            //  targetPkName = linkObject.PK();
             // }
             // else {
-            // 	sourceTableName = linkObject.dbTableName(true);
-            // 	sourcePkName = linkObject.PK();
-            // 	targetTableName = f.object.dbTableName(true);
-            // 	targetPkName = f.object.PK();
+            //  sourceTableName = linkObject.dbTableName(true);
+            //  sourcePkName = linkObject.PK();
+            //  targetTableName = f.object.dbTableName(true);
+            //  targetPkName = f.object.PK();
             // }
 
             relationMappings[relationName] = {
@@ -1076,7 +1083,7 @@ module.exports = class ABModel extends ABModelCore {
 
                   // Search string value of FK column
                   else if (
-                     field.key == "connectObject" &&
+                     ["connectObject", "user"].indexOf(field.key) > -1 &&
                      [
                         "contains",
                         "not_contains",
@@ -1333,10 +1340,10 @@ module.exports = class ABModel extends ABModelCore {
 
             // // if we are searching a multilingual field it is stored in translations so we need to search JSON
             // if (field && field.settings.supportMultilingual == 1) {
-            // 	fieldName = ('JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({tableName}.translations, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({tableName}.translations, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))')
-            // 					.replace(/{tableName}/g, field.object.dbTableName(true))
-            // 					.replace(/{languageCode}/g, userData.languageCode)
-            // 					.replace(/{columnName}/g, field.columnName);
+            //  fieldName = ('JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({tableName}.translations, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({tableName}.translations, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))')
+            //          .replace(/{tableName}/g, field.object.dbTableName(true))
+            //          .replace(/{languageCode}/g, userData.languageCode)
+            //          .replace(/{columnName}/g, field.columnName);
             // }
 
             // // if this is from a LIST, then make sure our value is the .ID
@@ -1374,15 +1381,15 @@ module.exports = class ABModel extends ABModelCore {
             // if (!objectLink) return;
 
             // Query
-            // 	.leftJoinRelation(relation_name)
-            // 	.whereRaw('{relation_name}.{primary_name} IS NULL'
-            // 		.replace('{relation_name}', relation_name)
-            // 		.replace('{primary_name}', objectLink.PK()));
+            //  .leftJoinRelation(relation_name)
+            //  .whereRaw('{relation_name}.{primary_name} IS NULL'
+            //    .replace('{relation_name}', relation_name)
+            //    .replace('{primary_name}', objectLink.PK()));
 
             // {
-            //	key: "COLUMN_NAME", // no need to include object name
-            //	rule: "have_no_relation",
-            //	value: "LINK_OBJECT_PK_NAME"
+            //  key: "COLUMN_NAME", // no need to include object name
+            //  rule: "have_no_relation",
+            //  value: "LINK_OBJECT_PK_NAME"
             // }
 
             var field = this.object.fields((f) => f.id == r.key)[0];

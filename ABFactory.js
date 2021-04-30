@@ -67,6 +67,11 @@ class ABFactory extends ABFactoryCore {
       // connection settings. The base definition is found in config/local.js
       // and can be returned by the this.req object.
 
+      this.__ModelPool = {};
+      // {hash} { modelName : Knex.connection() }
+      // This is a cached Objection(knex) cache of our Object Models for
+      // interacting with our DB tables using Objection.js
+
       //
       // Config Data
       //
@@ -314,11 +319,12 @@ class ABFactory extends ABFactoryCore {
                "DD/MM/YYYY",
                "MM/DD/YYYY",
                "DD-MM-YYYY",
-               "MM-DD-YYYY"
+               "MM-DD-YYYY",
             ];
 
             supportFormats.forEach((format) => {
-               if (!result || !result.isValid()) result = moment(dateText, format);
+               if (!result || !result.isValid())
+                  result = moment(dateText, format);
             });
 
             return new Date(result);
@@ -355,9 +361,7 @@ class ABFactory extends ABFactoryCore {
           * @return {Date}
           */
          subtractDate(date, number, unit) {
-            return moment(date)
-               .subtract(number, unit)
-               .toDate();
+            return moment(date).subtract(number, unit).toDate();
          },
 
          /**
@@ -370,10 +374,8 @@ class ABFactory extends ABFactoryCore {
           * @return {Date}
           */
          addDate(date, number, unit) {
-            return moment(date)
-               .add(number, unit)
-               .toDate();
-         }
+            return moment(date).add(number, unit).toDate();
+         },
       };
    }
 
