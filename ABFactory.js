@@ -439,6 +439,43 @@ class ABFactory extends ABFactoryCore {
       );
    }
 
+   /**
+    * @method modelPool()
+    * return the cached Model connection for the given modelName.
+    * @param {string} modelName
+    *        the name of the model connection we are requesting.
+    *        (this is assigned by the ABModel object)
+    * @return {Objection Model Connection}
+    */
+   modelPool(modelName) {
+      return this.__ModelPool[modelName];
+   }
+
+   /**
+    * @method modelPoolDelete()
+    * remove the current cached Model connection.
+    * @param {string} modelName
+    *        the name of the model connection we are requesting.
+    *        (this is assigned by the ABModel object)
+    */
+   modelPoolDelete(modelName) {
+      delete this.__ModelPool[modelName];
+   }
+
+   /**
+    * @method modelPoolSet()
+    * store the cached Model connection for the given modelName.
+    * This is set by the ABModel Object
+    * @param {string} modelName
+    *        the name of the model connection we are requesting.
+    *        (this is assigned by the ABModel object)
+    * @param {ConnectionModel} Model
+    * @return {Objection Model Connection}
+    */
+   modelPoolSet(modelName, Model) {
+      this.__ModelPool[modelName] = Model;
+   }
+
    //
    // Communications
    //
