@@ -481,31 +481,27 @@ module.exports = class ABModel extends ABModelCore {
             .patch(updateParams)
             .where(PK, id)
             .then((returnVals) => {
-               // track logging
-               /*
-//// TODO: transaction Logging:
-            ABTrack.logUpdate({
-               objectId: this.object.id,
-               rowId: id,
-               username: userData.username,
-               data: Object.assign(
-                  updateParams,
-                  updateRelationParams,
-                  transParams
-               ),
-            });
-            */
-
                // create a new query when use same query, then new data are created duplicate
-               let updateTasks = updateRelationValues(
-                  this.AB,
-                  this.object,
-                  id,
-                  updateRelationParams
+               let updateTasks = [];
+               // {array} Promise
+               // An array of the additional update operations being performed.  Each entry
+               // should be a {Promise} of an operation.
+
+               updateTasks.push(
+                  updateRelationValues(
+                     this.AB,
+                     this.object,
+                     id,
+                     updateRelationParams
+                  )
                );
 
                // update translation of the external table
-               if (this.object.isExternal || this.object.isImported)
+               // ## DEPRECIATED: LEGACY: this is an implementation designed to allow us
+               // to work with the legacy HRIS tables.  In the future, we will have to
+               // rework this to work with .isExternal or .isImported objects that are
+               // NOT LEGACY tables.
+               if (this.object.isExternal || this.object.isImported) {
                   updateTasks.push(
                      updateTranslationsValues(
                         this.AB,
@@ -514,11 +510,8 @@ module.exports = class ABModel extends ABModelCore {
                         transParams
                      )
                   );
+               }
 
-               // updateTasks
-               //    .reduce((promiseChain, currTask) => {
-               //       return promiseChain.then(currTask);
-               //    }, Promise.resolve([]))
                Promise.all(updateTasks)
                   // Query the new row to response to client
                   .then((values) => {
@@ -802,9 +795,7 @@ module.exports = class ABModel extends ABModelCore {
 
       connectFields.forEach((f) => {
          // find linked object name
-         var linkObject = this.object.AB.objects(
-            (obj) => obj.id == f.settings.linkObject
-         )[0];
+         var linkObject = this.object.AB.objectByID(f.settings.linkObject);
          if (linkObject == null) return;
 
          var linkField = f.fieldLink;
@@ -820,18 +811,33 @@ module.exports = class ABModel extends ABModelCore {
 
          // 1:1
          if (LinkType == "one:one") {
+            // in a 1:1 relatiionship, we still store the data from 1 obj
+            // into the data in another object.
+
+            // we figure out which object is the one containing the data
+            // to store, by the field's  .isSource setting.
+
+            // if an .indexField is present in the connection settings, then
+            // it references a column in the .isSource's object's table to use
+            // for the value being stored. (otherwise we default to the .PK()
+            // column)
+
             var sourceTable, targetTable, targetPkName, relation, columnName;
 
             if (f.settings.isSource == true) {
                sourceTable = tableName;
                targetTable = linkObject.dbTableName(true);
-               targetPkName = linkObject.PK();
+               targetPkName = f.indexField
+                  ? f.indexField.columnName
+                  : linkObject.PK();
                relation = Model.BelongsToOneRelation;
                columnName = f.columnName;
             } else {
                sourceTable = linkObject.dbTableName(true);
                targetTable = tableName;
-               targetPkName = this.object.PK();
+               targetPkName = f.indexField
+                  ? f.indexField.columnName
+                  : this.object.PK();
                relation = Model.HasOneRelation;
                columnName = linkField.columnName;
             }
@@ -850,6 +856,17 @@ module.exports = class ABModel extends ABModelCore {
          }
          // M:N
          else if (LinkType == "many:many") {
+            // in a M:N relatiionship, the connection data is managed via a
+            // join table.
+
+            // in this case .indexField  and/or  .indexField2 might be set.
+            // these values track custom field keys for use in what data is
+            // used to relate these values.
+
+            // when the definition is created, the object where the connection
+            // was created contains the .indexField field.  The linked object
+            // contains the .indexField2 field.
+
             // get join table name
             var joinTablename = f.joinTableName(true),
                joinColumnNames = f.joinColumnNames(),
@@ -863,18 +880,28 @@ module.exports = class ABModel extends ABModelCore {
             targetTableName = linkObject.dbTableName(true);
             targetPkName = linkObject.PK();
 
-            // if (f.settings.isSource == true) {
-            //  sourceTableName = f.object.dbTableName(true);
-            //  sourcePkName = f.object.PK();
-            //  targetTableName = linkObject.dbTableName(true);
-            //  targetPkName = linkObject.PK();
-            // }
-            // else {
-            //  sourceTableName = linkObject.dbTableName(true);
-            //  sourcePkName = linkObject.PK();
-            //  targetTableName = f.object.dbTableName(true);
-            //  targetPkName = f.object.PK();
-            // }
+            // if the connection is based upon a custom FK value, we need to
+            // reference that columnName instead of the default uuid
+
+            // check the .indexField connection (if specified)
+            let indexField = f.indexField;
+            if (indexField) {
+               if (indexField.object.id == f.object.id) {
+                  sourcePkName = indexField.columnName;
+               } else if (indexField.object.id == linkObject.id) {
+                  targetPkName = indexField.columnName;
+               }
+            }
+
+            // check the .indexField2 connection (if specified)
+            let indexField2 = f.indexField2;
+            if (indexField2) {
+               if (indexField2.object.id == f.object.id) {
+                  sourcePkName = indexField2.columnName;
+               } else if (indexField2.object.id == linkObject.id) {
+                  targetPkName = indexField2.columnName;
+               }
+            }
 
             relationMappings[relationName] = {
                relation: Model.ManyToManyRelation,
@@ -898,6 +925,13 @@ module.exports = class ABModel extends ABModelCore {
          }
          // 1:M
          else if (LinkType == "one:many") {
+            // in a 1:M relatiionship, the data from the linked object is
+            // stored in THIS object's data.
+
+            // if an .indexField is present in the connection settings, then
+            // it references a column in the linked object's table to use for the
+            // value being stored. (otherwise we default to the .PK() column)
+
             relationMappings[relationName] = {
                relation: Model.BelongsToOneRelation,
                modelClass: linkModel,
@@ -906,18 +940,29 @@ module.exports = class ABModel extends ABModelCore {
                   from: `${tableName}.${f.columnName}`,
 
                   // "{targetTable}.{primaryField}"
-                  to: `${linkObject.dbTableName(true)}.${linkObject.PK()}`,
+                  to: `${linkObject.dbTableName(true)}.${
+                     f.indexField ? f.indexField.columnName : linkObject.PK()
+                  }`,
                },
             };
          }
          // M:1
          else if (LinkType == "many:one") {
+            // in a M:1 relatiionship, the data from THIS object is stored
+            // in the linked object's data.
+
+            // if an .indexField is present in the connection settings, then
+            // it references a column in THIS object's table to use for the
+            // value being stored. (otherwise we default to the .PK() column)
+
             relationMappings[relationName] = {
                relation: Model.HasManyRelation,
                modelClass: linkModel,
                join: {
                   // "{sourceTable}.{primaryField}"
-                  from: `${tableName}.${this.object.PK()}`,
+                  from: `${tableName}.${
+                     f.indexField ? f.indexField.columnName : this.object.PK()
+                  }`,
 
                   // "{targetTable}.{field}"
                   to: `${linkObject.dbTableName(true)}.${linkField.columnName}`,
@@ -1882,7 +1927,7 @@ module.exports = class ABModel extends ABModelCore {
                : condition.value.replace(/{percent}/g, "");
 
          condition.rule =
-            ["contains", "equals", "in"].indexOf(condition.rule) == -1
+            ["contains", "equals", "in"].indexOf(condition.rule) > -1
                ? "in"
                : "not_in";
       }
@@ -1892,6 +1937,31 @@ module.exports = class ABModel extends ABModelCore {
 /************************
  *** Update() Helpers ***
  ************************/
+
+/**
+ * doSequential()
+ * A recursive helper function that allows us to process a given list of
+ * operations in sequential order.
+ * The incoming list of tasks is an array of Fn() that return {Promise} of
+ * their operations.  Each task is executed in order and once the .then()
+ * is called, the next task will be executed.
+ * @param {array:{fn}} tasks
+ * @param {fn} cb
+ *        a node style callback(err) to call once all operations have
+ *        completed.
+ */
+function doSequential(tasks, cb) {
+   if (tasks.length == 0) {
+      cb();
+   } else {
+      tasks
+         .shift()()
+         .then(() => {
+            doSequential(tasks, cb);
+         })
+         .catch(cb);
+   }
+}
 
 /**
  * clearRelate()
@@ -1912,7 +1982,7 @@ function clearRelate(obj, columnName, rowId) {
       // NOTE: when use same query, it will have a "created duplicate" error
       let query = obj.model().modelKnex().query();
 
-      let clearRelationName = AB.rules.toFieldRelationFormat(columnName);
+      let clearRelationName = obj.AB.rules.toFieldRelationFormat(columnName);
 
       query
          .where(obj.PK(), rowId)
@@ -1957,7 +2027,7 @@ function setRelate(obj, columnName, rowId, value) {
       // NOTE: when use same query, it will have a "created duplicate" error
       let query = obj.model().modelKnex().query();
 
-      let relationName = AB.rules.toFieldRelationFormat(columnName);
+      let relationName = obj.AB.rules.toFieldRelationFormat(columnName);
 
       query
          .where(obj.PK(), rowId)
@@ -2034,61 +2104,64 @@ function updateRelationValues(AB, object, id, updateRelationParams) {
                relateRowId = parseInt(updateRelationParams[colName]);
 
             // clear linked data
-            updateTasks.push(() => {
-               return new Promise((resolve, reject) => {
-                  let update = {};
-                  update[sourceField.columnName] = null;
-
-                  let query = object.model().modelKnex().query();
-                  query
-                     .update(update)
-                     .clearWhere()
-                     .where(object.PK(), id)
-                     .orWhere(object.PK(), relateRowId)
-                     .orWhere(sourceField.columnName, id)
-                     .orWhere(sourceField.columnName, relateRowId)
-                     .then(() => {
-                        resolve();
-                     })
-                     .catch((err) => reject(err));
-               });
-            });
-
-            // set linked data
-            if (updateRelationParams[colName]) {
-               updateTasks.push(() => {
-                  return new Promise((resolve, reject) => {
+            updateTasks.push(
+               () =>
+                  new Promise((resolve, reject) => {
                      let update = {};
-                     update[sourceField.columnName] = relateRowId;
+                     update[sourceField.columnName] = null;
 
                      let query = object.model().modelKnex().query();
                      query
                         .update(update)
                         .clearWhere()
                         .where(object.PK(), id)
+                        .orWhere(object.PK(), relateRowId)
+                        .orWhere(sourceField.columnName, id)
+                        .orWhere(sourceField.columnName, relateRowId)
                         .then(() => {
                            resolve();
                         })
                         .catch((err) => reject(err));
-                  });
-               });
+                  })
+            );
 
-               updateTasks.push(() => {
-                  return new Promise((resolve, reject) => {
-                     let update = {};
-                     update[sourceField.columnName] = id;
+            // set linked data
+            if (updateRelationParams[colName]) {
+               updateTasks.push(
+                  () =>
+                     new Promise((resolve, reject) => {
+                        let update = {};
+                        update[sourceField.columnName] = relateRowId;
 
-                     let query = object.model().modelKnex().query();
-                     query
-                        .update(update)
-                        .clearWhere()
-                        .where(object.PK(), relateRowId)
-                        .then(() => {
-                           resolve();
-                        })
-                        .catch((err) => reject(err));
-                  });
-               });
+                        let query = object.model().modelKnex().query();
+                        query
+                           .update(update)
+                           .clearWhere()
+                           .where(object.PK(), id)
+                           .then(() => {
+                              resolve();
+                           })
+                           .catch((err) => reject(err));
+                     })
+               );
+
+               updateTasks.push(
+                  () =>
+                     new Promise((resolve, reject) => {
+                        let update = {};
+                        update[sourceField.columnName] = id;
+
+                        let query = object.model().modelKnex().query();
+                        query
+                           .update(update)
+                           .clearWhere()
+                           .where(object.PK(), relateRowId)
+                           .then(() => {
+                              resolve();
+                           })
+                           .catch((err) => reject(err));
+                     })
+               );
             }
          }
 
@@ -2126,15 +2199,21 @@ function updateRelationValues(AB, object, id, updateRelationParams) {
             // NOTE : Error: batch insert only works with Postgresql
             updateRelationParams[colName].forEach((val) => {
                // insert relation values of relation
-               updateTasks.push(() => {
-                  return setRelate(object, colName, id, val);
-               });
+               updateTasks.push(() => setRelate(object, colName, id, val));
             });
          }
       });
    }
 
-   return updateTasks;
+   return new Promise((resolve, reject) => {
+      // be sure all our updateTasks are executed sequentially
+      doSequential(updateTasks, (err) => {
+         if (err) {
+            return reject(err);
+         }
+         resolve();
+      });
+   });
 }
 
 /**
