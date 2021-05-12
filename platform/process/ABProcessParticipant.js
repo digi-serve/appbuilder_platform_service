@@ -70,12 +70,6 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
             return;
          }
 
-         // console.log(
-         //    "TODO: ABProcessParticipant.usersForRoles():  after User Field revamp"
-         // );
-         // resolve([]);
-         // return;
-
          if (!Array.isArray(this.role)) {
             this.role = [this.role];
          }
@@ -85,19 +79,6 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
             .model()
             .find(
                { where: { uuid: this.role }, populate: true },
-               // {
-               //    where: {
-               //       glue: "and",
-               //       rules: [
-               //          {
-               //             key: RoleModel.PK(),
-               //             rule: "in",
-               //             value: this.role,
-               //          },
-               //       ],
-               //    },
-               //    populate: true,
-               // },
                {} // <-- user data isn't used in our condition
             )
 
@@ -106,14 +87,8 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
                var allUsers = [];
                (result || []).forEach((role) => {
                   var usernames = (role.users || []).map((u) => {
-                     // the data entry is a ABFieldUser instance,
-                     // so it is in the format:
-                     // {
-                     //    id: "username",
-                     //    image:"",
-                     //    text: "username"
-                     // }
-                     return u.username; // u.id || u;
+                     // NOTE: ABFieldUser connections are linked via username
+                     return u.username || u;
                   });
                   allUsers = allUsers.concat(usernames);
                });
@@ -125,30 +100,11 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
                this.AB.objectUser()
                   .model()
                   .find(
-                     { where: { username: allUsers }, populate: false }
-                     // {
-                     //    where: {
-                     //       glue: "and",
-                     //       rules: [
-                     //          {
-                     //             key: "username",
-                     //             rule: "in",
-                     //             value: allUsers,
-                     //          },
-                     //       ],
-                     //    },
-                     //    populate: true,
-                     // },
+                     { where: { username: allUsers }, populate: false },
                      {} // <-- user data isn't used in our condition
                   )
                   .then(resolve)
                   .catch(reject);
-
-               // SiteUser.find({ username: allUsers })
-               //    .then((listUsers) => {
-               //       resolve(listUsers);
-               //    })
-               //    .catch(reject);
             })
             .catch((err) => {
                reject(err);
