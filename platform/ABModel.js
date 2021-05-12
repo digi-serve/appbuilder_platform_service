@@ -416,7 +416,7 @@ module.exports = class ABModel extends ABModelCore {
          let pkField = `${tableName}.${this.object.PK()}`;
 
          query
-            .eager("")
+            // .eager("")
             .clearSelect()
             .countDistinct(`${pkField} as count`)
             .whereNotNull(pkField)
@@ -1283,15 +1283,50 @@ module.exports = class ABModel extends ABModelCore {
                   break;
 
                case "contain_current_user":
-                  columnName = `JSON_SEARCH(JSON_EXTRACT(${columnName}, '$[*].id'), 'one', '${userData.username}')`;
-                  operator = "IS NOT";
-                  value = "NULL";
+                  // columnName = `JSON_SEARCH(JSON_EXTRACT(${columnName}, '$[*].id'), 'one', '${userData.username}')`;
+                  // operator = "IS NOT";
+                  // value = "NULL";
+                  // break;
+                  operator = "IN";
+
+                  // If we have access to the userData.username
+                  if (
+                     userData.username
+                  ) {
+                     value = `( "${userData.username}" )`;
+                  }
+                  // if we wanted contains_current_user, but there wasn't a 
+                  // uservalue provided, then we want to make sure this 
+                  // condition doesn't return anything
+                  } else {
+                     // send a false by resetting the whereRaw to a fixed value.
+                     // any future attempts to replace this will be ignored.
+                     whereRaw = " 1=0 ";
+                  }
                   break;
 
+
                case "not_contain_current_user":
-                  columnName = `JSON_SEARCH(JSON_EXTRACT(${columnName}, '$[*].id'), 'one', '${userData.username}')`;
-                  operator = "IS";
-                  value = "NULL";
+                  // columnName = `JSON_SEARCH(JSON_EXTRACT(${columnName}, '$[*].id'), 'one', '${userData.username}')`;
+                  // operator = "IS";
+                  // value = "NULL";
+                  // break;
+                  operator = "NOT IN";
+
+                  // If we have access to the userData.username
+                  if (
+                     userData.username
+                  ) {
+                     value = `( "${userData.username}" )`;
+                  }
+                  // if we wanted not_contains_current_user, but there wasn't a 
+                  // uservalue provided, then we want to make sure this 
+                  // condition isn't limited by the lack of a username
+                  } else {
+                     // send a true by resetting the whereRaw to a fixed value.
+                     // any future attempts to replace this will be ignored.
+                     whereRaw = " 1=1 ";
+                  }
                   break;
 
                case "is_null":

@@ -58,7 +58,7 @@ module.exports = class ABModelQuery extends ABModel {
                               queryString.replace("select ", "")
                            );
 
-                           // sub query
+                           // sub query: NOTE: "this" == query
                            this.select(sqlCommand).as("result");
                         })
                         .join(
@@ -255,7 +255,7 @@ module.exports = class ABModelQuery extends ABModel {
       ];
 
       // added tableName to id because of non unique field error
-      return this.findAll(options, userData).then((result) => {
+      return this.findAll(options, userData, req).then((result) => {
          return result[0];
          // return result[0]['count'];
       });
