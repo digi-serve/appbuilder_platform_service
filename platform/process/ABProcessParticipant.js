@@ -82,6 +82,7 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
 
          // lookup the current list of Roles we are defined to use.
          this.AB.objectRole()
+            .model()
             .find(
                { where: { uuid: this.role }, populate: true },
                // {
@@ -118,12 +119,13 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
                });
 
                // make sure we remove any duplicates
-               allUsers = _.uniq(allUsers);
+               allUsers = this.AB.uniq(allUsers);
 
                // now return our SiteUsers based upon these usernames
                this.AB.objectUser()
+                  .model()
                   .find(
-                     { where: { username: allUsers }, populate: true }
+                     { where: { username: allUsers }, populate: false }
                      // {
                      //    where: {
                      //       glue: "and",
@@ -137,7 +139,7 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
                      //    },
                      //    populate: true,
                      // },
-                     // {} // <-- user data isn't used in our condition
+                     {} // <-- user data isn't used in our condition
                   )
                   .then(resolve)
                   .catch(reject);

@@ -821,7 +821,7 @@ module.exports = class ABClassObject extends ABObjectCore {
 
    requestRelationParams(allParameters) {
       var usefulParameters = {};
-      this.connectFields(true).forEach((f) => {
+      this.connectFields().forEach((f) => {
          if (f.requestRelationParam) {
             var p = f.requestRelationParam(allParameters);
             if (p) {
