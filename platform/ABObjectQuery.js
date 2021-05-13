@@ -43,14 +43,20 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
     * verify that a table for this ABObjectQuery exists.
     * @param {ABUtils.reqService} req
     *        the request object for this transaction.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateCreate().
+    * @param {knex} knex
+    *        the Knex connection.
     * @return {Promise}
     */
-   migrateCreate(req) {
+   migrateCreate(req, knex) {
+      knex = knex || this.AB.Knex.connection(this.connName);
+
+      let query = knex.queryBuilder();
+
       if (req) {
          req.log(`... recreate Query[${this.name || this.label}][${this.id}]`);
       }
-
-      let query = this.AB.Knex.connection(/* this.connName */).queryBuilder();
 
       //// Now compile our joins:
 
