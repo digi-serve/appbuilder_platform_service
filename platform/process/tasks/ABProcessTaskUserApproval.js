@@ -12,7 +12,9 @@ const ABProcessTaskUserApprovalCore = require(path.join(__dirname, "..", "..", "
 // // a micro service request object used to send requests to other services.
 // // This one is used to initiate emails to our process_manager service.
 
-module.exports = class ABProcessTaskUserApproval extends ABProcessTaskUserApprovalCore {
+module.exports = class ABProcessTaskUserApproval extends (
+   ABProcessTaskUserApprovalCore
+) {
    ////
    //// Process Instance Methods
    ////
@@ -88,6 +90,13 @@ module.exports = class ABProcessTaskUserApproval extends ABProcessTaskUserApprov
                jobData.users = myLane.account;
             }
          }
+
+         // Validate Roles & Users parameters:
+         if (jobData.roles && !Array.isArray(jobData.roles))
+            jobData.roles = [jobData.roles];
+
+         if (jobData.users && !Array.isArray(jobData.users))
+            jobData.users = [jobData.users];
 
          this._req.serviceRequest(
             "process_manager.userform.create",

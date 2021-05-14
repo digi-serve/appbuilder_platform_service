@@ -25,20 +25,22 @@ module.exports = class ABModel extends ABModelCore {
     * @return {Promise} resolved with the result of the find()
     */
    create(values, trx = null, condDefaults = null, req = null) {
-      values = this.object.requestParams(values);
+      // make sure we ONLY have valid field values in {values}
+      var baseValues = this.object.requestParams(values);
+      var addRelationParams = this.object.requestRelationParams(values);
 
       // make sure a UUID is set
       var PK = this.object.PK();
-      if (PK === "uuid" && values[PK] == null) {
-         values[PK] = this.AB.uuid();
+      if (PK === "uuid" && baseValues[PK] == null) {
+         baseValues[PK] = this.AB.uuid();
       }
 
       // created_at & updated_at
       var date = this.AB.rules.toSQLDateTime(new Date());
-      values["created_at"] = values["created_at"] || date;
-      values["updated_at"] = values["updated_at"] || date;
+      baseValues["created_at"] = baseValues["created_at"] || date;
+      baseValues["updated_at"] = baseValues["updated_at"] || date;
 
-      let validationErrors = this.object.isValidData(values);
+      let validationErrors = this.object.isValidData(baseValues);
       if (validationErrors.length > 0) {
          return Promise.reject(validationErrors);
       }
@@ -53,7 +55,7 @@ module.exports = class ABModel extends ABModelCore {
 
          // update our value
          query
-            .insert(values)
+            .insert(baseValues)
             .then((returnVals) => {
                if (req) {
                   req.log(
@@ -63,32 +65,52 @@ module.exports = class ABModel extends ABModelCore {
                   );
                }
 
-               // make sure we get a fully updated value for
-               // the return value
-               this.findAll(
-                  {
-                     where: {
-                        glue: "and",
-                        rules: [
-                           {
-                              key: PK,
-                              rule: "equals",
-                              value: returnVals[PK],
-                           },
-                        ],
+               var relateTasks = [];
+               for (var colName in addRelationParams) {
+                  if (!Array.isArray(addRelationParams[colName])) {
+                     addRelationParams[colName] = [addRelationParams[colName]];
+                  }
+
+                  addRelationParams[colName].forEach((val) => {
+                     // insert relation values of relation
+                     relateTasks.push(() =>
+                        setRelate(this.object, colName, returnVals[PK], val)
+                     );
+                  });
+               }
+
+               doSequential(relateTasks, (err) => {
+                  if (err) {
+                     return reject(err);
+                  }
+
+                  // make sure we get a fully updated value for
+                  // the return value
+                  this.findAll(
+                     {
+                        where: {
+                           glue: "and",
+                           rules: [
+                              {
+                                 key: PK,
+                                 rule: "equals",
+                                 value: returnVals[PK],
+                              },
+                           ],
+                        },
+                        offset: 0,
+                        limit: 1,
+                        populate: true,
                      },
-                     offset: 0,
-                     limit: 1,
-                     populate: true,
-                  },
-                  condDefaults,
-                  req
-               )
-                  .then((rows) => {
-                     // this returns an [] so pull 1st value:
-                     resolve(rows[0]);
-                  })
-                  .catch(reject);
+                     condDefaults,
+                     req
+                  )
+                     .then((rows) => {
+                        // this returns an [] so pull 1st value:
+                        resolve(rows[0]);
+                     })
+                     .catch(reject);
+               });
             })
             .catch((error) => {
                // populate any error messages with the SQL of this
@@ -2044,7 +2066,7 @@ function clearRelate(obj, columnName, rowId) {
  * set a relationship between obj[columnName] and value
  * @param {ABObject} obj
  * @param {string} columnName
- *        the column name of the relations we are clearing.
+ *        the column name of the relations we are creating.
  * @param {string} rowId
  *        the .uuid of the row we are working on.
  * @param {valueHash} value
