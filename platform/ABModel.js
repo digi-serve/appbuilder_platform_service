@@ -391,7 +391,12 @@ module.exports = class ABModel extends ABModelCore {
             .catch((error) => {
                // populate any error messages with the SQL of this
                // query:
-               error._sql = query.toKnexQuery().toSQL().sql;
+               try {
+                  error._sql = query.toKnexQuery().toSQL().sql;
+               } catch (e) {
+                  console.error("Error trying to .sql() my query");
+                  console.error(e);
+               }
                reject(error);
             });
       });
@@ -1573,7 +1578,9 @@ module.exports = class ABModel extends ABModelCore {
 
          // now join our where statements according to the .glue values
          var sqlWhere = this.queryConditionsJoinConditions(whereParsed);
-         query.whereRaw(sqlWhere);
+         if (sqlWhere && sqlWhere.length > 0) {
+            query.whereRaw(sqlWhere);
+         }
 
          // Special Case:  'have_no_relation'
          // 1:1 - Get rows that no relation with
