@@ -27,6 +27,23 @@ var DefinitionManager = {
    Update,
 };
 
+var Listener = null;
+// {abServiceSubscriber}
+// A Subscriber for the definition.* published messages.
+
+/**
+ * @function staleHandler()
+ * handles resetting the ABFactory for the Tenant that just had their
+ * definitions updated.
+ * Definitions will be reloaded the next time a relevant request needs
+ * that tenant's data.
+ */
+function staleHandler(req) {
+   var tenantID = req.tenantID();
+   delete Factories[tenantID];
+   req.log(`:: Definitions reset for tenant[${tenantID}]`);
+}
+
 module.exports = {
    init: (req) => {
       return new Promise((resolve, reject) => {
@@ -48,7 +65,7 @@ module.exports = {
                   // Already there, so skip.
                   return;
                }
-
+               req.log(`:: Loading Definitions for tenant[${tenantID}]`);
                return queryAllDefinitions(req).then((defs) => {
                   if (defs && Array.isArray(defs) && defs.length) {
                      var hashDefs = {};
@@ -84,6 +101,24 @@ module.exports = {
                });
             })
             .then(() => {
+               // initialize Listener if not initialized
+               if (!Listener) {
+                  // record our stale handler
+                  Listener = req.serviceSubscribe(
+                     "definition.stale",
+                     staleHandler
+                  );
+
+                  // attach staleHandler() to our other Events:
+                  [
+                     "definition.created",
+                     "definition.destroyed",
+                     "definition.updated",
+                  ].forEach((e) => {
+                     req.serviceSubscribe(e, staleHandler);
+                  });
+               }
+
                // return the ABFactory for this tenantID
                resolve(Factories[tenantID]);
             })

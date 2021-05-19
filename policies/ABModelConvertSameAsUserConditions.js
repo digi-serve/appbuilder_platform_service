@@ -454,7 +454,7 @@ function processLookup(AB, list, userData, cb, data) {
 
       lookup.obj
          .model()
-         .findAll({ where: cond }, userData, true) // just send the user data
+         .findAll({ where: cond }, userData) // just send the user data
          .then((items) => {
             // now pass these back to the next lookup:
             processLookup(AB, list, userData, cb, items);

@@ -191,10 +191,24 @@ module.exports = class ABFieldDateTime extends ABFieldDateTimeCore {
       if (!this.settings.defaultDateValue && !this.settings.defaultTimeValue)
          return null;
 
+      // occassionally, the default value checkbox is checked, but no valid date
+      // is set, so we get a default string "Thu Jan 01 1970 07:00:00 GMT+0700 (Indochina Time)"
+      if (this.settings.defaultDateValue.indexOf("Thu Jan 01 1970") > -1) {
+         this.settings.defaultDateValue = "";
+      }
+      if (this.settings.defaultTimeValue.indexOf("Thu Jan 01 1970") > -1) {
+         this.settings.defaultTimeValue = "";
+      }
+
       let result = moment().utc();
 
       // Date
       if (this.settings.defaultDateValue) {
+         console.log(
+            `DEBUG: f[${this.label || this.name}][${
+               this.id
+            }] defaultDateValue[${this.settings.defaultDateValue}]`
+         );
          let defaultDate = moment(this.settings.defaultDateValue);
          if (defaultDate && defaultDate.isValid()) {
             defaultDate = defaultDate.utc(); // Convert to UTC

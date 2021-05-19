@@ -27,11 +27,11 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
       ids.push(this.id);
    }
 
-   users() {
+   users(req) {
       return new Promise((resolve, reject) => {
          var allLookups = [];
-         allLookups.push(this.usersForRoles());
-         allLookups.push(this.usersForAccounts());
+         allLookups.push(this.usersForRoles(req));
+         allLookups.push(this.usersForAccounts(req));
 
          Promise.all(allLookups)
             .then((results) => {
@@ -43,7 +43,7 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
       });
    }
 
-   usersForAccounts() {
+   usersForAccounts(req) {
       return new Promise((resolve, reject) => {
          if (!this.useAccount) {
             resolve([]);
@@ -53,9 +53,14 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
             this.account = [this.account];
          }
 
-         this.AB.objectUser()
-            .model()
-            .find({ uuid: this.account })
+         // check if this.account is either a .uuid or .username
+         req.retry(() =>
+            this.AB.objectUser()
+               .model()
+               .find({
+                  or: [{ uuid: this.account }, { username: this.account }],
+               })
+         )
             .then((listUsers) => {
                resolve(listUsers);
             })
@@ -63,90 +68,49 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
       });
    }
 
-   usersForRoles() {
+   usersForRoles(req) {
       return new Promise((resolve, reject) => {
          if (!this.useRole) {
             resolve([]);
             return;
          }
 
-         // console.log(
-         //    "TODO: ABProcessParticipant.usersForRoles():  after User Field revamp"
-         // );
-         // resolve([]);
-         // return;
-
          if (!Array.isArray(this.role)) {
             this.role = [this.role];
          }
 
          // lookup the current list of Roles we are defined to use.
-         this.AB.objectRole()
-            .find(
-               { where: { uuid: this.role }, populate: true },
-               // {
-               //    where: {
-               //       glue: "and",
-               //       rules: [
-               //          {
-               //             key: RoleModel.PK(),
-               //             rule: "in",
-               //             value: this.role,
-               //          },
-               //       ],
-               //    },
-               //    populate: true,
-               // },
-               {} // <-- user data isn't used in our condition
-            )
+         req.retry(() =>
+            this.AB.objectRole()
+               .model()
+               .find({ where: { uuid: this.role }, populate: true }, req)
+         )
 
             .then((result = []) => {
                // for each role, compile a list of Users->usernames
                var allUsers = [];
                (result || []).forEach((role) => {
                   var usernames = (role.users || []).map((u) => {
-                     // the data entry is a ABFieldUser instance,
-                     // so it is in the format:
-                     // {
-                     //    id: "username",
-                     //    image:"",
-                     //    text: "username"
-                     // }
-                     return u.username; // u.id || u;
+                     // NOTE: ABFieldUser connections are linked via username
+                     return u.username || u;
                   });
                   allUsers = allUsers.concat(usernames);
                });
 
                // make sure we remove any duplicates
-               allUsers = _.uniq(allUsers);
+               allUsers = this.AB.uniq(allUsers);
 
                // now return our SiteUsers based upon these usernames
-               this.AB.objectUser()
-                  .find(
-                     { where: { username: allUsers }, populate: true }
-                     // {
-                     //    where: {
-                     //       glue: "and",
-                     //       rules: [
-                     //          {
-                     //             key: "username",
-                     //             rule: "in",
-                     //             value: allUsers,
-                     //          },
-                     //       ],
-                     //    },
-                     //    populate: true,
-                     // },
-                     // {} // <-- user data isn't used in our condition
-                  )
+               req.retry(() =>
+                  this.AB.objectUser()
+                     .model()
+                     .find(
+                        { where: { username: allUsers }, populate: false },
+                        req
+                     )
+               )
                   .then(resolve)
                   .catch(reject);
-
-               // SiteUser.find({ username: allUsers })
-               //    .then((listUsers) => {
-               //       resolve(listUsers);
-               //    })
-               //    .catch(reject);
             })
             .catch((err) => {
                reject(err);

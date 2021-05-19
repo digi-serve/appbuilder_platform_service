@@ -206,7 +206,88 @@ module.exports = class ABClassObject extends ABObjectCore {
    }
 
    /**
-    * migrateCreateTable
+    * @method migrateField()
+    * tell a given field to perform it's .migrateCreate() action.
+    * this is part of the .migrateCreate() => .migrateCreateFields() => migrageField()
+    * process.
+    * @param {ABField} f
+    *        the current field we need to perform our migration.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateCreate().
+    * @param {knex} knex
+    *        the Knex connection.
+    * @return {Promise}
+    */
+   migrateField(f, req, knex) {
+      return f.migrateCreate(req, knex).catch((err) => {
+         req.notify.developer(err, {
+            context: `field[${f.name || f.label}].migrateCreate(): error:`,
+            field: f,
+            AB: this.AB,
+         });
+         throw err;
+      });
+   }
+
+   /**
+    * @method migrateCreateFields()
+    * Step through all our fields and have them perform their .migrateCreate()
+    * actions.  These fields need to be created in a specific order:
+    *    normal Fields
+    *    indexes
+    *    connect Fields
+    *
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateCreate().
+    * @param {knex} knex
+    *        the Knex connection.
+    * @return {Promise}
+    */
+   migrateCreateFields(req, knex) {
+      var connectFields = this.connectFields();
+      return Promise.resolve()
+         .then(() => {
+            //// NOTE: NOW the table is created
+            //// let's go add our Fields to it:
+            let fieldUpdates = [];
+
+            let normalFields = this.fields(
+               (f) =>
+                  f &&
+                  !connectFields.find(
+                     (c) => c.id == f.id
+                  ) /* f.key != "connectObject" */
+            );
+
+            normalFields.forEach((f) => {
+               fieldUpdates.push(this.migrateField(f, req, knex));
+            });
+
+            return Promise.all(fieldUpdates);
+         })
+         .then(() => {
+            // Now Create our indexes
+
+            let fieldUpdates = [];
+            this.indexes().forEach((idx) => {
+               fieldUpdates.push(this.migrateField(idx, req, knex));
+            });
+            return Promise.all(fieldUpdates);
+         })
+         .then(() => {
+            // finally create any connect Fields
+
+            let fieldUpdates = [];
+
+            connectFields.forEach((f) => {
+               fieldUpdates.push(this.migrateField(f, req, knex));
+            });
+            return Promise.all(fieldUpdates);
+         });
+   }
+
+   /**
+    * migrateCreate
     * verify that a table for this object exists.
     * @param {ABUtil.reqService} req
     *        the request object for the job driving the migrateCreate().
@@ -230,16 +311,6 @@ module.exports = class ABClassObject extends ABObjectCore {
                         this.name || this.label
                      }]->table[${tableName}]`
                   );
-                  function migrateIt(f) {
-                     return f.migrateCreate(req, knex).catch((err) => {
-                        req.notify.developer(err, {
-                           context: `field[${f.label}].migrateCreate(): error:`,
-                           field: f,
-                           AB: this.AB,
-                        });
-                        throw err;
-                     });
-                  }
 
                   return knex.schema
                      .createTable(tableName, (t) => {
@@ -261,38 +332,7 @@ module.exports = class ABClassObject extends ABObjectCore {
                         t.text("properties");
                      })
                      .then(() => {
-                        //// NOTE: NOW the table is created
-                        //// let's go add our Fields to it:
-                        let fieldUpdates = [];
-
-                        let normalFields = this.fields(
-                           (f) => f && f.key != "connectObject"
-                        );
-
-                        normalFields.forEach((f) => {
-                           fieldUpdates.push(migrateIt(f));
-                        });
-
-                        return Promise.all(fieldUpdates);
-                     })
-                     .then(() => {
-                        // Now Create our indexes
-
-                        let fieldUpdates = [];
-                        this.indexes().forEach((idx) => {
-                           fieldUpdates.push(migrateIt(idx));
-                        });
-                        return Promise.all(fieldUpdates);
-                     })
-                     .then(() => {
-                        // finally create any connect Fields
-
-                        let fieldUpdates = [];
-                        let connectFields = this.connectFields();
-                        connectFields.forEach((f) => {
-                           fieldUpdates.push(migrateIt(f));
-                        });
-                        return Promise.all(fieldUpdates);
+                        return this.migrateCreateFields(req, knex);
                      })
                      .then(resolve)
                      .catch(reject);
@@ -302,7 +342,12 @@ module.exports = class ABClassObject extends ABObjectCore {
                         this.name || this.label
                      }] -> table[${tableName}]`
                   );
-                  resolve();
+
+                  // the Object might already exist,  but we need to make sure any added
+                  // fields are created.
+                  this.migrateCreateFields(req, knex)
+                     .then(resolve)
+                     .catch(reject);
                }
             })
             .catch(reject);
@@ -776,7 +821,7 @@ module.exports = class ABClassObject extends ABObjectCore {
 
    requestRelationParams(allParameters) {
       var usefulParameters = {};
-      this.connectFields(true).forEach((f) => {
+      this.connectFields().forEach((f) => {
          if (f.requestRelationParam) {
             var p = f.requestRelationParam(allParameters);
             if (p) {
@@ -1821,7 +1866,7 @@ module.exports = class ABClassObject extends ABObjectCore {
                               // if the linked object's PK is uuid, then exclude .id
                               unselectId: (builder) => {
                                  builder.omit(["id"]);
-                              }
+                              },
                            });
                         }
 

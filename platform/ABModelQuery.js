@@ -32,9 +32,12 @@ module.exports = class ABModelQuery extends ABModel {
     * @return {Promise} resolved with the result of the find()
     */
    findAll(options = {}, userData, req) {
-      let raw = this.AB.Knex.connection().raw,
-         query = this.AB.Knex.connection().queryBuilder();
-      query.from(this.dbViewName());
+      let query = this.AB.Knex.connection().queryBuilder();
+      query.from(this.object.dbViewName());
+
+      let raw = (...params) => {
+         return this.AB.Knex.connection().raw(...params);
+      };
 
       return (
          Promise.resolve()
@@ -58,7 +61,7 @@ module.exports = class ABModelQuery extends ABModel {
                               queryString.replace("select ", "")
                            );
 
-                           // sub query
+                           // sub query: NOTE: "this" == query
                            this.select(sqlCommand).as("result");
                         })
                         .join(
@@ -114,7 +117,8 @@ module.exports = class ABModelQuery extends ABModel {
                   }
 
                   if (options) {
-                     this.reduceConditions(options.where, userData)
+                     this.object
+                        .reduceConditions(options.where, userData)
                         .then(() => {
                            // when finished populate our Find Conditions
                            this.queryConditions(query, options.where, userData);
@@ -255,7 +259,7 @@ module.exports = class ABModelQuery extends ABModel {
       ];
 
       // added tableName to id because of non unique field error
-      return this.findAll(options, userData).then((result) => {
+      return this.findAll(options, userData, req).then((result) => {
          return result[0];
          // return result[0]['count'];
       });

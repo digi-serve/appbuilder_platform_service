@@ -18,7 +18,7 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
    //// Process Instance Methods
    ////
 
-   laneUserEmails(allLanes) {
+   laneUserEmails(allLanes, req) {
       if (!Array.isArray(allLanes)) {
          allLanes = [allLanes];
       }
@@ -30,7 +30,7 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
             allLanes,
             (myLane, cb) => {
                myLane
-                  .users()
+                  .users(req)
                   .then((list) => {
                      list.forEach((l) => {
                         if (l.email) {
@@ -63,7 +63,7 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
       });
    }
 
-   resolveAddresses(instance, field, method, select, custom) {
+   resolveAddresses(instance, field, method, select, custom, req) {
       return new Promise((resolve, reject) => {
          method = parseInt(method);
 
@@ -111,7 +111,7 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
                   return;
                }
 
-               this.laneUserEmails(myLanes)
+               this.laneUserEmails(myLanes, req)
                   .then((emails) => {
                      var data = {};
                      data[field] = emails;
@@ -133,7 +133,7 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
                   this.process,
                   this.AB
                );
-               this.laneUserEmails(tempLane)
+               this.laneUserEmails(tempLane, req)
                   .then((emails) => {
                      var data = {};
                      data[field] = emails;
@@ -154,23 +154,25 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
       });
    }
 
-   resolveToAddresses(instance) {
+   resolveToAddresses(instance, req) {
       return this.resolveAddresses(
          instance,
          "to",
          this.to,
          this.toUsers,
-         this.toCustom
+         this.toCustom,
+         req
       );
    }
 
-   resolveFromAddresses(instance) {
+   resolveFromAddresses(instance, req) {
       return this.resolveAddresses(
          instance,
          "from",
          this.from,
          this.fromUsers,
-         this.fromCustom
+         this.fromCustom,
+         req
       );
    }
 
@@ -189,8 +191,8 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
    do(instance, dbTransaction, req) {
       return new Promise((resolve, reject) => {
          var tasks = [];
-         tasks.push(this.resolveToAddresses(instance));
-         tasks.push(this.resolveFromAddresses(instance));
+         tasks.push(this.resolveToAddresses(instance, req));
+         tasks.push(this.resolveFromAddresses(instance, req));
 
          Promise.all(tasks)
             .then(() => {
