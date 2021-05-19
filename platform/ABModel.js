@@ -1226,15 +1226,33 @@ module.exports = class ABModel extends ABModelCore {
                   break;
 
                case "contain_current_user":
-                  columnName = `JSON_SEARCH(JSON_EXTRACT(${columnName}, '$[*].id'), 'one', '${userData.username}')`;
-                  operator = "IS NOT";
-                  value = "NULL";
-                  break;
-
                case "not_contain_current_user":
-                  columnName = `JSON_SEARCH(JSON_EXTRACT(${columnName}, '$[*].id'), 'one', '${userData.username}')`;
-                  operator = "IS";
-                  value = "NULL";
+                  // Pull ABUserField when condition.key does not be .id of ABField
+                  if (field == null) {
+                     field = this.fields((f) => {
+                        let condKey = (condition.key || "").replace(/`/g, "");
+
+                        return (
+                           condKey == f.columnName ||
+                           condKey ==
+                              `${f.dbPrefix()}.${f.columnName}`.replace(
+                                 /`/g,
+                                 ""
+                              )
+                        );
+                     })[0];
+                  }
+
+                  if (field) {
+                     columnName = this.PK();
+                     operator =
+                        condition.rule == "contain_current_user"
+                           ? "IN"
+                           : "NOT IN";
+                     value = `(SELECT \`${this.object.name}\`
+                              FROM \`${field.joinTableName()}\`
+                              WHERE \`USER\` IN ('${userData.username}'))`;
+                  }
                   break;
 
                case "is_null":
