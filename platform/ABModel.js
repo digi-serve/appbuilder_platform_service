@@ -1291,44 +1291,54 @@ module.exports = class ABModel extends ABModelCore {
             break;
 
          case "contain_current_user":
-            // columnName = `JSON_SEARCH(JSON_EXTRACT(${columnName}, '$[*].id'), 'one', '${userData.username}')`;
-            // operator = "IS NOT";
-            // value = "NULL";
-            // break;
-            operator = "IN";
-
-            // If we have access to the userData.username
-            if (userData.username) {
-               value = `( "${userData.username}" )`;
-            } else {
-               // if we wanted contains_current_user, but there wasn't a
-               // uservalue provided, then we want to make sure this
-               // condition doesn't return anything
-               //
-               // send a false by resetting the whereRaw to a fixed value.
-               // any future attempts to replace this will be ignored.
-               whereRaw = " 1=0 ";
-            }
-            break;
-
          case "not_contain_current_user":
-            // columnName = `JSON_SEARCH(JSON_EXTRACT(${columnName}, '$[*].id'), 'one', '${userData.username}')`;
-            // operator = "IS";
-            // value = "NULL";
-            // break;
-            operator = "NOT IN";
+            if (!userData.username) {
+               if (condition.key == "contain_current_user") {
+                  // if we wanted contains_current_user, but there wasn't a
+                  // uservalue provided, then we want to make sure this
+                  // condition doesn't return anything
+                  //
+                  // send a false by resetting the whereRaw to a fixed value.
+                  // any future attempts to replace this will be ignored.
+                  whereRaw = " 1=0 ";
+               }
+               else if (condition.key == "not_contain_current_user") {
+                  // if we wanted not_contains_current_user, but there wasn't a
+                  // uservalue provided, then we want to make sure this
+                  // condition isn't limited by the lack of a username
+                  //
+                  // send a true by resetting the whereRaw to a fixed value.
+                  // any future attempts to replace this will be ignored.
+                  whereRaw = " 1=1 ";
+               }
+               break;
+            }
 
-            // If we have access to the userData.username
-            if (userData.username) {
-               value = `( "${userData.username}" )`;
-            } else {
-               // if we wanted not_contains_current_user, but there wasn't a
-               // uservalue provided, then we want to make sure this
-               // condition isn't limited by the lack of a username
-               //
-               // send a true by resetting the whereRaw to a fixed value.
-               // any future attempts to replace this will be ignored.
-               whereRaw = " 1=1 ";
+             // Pull ABUserField when condition.key does not be .id of ABField
+             if (field == null) {
+               field = this.fields((f) => {
+                  let condKey = (condition.key || "").replace(/`/g, "");
+
+                  return (
+                     condKey == f.columnName ||
+                     condKey ==
+                        `${f.dbPrefix()}.${f.columnName}`.replace(
+                           /`/g,
+                           ""
+                        )
+                  );
+               })[0];
+            }
+
+            if (field) {
+               columnName = this.PK();
+               operator =
+                  condition.rule == "contain_current_user"
+                     ? "IN"
+                     : "NOT IN";
+               value = `(SELECT \`${this.object.name}\`
+                        FROM \`${field.joinTableName()}\`
+                        WHERE \`USER\` IN ('${userData.username}'))`;
             }
             break;
 
