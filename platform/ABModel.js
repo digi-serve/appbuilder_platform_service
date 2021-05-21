@@ -66,6 +66,9 @@ module.exports = class ABModel extends ABModelCore {
                }
 
                var relateTasks = [];
+               // {array}
+               // all the fn() calls that need to be performed to relate a task.
+
                for (var colName in addRelationParams) {
                   if (!Array.isArray(addRelationParams[colName])) {
                      addRelationParams[colName] = [addRelationParams[colName]];
@@ -73,9 +76,18 @@ module.exports = class ABModel extends ABModelCore {
 
                   addRelationParams[colName].forEach((val) => {
                      // insert relation values of relation
-                     relateTasks.push(() =>
-                        setRelate(this.object, colName, returnVals[PK], val)
+                     // NOTE: doing the fn call here to properly preserve the
+                     // closure(val) property.
+                     AddToRelateTasks(
+                        relateTasks,
+                        this.object,
+                        colName,
+                        returnVals[PK],
+                        val
                      );
+                     // relateTasks.push(() =>
+                     //    setRelate(this.object, colName, returnVals[PK], val)
+                     // );
                   });
                }
 
@@ -1088,16 +1100,19 @@ module.exports = class ABModel extends ABModelCore {
                      );
                   }
                } else {
-                  let transCol;
-                  // If it is a query
-                  if (this.object.viewName)
-                     transCol = "`{prefix}.translations`";
-                  else transCol = "{prefix}.translations";
+                  let transCol = `${field
+                     .dbPrefix()
+                     .replace(/`/g, "")}.translations`;
 
-                  transCol = transCol.replace(
-                     "{prefix}",
-                     field.dbPrefix().replace(/`/g, "")
-                  );
+                  // If it is a query
+                  if (this.object.viewName) {
+                     // just wrap the whole transCol in ``
+                     transCol = "`" + transCol + "`";
+                  } else {
+                     // each piece of the transCol "dbname.tablename.colname" needs to be
+                     // wrapped in ``  ( `dbname`.`tablename`.`colname` )
+                     transCol = "`" + transCol.split(".").join("`.`") + "`"; // "{prefix}.translations";
+                  }
 
                   condition.key = this.AB.Knex.connection(/* connectionName */).raw(
                      'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({transCol}, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({transCol}, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
@@ -1299,8 +1314,7 @@ module.exports = class ABModel extends ABModelCore {
                   // send a false by resetting the whereRaw to a fixed value.
                   // any future attempts to replace this will be ignored.
                   whereRaw = " 1=0 ";
-               }
-               else if (condition.key == "not_contain_current_user") {
+               } else if (condition.key == "not_contain_current_user") {
                   // if we wanted not_contains_current_user, but there wasn't a
                   // uservalue provided, then we want to make sure this
                   // condition isn't limited by the lack of a username
@@ -1312,18 +1326,15 @@ module.exports = class ABModel extends ABModelCore {
                break;
             }
 
-             // Pull ABUserField when condition.key does not be .id of ABField
-             if (field == null) {
+            // Pull ABUserField when condition.key does not be .id of ABField
+            if (field == null) {
                field = this.fields((f) => {
                   let condKey = (condition.key || "").replace(/`/g, "");
 
                   return (
                      condKey == f.columnName ||
                      condKey ==
-                        `${f.dbPrefix()}.${f.columnName}`.replace(
-                           /`/g,
-                           ""
-                        )
+                        `${f.dbPrefix()}.${f.columnName}`.replace(/`/g, "")
                   );
                })[0];
             }
@@ -1331,9 +1342,7 @@ module.exports = class ABModel extends ABModelCore {
             if (field) {
                columnName = this.PK();
                operator =
-                  condition.rule == "contain_current_user"
-                     ? "IN"
-                     : "NOT IN";
+                  condition.rule == "contain_current_user" ? "IN" : "NOT IN";
                value = `(SELECT \`${this.object.name}\`
                         FROM \`${field.joinTableName()}\`
                         WHERE \`USER\` IN ('${userData.username}'))`;
@@ -2117,6 +2126,25 @@ module.exports = class ABModel extends ABModelCore {
 /************************
  *** Update() Helpers ***
  ************************/
+
+/**
+ * AddToRelateTasks()
+ * Adds a properly formatted call to setRelate() to a list of tasks
+ * that is passed in.
+ * The primary use of this fn() is to preserve the param values for
+ * when the delayed fn() is called so it references the correct values.
+ * @param {array} listTasks
+ *        the list of setRelate() calls that need to be made.
+ * @param {ABObject} obj
+ * @param {string} colName
+ * @param {string} pk
+ *        the {uuid} of the row being updated with the relationship
+ * @param {string} val
+ *        the value of the relationship being stored.
+ */
+function AddToRelateTasks(listTasks, obj, colName, pk, val) {
+   listTasks.push(() => setRelate(obj, colName, pk, val));
+}
 
 /**
  * doSequential()

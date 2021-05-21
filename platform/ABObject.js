@@ -1,5 +1,5 @@
 const path = require("path");
-const _ = require("lodash");
+// const _ = require("lodash");
 
 const ABObjectCore = require(path.join(
    __dirname,
@@ -7,8 +7,8 @@ const ABObjectCore = require(path.join(
    "core",
    "ABObjectCore.js"
 ));
-const Model = require("objection").Model;
-const ABModel = require(path.join(__dirname, "ABModel.js"));
+// const Model = require("objection").Model;
+// const ABModel = require(path.join(__dirname, "ABModel.js"));
 
 const ConversionList = [
    require("../policies/ABModelConvertSailsCondition"),
@@ -29,7 +29,7 @@ const PolicyList = [
 // prepare them for running.
 
 // var __ObjectPool = {};
-var __ModelPool = {}; // reuse any previously created Model connections
+// var __ModelPool = {}; // reuse any previously created Model connections
 // to minimize .knex bindings (and connection pools!)
 
 module.exports = class ABClassObject extends ABObjectCore {
@@ -152,75 +152,104 @@ module.exports = class ABClassObject extends ABObjectCore {
     * @return {Promise}
     */
    includeScopes(cond, condDefaults, req) {
+      // Q: if this is being run as condDefaults.username == "_system"
+      // should we simply return and not Scope?
+      if (condDefaults.username == "_system_") {
+         return Promise.resolve();
+      }
+
       // still in progress:
-      return Promise.resolve();
-      /*
       return new Promise((resolve, reject) => {
          // find Roles for user:
-         this.AB.objectUser()
-            .model()
-            .find({
-               where: { username: condDefaults.username },
+         var SiteUser = this.AB.objectUser().model();
+         req.retry(() =>
+            SiteUser.find({
+               where: { username: condDefaults.username, isActive: 1 },
                populate: true,
             })
-            .then((list) => {
-               var user = list[0];
-               if (!user) {
-                  // This is unexpected ...
-                  req.notify.developer(
-                     new Error(
-                        `ABObject.includeScopes(): unknown user[${condDefaults.username}] `
-                     ),
-                     {
-                        context:
-                           "ABObject.includeScopes: unknown user provided",
-                        condDefaults,
-                        req,
-                     }
-                  );
-                  return resolve();
-               }
+         ).then((list) => {
+            var user = list[0];
+            if (!user) {
+               // This is unexpected ...
+               var error = new Error(
+                  `ABObject.includeScopes(): unknown or inactive user[${condDefaults.username}] `
+               );
+               req.notify.developer(error, {
+                  context:
+                     "ABObject.includeScopes: unknown or inactive user provided",
+                  condDefaults,
+                  req,
+               });
+               // treat this like an error
+               return reject(error);
+            }
 
-               // pull all the Scopes for
-               // V1 : method of scope definitions.
-               // V2 : TODO: consider simplifying the structure and filters
-               var allScopes = [];
-               (user.SITEROLE__relation || user.SITE_ROLE || []).forEach(
-                  (role) => {
-                     (
-                        role.SITESCOPE__relation ||
-                        role.SITE_SCOPE ||
-                        []
-                     ).forEach((scope) => {
-                        if (!Array.isArray(scope.objectIds)) {
-                           try {
-                              //// LEFT OFF HERE:
-                              scope.objectIds = json.parse(scope.objectIds);
-                           } catch (e) {}
-                        }
-
-                        allScopes.push(scope.uuid || scope);
-                     });
+            // pull all the Scopes for
+            // V1 : method of scope definitions.
+            // V2 : TODO: consider simplifying the structure and filters
+            var allRoles = user.SITEROLE__relation || user.SITE_ROLE || [];
+            if (allRoles.length == 0) {
+               // Q: So no roles in the system means NO ACCESS. So let's not return any data:
+               // add a 1=0 clause to prevent any results:
+               cond.where = {
+                  glue: "and",
+                  rules: [cond.where, { key: "1", rule: "=", value: "0" }],
+               };
+               req.notify.developer(
+                  new Error(
+                     "ABObject.includeScopes(): user has NO ROLES : preventing data access"
+                  ),
+                  {
+                     context: "ABObject.includeScopes(): user has NO ROLES",
+                     condDefaults,
                   }
                );
+               // but continue on since this isn't technically an Error ...
+               return resolve();
+            }
 
-               allScopes = this.AB.uniq(allScopes);
+            // find all the scopes related to these Roles:
+            var Scopes = this.AB.objectScope().model();
+            req.retry(() => Scopes.find({ roles: allRoles })).then((list) => {
+               // pluck the filter that refer to a field in this object
+               var myFieldIDs = this.fields().map((f) => f.id);
+               var relatedRules = [];
+               (list || []).forEach((scope) => {
+                  if (scope.Filters && scope.Filters.rules) {
+                     (scope.Filters.rules || []).forEach((r) => {
+                        if (myFieldIDs.indexOf(r.key) > -1) {
+                           relatedRules.push(r);
+                        }
+                     });
+                  }
+               });
 
-               if (allScopes.length == 0) {
-                  return resolve();
+               // if there are Rules that relate to this object
+               if (relatedRules.length > 0) {
+                  // we now have to apply our ScopeRules
+                  var ScopeRules = {
+                     glue: "or",
+                     rules: relatedRules,
+                  };
+
+                  // if there are NO existing rules, these become our
+                  // rules:
+                  if (!cond.where || (cond.where.rules || []).length == 0) {
+                     cond.where = ScopeRules;
+                  } else {
+                     // Otherwise, we need to AND our new ScopeRules
+                     // together with the original Condition:
+                     var newWhere = {
+                        glue: "and",
+                        rules: [cond.where, ScopeRules],
+                     };
+                     cond.where = newWhere;
+                  }
                }
-
-               this.AB.objectScope()
-                  .model()
-                  .find({ uuid: allScopes })
-                  .then((list) => {
-                     debugger;
-                     console.log(list);
-                     return resolve();
-                  });
+               return resolve();
             });
+         });
       });
-      */
    }
 
    /**
@@ -252,10 +281,9 @@ module.exports = class ABClassObject extends ABObjectCore {
       (this.indexes() || []).forEach((indx) => {
          // console.log("       indx:", indx);
          var hasConnect =
-            (indx.fields || []).filter((f) => f.key == "connectObject").length >
-            0;
+            (indx.fields || []).filter((f) => f.isConnected).length > 0;
          if (hasConnect) {
-            sails.log(
+            console.log(
                `:::: STASHING INDEX O[${this.label}].I[${indx.indexName}]`
             );
             this._stashIndexes.push(indx);
@@ -2063,6 +2091,26 @@ module.exports = class ABClassObject extends ABObjectCore {
          require("../../policies/ABModelConvertQueryFieldConditions"),
       ];
 
+      // These older policies require an incoming req object with some
+      // expected functionality.  The myReq is a mock object to mimic
+      // those legacy features with our current capabilities.
+      let myReq = {
+         options: {
+            _where: _where,
+         },
+         user: {
+            data: userData,
+         },
+         param: (id) => {
+            if (id == "appID") {
+               console.error("appID being requested from processPolicy: WHY?");
+               return this.application.id;
+            } else if (id == "objID") {
+               return this.id;
+            }
+         },
+      };
+
       // run the options.where through our existing policy filters
       // get array of policies to run through
       let processPolicy = (indx, cb) => {
@@ -2073,28 +2121,6 @@ module.exports = class ABClassObject extends ABObjectCore {
             let policy = PolicyList[indx];
 
             // run the policy on my data
-            // policy(req, res, cb)
-            // 	req.options._where
-            //  req.user.data
-            let myReq = {
-               options: {
-                  _where: _where,
-               },
-               user: {
-                  data: userData,
-               },
-               param: (id) => {
-                  if (id == "appID") {
-                     console.error(
-                        "appID being requested from processPolicy: WHY?"
-                     );
-                     return this.application.id;
-                  } else if (id == "objID") {
-                     return this.id;
-                  }
-               },
-            };
-
             policy(myReq, {}, (err) => {
                if (err) {
                   cb(err);
@@ -2120,8 +2146,6 @@ module.exports = class ABClassObject extends ABObjectCore {
    }
 
    selectFormulaFields(query) {
-      let raw = ABMigration.connection().raw;
-
       // Formula fields
       let formulaFields = this.fields((f) => f.key == "formula");
       (formulaFields || []).forEach((f) => {
@@ -2129,7 +2153,9 @@ module.exports = class ABClassObject extends ABObjectCore {
          if (selectSQL) {
             // selectSQL += ` AS ${this.dbTableName(true)}.${f.columnName}`;
             selectSQL += ` AS \`${f.columnName}\``;
-            query = query.select(raw(selectSQL));
+            query = query.select(
+               this.AB.Knex.connection(/* connectionName */).raw(selectSQL)
+            );
          }
       });
 
