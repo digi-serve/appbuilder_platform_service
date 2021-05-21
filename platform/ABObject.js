@@ -140,6 +140,90 @@ module.exports = class ABClassObject extends ABObjectCore {
    }
 
    /**
+    * @method includeScopes()
+    * modify the cond to apply scopes relevant to this ABObject. The passed
+    * in cond object is directy modified, as well as being passed back in
+    * the promise.
+    * @param {obj} cond
+    *        a querybuilder formatted condition clause
+    * @param {obj} condDefaults
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving this transaction.
+    * @return {Promise}
+    */
+   includeScopes(cond, condDefaults, req) {
+      // still in progress:
+      return Promise.resolve();
+      /*
+      return new Promise((resolve, reject) => {
+         // find Roles for user:
+         this.AB.objectUser()
+            .model()
+            .find({
+               where: { username: condDefaults.username },
+               populate: true,
+            })
+            .then((list) => {
+               var user = list[0];
+               if (!user) {
+                  // This is unexpected ...
+                  req.notify.developer(
+                     new Error(
+                        `ABObject.includeScopes(): unknown user[${condDefaults.username}] `
+                     ),
+                     {
+                        context:
+                           "ABObject.includeScopes: unknown user provided",
+                        condDefaults,
+                        req,
+                     }
+                  );
+                  return resolve();
+               }
+
+               // pull all the Scopes for
+               // V1 : method of scope definitions.
+               // V2 : TODO: consider simplifying the structure and filters
+               var allScopes = [];
+               (user.SITEROLE__relation || user.SITE_ROLE || []).forEach(
+                  (role) => {
+                     (
+                        role.SITESCOPE__relation ||
+                        role.SITE_SCOPE ||
+                        []
+                     ).forEach((scope) => {
+                        if (!Array.isArray(scope.objectIds)) {
+                           try {
+                              //// LEFT OFF HERE:
+                              scope.objectIds = json.parse(scope.objectIds);
+                           } catch (e) {}
+                        }
+
+                        allScopes.push(scope.uuid || scope);
+                     });
+                  }
+               );
+
+               allScopes = this.AB.uniq(allScopes);
+
+               if (allScopes.length == 0) {
+                  return resolve();
+               }
+
+               this.AB.objectScope()
+                  .model()
+                  .find({ uuid: allScopes })
+                  .then((list) => {
+                     debugger;
+                     console.log(list);
+                     return resolve();
+                  });
+            });
+      });
+      */
+   }
+
+   /**
     * @method stashConnectFields()
     * internally "stash" the connectFields away so we don't reference them.
     * We do this during an import, so we can create the base Object Tables
@@ -399,7 +483,7 @@ module.exports = class ABClassObject extends ABObjectCore {
    /// DB Model Services
    ///
 
-   modelName() {
+   /* modelName() {
       return this.id.replace(/[^a-zA-Z]/g, ""); // remove special characters and numbers to allow model name to be class name
 
       // let appName = this.application.name,
@@ -412,7 +496,7 @@ module.exports = class ABClassObject extends ABObjectCore {
 
       // return this.tableName.replace(/[^a-zA-Z0-9]/g, ""); // remove special characters to allow model name to be class name
    }
-
+*/
    /**
     * model()
     * return an instance of ABModel that can operate the data for this ABObject
@@ -492,7 +576,7 @@ module.exports = class ABClassObject extends ABObjectCore {
    }
    */
 
-   modelRelation() {
+   /*   modelRelation() {
       var tableName = this.dbTableName(true);
 
       // Compile our relations from our DataFields
@@ -693,20 +777,20 @@ module.exports = class ABClassObject extends ABObjectCore {
          properties: { type: ["null", "object"] },
       };
    }
-
+*/
    /**
     * @method modelRefresh
     * when the definition of a model changes, we need to clear our cached
     * model definitions.
     * NOTE: called from our ABField.migrateXXX methods.
     */
-   modelRefresh() {
+   /*   modelRefresh() {
       var modelName = this.modelName();
       delete __ModelPool[modelName];
 
       ABMigration.refreshObject(this);
    }
-
+*/
    /**
     * @method queryFind
     * return an Objection.js QueryBuilder (basically a knex QueryBuilder with
@@ -719,7 +803,7 @@ module.exports = class ABClassObject extends ABObjectCore {
     * 		The current user's data (which can be used in our conditions.)
     * @return {QueryBuilder}
     */
-   queryFind(options = {}, userData) {
+   /*   queryFind(options = {}, userData) {
       let query = this.model().query();
 
       return Promise.resolve()
@@ -737,7 +821,7 @@ module.exports = class ABClassObject extends ABObjectCore {
             return query;
          });
    }
-
+*/
    /**
     * @method queryCount
     * return an Objection.js QueryBuilder that is already setup for this object.
@@ -751,7 +835,7 @@ module.exports = class ABClassObject extends ABObjectCore {
     * 		[optional] the table name to use for the count
     * @return {QueryBuilder}
     */
-   queryCount(options = {}, userData, tableName) {
+   /*   queryCount(options = {}, userData, tableName) {
       if (_.isUndefined(tableName)) {
          tableName = this.model().tableName;
       }
@@ -796,7 +880,7 @@ module.exports = class ABClassObject extends ABObjectCore {
             return query;
          });
    }
-
+*/
    /**
     * @method requestParams
     * Parse through the given parameters and return a subset of data that
@@ -910,9 +994,7 @@ module.exports = class ABClassObject extends ABObjectCore {
     *       this request is running under.
     *       {
     *          username: {string},
-    *          guid: {string},
     *          languageCode: {string}, - 'en', 'th'
-    *          ...
     *       }
     * @return {Promise}
     */
@@ -1006,7 +1088,7 @@ module.exports = class ABClassObject extends ABObjectCore {
     *                             }
     * @return {Promise}
     */
-   populateFindConditions(query, options, userData = {}) {
+   /*   populateFindConditions(query, options, userData = {}) {
       var where = {
             glue: "and",
             rules: [],
@@ -1884,7 +1966,7 @@ module.exports = class ABClassObject extends ABObjectCore {
             )
       );
    }
-
+*/
    /**
     * @method pullScopes
     *

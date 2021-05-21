@@ -271,6 +271,8 @@ module.exports = class ABModel extends ABModelCore {
                }
                return this.findAll(cond, userDefaults, req);
             }
+            err.__context = err.__context || [];
+            err.__context.push(".find().findAll().catch():throw err");
             throw err;
          });
       });
@@ -376,10 +378,6 @@ module.exports = class ABModel extends ABModelCore {
 
          // populate the data?
          this.queryPopulate(query, cond.populate);
-
-         // TODO: test to see if we can pull the query.toString()
-         // during the .catch() handler. Otherwise we movie it here.
-         // var sql = query.toString();
 
          // perform the operation
          query
@@ -1140,8 +1138,8 @@ module.exports = class ABModel extends ABModelCore {
             else if (
                ["connectObject", "user"].indexOf(field.key) > -1 &&
                [
-                  "contains",
-                  "not_contains",
+                  "contain",
+                  "not_contain",
                   "equals",
                   "not_equal",
                   "in",
