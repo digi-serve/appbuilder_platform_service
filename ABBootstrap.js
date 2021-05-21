@@ -98,6 +98,16 @@ module.exports = {
 
                      return newFactory.init();
                   }
+                  req.notify.developer(
+                     new Error(
+                        `No Definitions returned for tenant[${tenantID}]`
+                     ),
+                     {
+                        context: "ABBootstrap.queryAllDefinitions()",
+                        tenantID,
+                        req,
+                     }
+                  );
                });
             })
             .then(() => {
