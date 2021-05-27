@@ -1,3 +1,4 @@
+const _ = require("lodash");
 const ABModel = require("./ABModel");
 
 module.exports = class ABModelQuery extends ABModel {
@@ -35,8 +36,11 @@ module.exports = class ABModelQuery extends ABModel {
       let query = this.AB.Knex.connection().queryBuilder();
       query.from(this.object.dbViewName());
 
-      let raw = (...params) => {
-         return this.AB.Knex.connection().raw(...params);
+      // let raw = (...params) => {
+      //    return this.AB.Knex.connection().raw(...params);
+      // };
+      let raw = (command) => {
+         return this.AB.Knex.connection().raw(command);
       };
 
       return (
@@ -116,7 +120,12 @@ module.exports = class ABModelQuery extends ABModel {
                      }
                   }
 
-                  if (options) {
+                  if (
+                     options &&
+                     options.where &&
+                     options.where.rules &&
+                     options.where.rules.length
+                  ) {
                      this.object
                         .reduceConditions(options.where, userData)
                         .then(() => {
@@ -125,6 +134,8 @@ module.exports = class ABModelQuery extends ABModel {
                            next();
                         })
                         .catch(bad);
+                  } else {
+                     next();
                   }
                });
             })
@@ -188,9 +199,10 @@ module.exports = class ABModelQuery extends ABModel {
                                  Object.keys(tran).forEach((tranKey) => {
                                     if (tranKey == "language_code") return;
 
-                                    var newTranKey = "{objectName}.{propertyName}"
-                                       .replace("{objectName}", objectName)
-                                       .replace("{propertyName}", tranKey);
+                                    var newTranKey =
+                                       "{objectName}.{propertyName}"
+                                          .replace("{objectName}", objectName)
+                                          .replace("{propertyName}", tranKey);
 
                                     // add new property name
                                     newTran[newTranKey] = tran[tranKey];
@@ -234,32 +246,31 @@ module.exports = class ABModelQuery extends ABModel {
     * @return {Promise} resolved with the result of the find()
     */
    findCount(options, userData, req) {
-      // options = options || {};
+      // copy .options variable to prevent overwrite its property values
+      let opts = _.cloneDeep(options || {});
 
       // we don't include relative data on counts:
       // and get rid of any .sort, .offset, .limit
       // options.includeRelativeData = false;
-      delete options.sort;
-      delete options.offset;
-      delete options.limit;
+      delete opts.sort;
+      delete opts.offset;
+      delete opts.limit;
 
       // not update translations key names
-      options.ignoreEditTranslations = true;
+      opts.ignoreEditTranslations = true;
 
       // not include .id column
-      options.ignoreIncludeId = true;
+      opts.ignoreIncludeId = true;
 
       // not include columns
       // to prevent 'ER_MIX_OF_GROUP_FUNC_AND_FIELDS' error
-      options.ignoreIncludeColumns = true;
+      opts.ignoreIncludeColumns = true;
 
       // return the count not the full data
-      options.columnNames = [
-         this.AB.Knex.connection().raw("COUNT(*) as count"),
-      ];
+      opts.columnNames = [this.AB.Knex.connection().raw("COUNT(*) as count")];
 
       // added tableName to id because of non unique field error
-      return this.findAll(options, userData, req).then((result) => {
+      return this.findAll(opts, userData, req).then((result) => {
          return result[0];
          // return result[0]['count'];
       });
@@ -308,3 +319,4 @@ module.exports = class ABModelQuery extends ABModel {
       return Promise.reject(error);
    }
 };
+
