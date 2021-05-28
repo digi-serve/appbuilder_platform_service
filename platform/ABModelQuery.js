@@ -1,4 +1,3 @@
-const _ = require("lodash");
 const ABModel = require("./ABModel");
 
 module.exports = class ABModelQuery extends ABModel {
@@ -247,7 +246,7 @@ module.exports = class ABModelQuery extends ABModel {
     */
    findCount(options, userData, req) {
       // copy .options variable to prevent overwrite its property values
-      let opts = _.cloneDeep(options || {});
+      let opts = this.AB.cloneDeep(options || {});
 
       // we don't include relative data on counts:
       // and get rid of any .sort, .offset, .limit
