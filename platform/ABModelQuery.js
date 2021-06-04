@@ -82,7 +82,7 @@ module.exports = class ABModelQuery extends ABModel {
 
                   // update our condition to include the one we are defined with:
                   //
-                  let where = this.where;
+                  let where = this.object.where;
                   if (where && where.glue && !options.skipExistingConditions) {
                      // we need to make sure our options.where properly contains our
                      // internal definitions as well.
