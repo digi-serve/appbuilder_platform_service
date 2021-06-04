@@ -209,6 +209,11 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                         .hasColumn(tableName, this.columnName)
                         .then((exists) => {
                            didExist = exists;
+                           if (exists) {
+                              req.log(
+                                 `   ... exists O[${this.object.name}].f[${this.columnName}] -> skip create attempt.`
+                              );
+                           }
                            next(null, exists);
                         })
                         .catch(next);
@@ -231,6 +236,9 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                   // create a column
                   (exists, next) => {
                      if (exists) return next();
+                     req.log(
+                        `   ... creating O[${this.object.name}].f[${this.columnName}]`
+                     );
                      knex.schema
                         .table(tableName, (t) => {
                            let linkCol = this.setNewColumnSchema(
