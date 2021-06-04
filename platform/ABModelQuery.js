@@ -11,7 +11,7 @@ module.exports = class ABModelQuery extends ABModel {
     *    The request object associated with the current tenant/request
     * @return {Promise} resolved with the result of the find()
     */
-   create(values, trx = null, condDefaults = null, req = null) {
+   create(/* values, trx = null, condDefaults = null, req = null */) {
       var error = new Error(
          "ABObjectQuery.ABModelQuery.create() should not be called."
       );
@@ -54,6 +54,9 @@ module.exports = class ABModelQuery extends ABModel {
                      //    from (
                      //       select distinct ...
                      //       ) result , (SELECT @rownum:=0) r;
+                     // NOTE: we are getting a general Query from the Knex
+                     // connection.  Unlike in ABModel where we want queries
+                     // associated with a Model Definition (this.modelKnex())
                      let queryRoot = this.AB.Knex.connection().queryBuilder(),
                         queryString = query.toString();
 
@@ -163,7 +166,9 @@ module.exports = class ABModelQuery extends ABModel {
                // edit property names of .translation
                // {objectName}.{columnName}
                if (!options.ignoreEditTranslations) {
-                  query.on("query-response", function (rows, obj, builder) {
+                  query.on("query-response", function (
+                     rows /* , obj, builder */
+                  ) {
                      (rows || []).forEach((r) => {
                         // each rows
                         Object.keys(r).forEach((rKey) => {
@@ -198,10 +203,9 @@ module.exports = class ABModelQuery extends ABModel {
                                  Object.keys(tran).forEach((tranKey) => {
                                     if (tranKey == "language_code") return;
 
-                                    var newTranKey =
-                                       "{objectName}.{propertyName}"
-                                          .replace("{objectName}", objectName)
-                                          .replace("{propertyName}", tranKey);
+                                    var newTranKey = "{objectName}.{propertyName}"
+                                       .replace("{objectName}", objectName)
+                                       .replace("{propertyName}", tranKey);
 
                                     // add new property name
                                     newTran[newTranKey] = tran[tranKey];
@@ -218,15 +222,25 @@ module.exports = class ABModelQuery extends ABModel {
                   });
                } // if ignoreEditTranslations
 
-               return Promise.resolve();
+               // return Promise.resolve();
             })
 
             // Final
             .then(() => {
+               // when query is from a queryBuilder() we can do .toString()
+               // to get the sql.
+               let _sql = query.toString();
                if (req) {
-                  req.log("ABModelQuery.findAll():", query.toString());
+                  req.log("ABModelQuery.findAll():", _sql);
                }
-               return Promise.resolve(query);
+               // return Promise.resolve(query);
+               return new Promise((resolve, reject) => {
+                  // add a catch handler that will include ._sql as part of the error
+                  query.then(resolve).catch((error) => {
+                     error._sql = _sql;
+                     reject(error);
+                  });
+               });
             })
       );
    }
@@ -248,6 +262,8 @@ module.exports = class ABModelQuery extends ABModel {
       // copy .options variable to prevent overwrite its property values
       let opts = this.AB.cloneDeep(options || {});
 
+      // NOTE: we have to remove these because we are re-using the
+      // .findAll() for performing the actual lookup.
       // we don't include relative data on counts:
       // and get rid of any .sort, .offset, .limit
       // options.includeRelativeData = false;
@@ -286,7 +302,7 @@ module.exports = class ABModelQuery extends ABModel {
     *
     * @return {Promise} resolved with the result of the find()
     */
-   update(id, values, trx = null) {
+   update(/* id, values, trx = null */) {
       var error = new Error(
          "ABObjectQuery.ABModelQuery.update() should not be called."
       );
@@ -311,11 +327,10 @@ module.exports = class ABModelQuery extends ABModel {
     *
     * @return {Promise}
     */
-   relate(id, fieldRef, value, trx = null) {
+   relate(/* id, fieldRef, value, trx = null */) {
       var error = new Error(
          "ABObjectQuery.ABModelQuery.relate() should not be called."
       );
       return Promise.reject(error);
    }
 };
-

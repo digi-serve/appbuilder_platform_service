@@ -1210,19 +1210,21 @@ module.exports = class ABModel extends ABModelCore {
       if (typeof columnName == "string") {
          // make sure to ` ` columnName (if it isn't our special '1' condition )
          // see Policy:ABModelConvertSameAsUserConditions  for when that is applied
-         if (columnName != "1" && columnName.indexOf("`") == -1) {
-            // if columnName is  a  table.field  then be sure to `` each one individually
-            var parts = columnName.split(".");
-            for (var p = 0; p < parts.length; p++) {
-               parts[p] = "`" + parts[p] + "`";
+         if (columnName != "1") {
+            if (columnName.indexOf("`") == -1) {
+               // if columnName is  a  table.field  then be sure to `` each one individually
+               var parts = columnName.split(".");
+               for (var p = 0; p < parts.length; p++) {
+                  parts[p] = "`" + parts[p] + "`";
+               }
+               columnName = parts.join(".");
             }
-            columnName = parts.join(".");
-         }
 
-         // ABClassQuery:
-         // If this is query who create MySQL view, then column name does not have `
-         if (this.object.viewName) {
-            columnName = "`" + columnName.replace(/`/g, "") + "`";
+            // ABClassQuery:
+            // If this is query who create MySQL view, then column name does not have `
+            if (this.object.viewName) {
+               columnName = "`" + columnName.replace(/`/g, "") + "`";
+            }
          }
       }
 
@@ -1455,12 +1457,12 @@ module.exports = class ABModel extends ABModelCore {
     *        this.queryConditionsParseConditions()
     * @return {string}
     */
-   queryConditionsJoinConditions(cond) {
+   queryConditionsJoinConditions(cond, req) {
       if (cond.glue) {
          // combine my sub rules into a single condition
 
          var rules = cond.rules
-            .map((r) => this.queryConditionsJoinConditions(r))
+            .map((r) => this.queryConditionsJoinConditions(r, req))
             .filter((r) => r)
             .join(` ${cond.glue.toUpperCase()} `);
 
@@ -1481,7 +1483,24 @@ module.exports = class ABModel extends ABModelCore {
       }
 
       // return this individual condition:  ( A )
-      return `( ${cond} )`;
+      if (typeof cond == "string") {
+         return `( ${cond} )`;
+      }
+
+      // maybe it is an unprocessed cond obj:
+      if (cond.key && cond.rule && cond.value) {
+         return `( ${cond.key} ${cond.rule} ${cond.value} )`;
+      }
+
+      var error = new Error(
+         "unknown cond type in .queryConditionsJoinCondition"
+      );
+      req.notify.developer(error, {
+         context: "",
+         cond,
+      });
+
+      throw error;
    }
 
    /**
@@ -1594,7 +1613,7 @@ module.exports = class ABModel extends ABModelCore {
          );
 
          // now join our where statements according to the .glue values
-         var sqlWhere = this.queryConditionsJoinConditions(whereParsed);
+         var sqlWhere = this.queryConditionsJoinConditions(whereParsed, req);
          if (sqlWhere && sqlWhere.length > 0) {
             query.whereRaw(sqlWhere);
          }

@@ -193,7 +193,7 @@ module.exports = class ABClassObject extends ABObjectCore {
                // add a 1=0 clause to prevent any results:
                cond.where = {
                   glue: "and",
-                  rules: [cond.where, { key: "1", rule: "=", value: "0" }],
+                  rules: [cond.where, { key: "1", rule: "equals", value: "0" }],
                };
                req.notify.developer(
                   new Error(
