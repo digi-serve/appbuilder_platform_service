@@ -461,15 +461,17 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
                   req.log(errObj);
                }
             }
-            if (!fieldLink) {
-               var errObj = this.AB.toError(
-                  `!!! connected.field[${f.id}] did not have a fieldLink`,
-                  f.toObj()
-               );
-               if (req) {
-                  req.log(errObj);
-               }
-            }
+            // NOTE: f.fieldLink already generates an Error message.
+            // we no longer need to post another here.
+            // if (!fieldLink) {
+            //    var errObj = this.AB.toError(
+            //       `!!! connected.field[${f.id}] did not have a fieldLink`,
+            //       f.toObj()
+            //    );
+            //    if (req) {
+            //       req.log(errObj);
+            //    }
+            // }
 
             // custom index
             if (fieldIndex && fieldIndex.object.id == obj.id) {

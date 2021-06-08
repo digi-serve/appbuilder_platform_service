@@ -1350,7 +1350,7 @@ module.exports = class ABModel extends ABModelCore {
                      userData.username
                   }')`;
                   operator =
-                     condition.rule == "contain_current_user" ? "IS" : "IS NOT";
+                     condition.rule != "contain_current_user" ? "IS" : "IS NOT";
                   value = "NULL";
                }
                // Object
