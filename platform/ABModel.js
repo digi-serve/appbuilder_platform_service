@@ -1342,12 +1342,26 @@ module.exports = class ABModel extends ABModelCore {
             }
 
             if (field) {
-               columnName = this.PK();
-               operator =
-                  condition.rule == "contain_current_user" ? "IN" : "NOT IN";
-               value = `(SELECT \`${this.object.name}\`
-                        FROM \`${field.joinTableName()}\`
-                        WHERE \`USER\` IN ('${userData.username}'))`;
+               // Query
+               if (this.object.isQuery) {
+                  columnName = `JSON_SEARCH(JSON_EXTRACT(\`${
+                     field.alias
+                  }.${field.relationName()}\`, '$[*].id'), 'one', '${
+                     userData.username
+                  }')`;
+                  operator =
+                     condition.rule == "contain_current_user" ? "IS" : "IS NOT";
+                  value = "NULL";
+               }
+               // Object
+               else {
+                  columnName = this.object.PK();
+                  operator =
+                     condition.rule == "contain_current_user" ? "IN" : "NOT IN";
+                  value = `(SELECT \`${this.object.name}\`
+                           FROM \`${field.joinTableName()}\`
+                           WHERE \`USER\` IN ('${userData.username}'))`;
+               }
             }
             break;
 
