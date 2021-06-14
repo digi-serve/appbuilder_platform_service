@@ -263,9 +263,9 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
       };
 
       let makeLink = (object, link, joinTable, alias, A, op, B) => {
-         if (req) {
-            req.log("link.type:" + link.type);
-         }
+         // if (req) {
+         //    req.log("link.type:" + link.type);
+         // }
 
          // try to correct some type mistakes:
          let type = link.type.toLowerCase();
