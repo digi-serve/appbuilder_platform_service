@@ -108,6 +108,14 @@ module.exports = class ABClassObject extends ABObjectCore {
    }
 
    /**
+    * @method applyIndexNormal()
+    * reapply the normal indexes we "stashed" earlier.
+    */
+   applyIndexNormal() {
+      this._indexes = this._stashIndexNormal || [];
+   }
+
+   /**
     * @method getStashedIndexes()
     * return the array of stashed indexes.
     * @return {array} [...{ABIndex}] or {null}
@@ -115,6 +123,16 @@ module.exports = class ABClassObject extends ABObjectCore {
    getStashedIndexes() {
       if (!this._stashIndexes) return null;
       return this._stashIndexes;
+   }
+
+   /**
+    * @method getStashedIndexNormals()
+    * return the array of stashed normal indexes.
+    * @return {array} [...{ABIndex}] or {null}
+    */
+   getStashedIndexNormals() {
+      if (!this._stashIndexNormal) return null;
+      return this._stashIndexNormal;
    }
 
    /**
@@ -292,6 +310,16 @@ module.exports = class ABClassObject extends ABObjectCore {
             });
          }
       });
+   }
+   /**
+    * @method stashIndexNormal()
+    * internally "stash" these noraml indexs away so we don't reference them.
+    * We do this during an import, so that we wait until all base fields are
+    * created before we create any of the index fields.
+    */
+   stashIndexNormal() {
+      this._stashIndexNormal = this._indexes;
+      this._indexes = [];
    }
 
    ///
