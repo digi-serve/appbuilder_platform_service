@@ -2,7 +2,9 @@ const path = require("path");
 // prettier-ignore
 const ABProcessTaskServiceQueryCore = require(path.join(__dirname, "..", "..", "..", "core", "process", "tasks", "ABProcessTaskServiceQueryCore.js"));
 
-module.exports = class ABProcessTaskServiceQuery extends ABProcessTaskServiceQueryCore {
+module.exports = class ABProcessTaskServiceQuery extends (
+   ABProcessTaskServiceQueryCore
+) {
    /**
     * @method exportIDs()
     * export any relevant .ids for the necessary operation of this application.
@@ -46,9 +48,6 @@ module.exports = class ABProcessTaskServiceQuery extends ABProcessTaskServiceQue
             .then((result) => {
                // this resolves when all the operations are finished
                // so we are done!
-               this.stateUpdate(instance, {
-                  data: result ? result.data : null,
-               });
 
                this.log(instance, `${this.name} completed successfully`);
                this.stateCompleted(instance);
@@ -64,19 +63,5 @@ module.exports = class ABProcessTaskServiceQuery extends ABProcessTaskServiceQue
                reject(err);
             });
       });
-   }
-
-   /**
-    * @method processData()
-    * return the current value requested for the given data key.
-    * @param {obj} instance
-    * @return {mixed} | null
-    */
-   processData(instance, key) {
-      let myState = this.myState(instance);
-      let data = myState.data;
-      if (data == null) return null;
-
-      return key ? data[key] : data;
    }
 };
