@@ -1616,6 +1616,10 @@ module.exports = class ABModel extends ABModelCore {
 
          // first, pull out our "have_no_relation" rules for later:
          var noRelationRules = [];
+
+         // make sure we don't edit the passed in where object
+         where = this.AB.cloneDeep(where);
+
          where = this.queryConditionsPluckNoRelations(where, noRelationRules);
 
          // Now walk through each of our conditions and turn them into their
