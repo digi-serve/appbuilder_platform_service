@@ -2020,7 +2020,11 @@ module.exports = class ABModel extends ABModelCore {
       }
       // M:N
       else if (LinkType == "many:many") {
-         let joinTable = connectedField.joinTableName(true),
+         let joinPrefixTableName = connectedField
+               .joinTableName(true)
+               .split(".")[0],
+            joinTableName = connectedField.joinTableName(true).split(".")[1],
+            joinTable = `\`${joinPrefixTableName}\`.\`${joinTableName}\``,
             joinColumnNames = connectedField.joinColumnNames();
 
          selectSQL = `(SELECT IFNULL(${type[settings.type]}(\`${
