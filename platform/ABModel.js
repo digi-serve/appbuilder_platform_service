@@ -1237,8 +1237,8 @@ module.exports = class ABModel extends ABModelCore {
       }
       condition.rule = rule;
       // basic case:  simple conversion
-      var operator = conversionHash[condition.rule];
-      var value = condition.value;
+      let operator = conversionHash[condition.rule];
+      let value = condition.value || "";
 
       // If a function, then ignore quote. like DATE('05-05-2020')
       if (!RegExp("^[A-Z]+[(].*[)]$").test(value)) {
