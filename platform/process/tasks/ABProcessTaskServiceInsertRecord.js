@@ -142,7 +142,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
     * @return {mixed} | null
     */
    processDataStart(instance) {
-      let startElement = this.startElement;
+      let startElement = this.startElement[0];
       if (!startElement) return null;
 
       return startElement.myState(instance).data;
