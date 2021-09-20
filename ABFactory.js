@@ -44,7 +44,7 @@ class ABFactory extends ABFactoryCore {
        *        for this platform.
        *        Should Expose:
        *          DefinitionManager.Create(req, values)
-       *          DefinitionManager.Destroy(req, id);
+       *          DefinitionManager.Destroy(req, cond);
        *          DefinitionManager.Find(req, cond);
        *          DefinitionManager.Update(req, cond, values);
        * @param {ABUtil.request} req
@@ -390,7 +390,7 @@ class ABFactory extends ABFactoryCore {
    //
 
    /**
-    * definiitonCreate(def)
+    * definiitonCreate()
     * create a new ABDefinition
     * @param {obj} def
     *        the value hash of the new definition entry
@@ -408,21 +408,32 @@ class ABFactory extends ABFactoryCore {
    }
 
    /**
-    * definitionDestroy(id)
+    * definitionDestroy()
     * delete an ABDefinition
     * @param {string} id
     *        the uuid of the ABDefinition to delete
     * @return {Promise}
     */
    definitionDestroy(req, id, options = {}) {
-      return this.Definitions.Destroy(this, req, id, options).then(() => {
+      return this.Definitions.Destroy(this, req, { id }, options).then(() => {
          delete this._definitions[id];
          this.emit("definition.destroyed", id);
       });
    }
 
    /**
-    * definitionUpdate(id, def)
+    * definitionFind()
+    * return the definitions that match the provided condition.
+    * @param {string} id
+    *        the uuid of the ABDefinition to delete
+    * @return {Promise}
+    */
+   definitionFind(req, cond, options = {}) {
+      return this.Definitions.Find(this, req, cond, options);
+   }
+
+   /**
+    * definitionUpdate()
     * update an existing ABDefinition
     * @param {string} id
     *        the uuid of the ABDefinition to update.
@@ -433,8 +444,11 @@ class ABFactory extends ABFactoryCore {
     */
    definitionUpdate(req, id, values, options = {}) {
       return this.Definitions.Update(this, req, { id }, values, options).then(
-         () => {
+         (rows) => {
+            let newDef = this.definitionNew(rows[0] || rows);
+            this._definitions[id] = newDef;
             this.emit("definition.updated", id);
+            return newDef;
          }
       );
    }
