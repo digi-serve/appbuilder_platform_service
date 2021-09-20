@@ -67,7 +67,7 @@ module.exports = function (AB, req, cond, data, options = {}) {
          } else {
             req.log.verbose("definitionUpdate.query() results:", results);
 
-            queryDefinitionFind(AB, req, condition)
+            queryDefinitionFind(AB, req, cond)
                .then((rowsUpdated) => {
                   resolve(rowsUpdated);
                })
