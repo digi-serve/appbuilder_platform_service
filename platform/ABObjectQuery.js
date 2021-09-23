@@ -579,8 +579,7 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
                }
             }
 
-            if (selectField)
-               selects.push(this.AB.Knex.connection().raw(selectField));
+            if (selectField) selects.push(this.AB.Knex.raw(selectField));
          }
          // Aggregate fields
          else if (f.key == "formula") {
@@ -674,19 +673,21 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
                let fieldLink = fieldConnect.fieldLink;
                if (!fieldLink) return;
 
-               joinClause = " INNER JOIN {joinTable} ON {joinTable}.`{linkObjectName}` = {linkTable}.`{linkColumn}` "
-                  .replace(/{joinTable}/g, fieldConnect.joinTableName(true))
-                  .replace(/{linkObjectName}/g, objectNumber.name)
-                  .replace(/{linkTable}/g, objectNumber.dbTableName(true))
-                  .replace(/{linkColumn}/g, objectNumber.PK());
+               joinClause =
+                  " INNER JOIN {joinTable} ON {joinTable}.`{linkObjectName}` = {linkTable}.`{linkColumn}` "
+                     .replace(/{joinTable}/g, fieldConnect.joinTableName(true))
+                     .replace(/{linkObjectName}/g, objectNumber.name)
+                     .replace(/{linkTable}/g, objectNumber.dbTableName(true))
+                     .replace(/{linkColumn}/g, objectNumber.PK());
 
-               whereClause = "{joinTable}.`{joinColumn}` = {table}.`{id}` AND {linkTable}.`{column}` IS NOT NULL"
-                  .replace(/{joinTable}/g, fieldConnect.joinTableName(true))
-                  .replace(/{joinColumn}/g, fieldConnect.object.name)
-                  .replace(/{table}/g, f.dbPrefix())
-                  .replace(/{id}/g, fieldConnect.object.PK())
-                  .replace(/{linkTable}/g, objectNumber.dbTableName(true))
-                  .replace(/{column}/g, fieldNumber.columnName);
+               whereClause =
+                  "{joinTable}.`{joinColumn}` = {table}.`{id}` AND {linkTable}.`{column}` IS NOT NULL"
+                     .replace(/{joinTable}/g, fieldConnect.joinTableName(true))
+                     .replace(/{joinColumn}/g, fieldConnect.object.name)
+                     .replace(/{table}/g, f.dbPrefix())
+                     .replace(/{id}/g, fieldConnect.object.PK())
+                     .replace(/{linkTable}/g, objectNumber.dbTableName(true))
+                     .replace(/{column}/g, fieldNumber.columnName);
             }
 
             let colFormat = (
@@ -703,7 +704,7 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
                .replace(/{displayPrefix}/g, f.alias ? f.alias : obj.name)
                .replace(/{displayName}/g, f.columnName);
 
-            selects.push(this.AB.Knex.connection().raw(colFormat));
+            selects.push(this.AB.Knex.raw(colFormat));
          }
          // Normal fields
          else {
@@ -786,7 +787,7 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
             .replace("{displayPrefix}", prefix.replace(/`/g, ""))
             .replace("{displayName}", "translations");
 
-         selects.push(this.AB.Knex.connection().raw(transField));
+         selects.push(this.AB.Knex.raw(transField));
       });
 
       // when empty columns, then add default id
@@ -1147,3 +1148,4 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
       return condition;
    }
 };
+

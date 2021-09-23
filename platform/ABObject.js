@@ -2181,9 +2181,7 @@ module.exports = class ABClassObject extends ABObjectCore {
          if (selectSQL) {
             // selectSQL += ` AS ${this.dbTableName(true)}.${f.columnName}`;
             selectSQL += ` AS \`${f.columnName}\``;
-            query = query.select(
-               this.AB.Knex.connection(/* connectionName */).raw(selectSQL)
-            );
+            query = query.select(this.AB.Knex.raw(selectSQL));
          }
       });
 
@@ -2259,24 +2257,21 @@ module.exports = class ABClassObject extends ABObjectCore {
          connectedField.settings.linkType == "many" &&
          connectedField.settings.linkViaType == "many"
       ) {
-         let joinPrefixTableName = connectedField
-               .joinTableName(true)
-               .split(".")[0],
-            joinTableName = connectedField.joinTableName(true).split(".")[1],
-            joinTable = `\`${joinPrefixTableName}\`.\`${joinTableName}\``,
-            joinColumnNames = connectedField.joinColumnNames();
+         let joinTable = `\`${connectedField.object.dbSchemaName()}\`.\`${connectedField.joinTableName()}\``,
+            joinColumnNames = connectedField.joinColumnNames(),
+            connectedTable = `\`${connectedObj.dbSchemaName()}\`.\`${connectedObj.dbTableName()}\``;
 
-         selectSQL = `(SELECT ${type[settings.type]}(\`${
+         selectSQL = `(SELECT IFNULL(${type[settings.type]}(\`${
             numberField.columnName
-         }\`)
-               FROM ${connectedObj.dbTableName(true)}
+         }\`), 0)
+               FROM ${connectedTable}
                INNER JOIN ${joinTable}
                ON ${joinTable}.\`${
             joinColumnNames.targetColumnName
-         }\` = ${connectedObj.dbTableName(true)}.${connectedObj.PK()}
+         }\` = ${connectedTable}.\`${connectedObj.PK()}\`
                WHERE ${joinTable}.\`${
             joinColumnNames.sourceColumnName
-         }\` = ${this.dbTableName(true)}.\`${this.PK()}\`)`;
+         }\` = \`${this.object.dbSchemaName()}\`.\`${this.object.dbTableName()}\`.\`${this.object.PK()}\` ${whereClause})`;
       }
 
       return selectSQL;
@@ -2337,12 +2332,13 @@ module.exports = class ABClassObject extends ABObjectCore {
          };
 
          // create sub-query to get values from MN table
-         condition.value = "(SELECT `{sourceFkName}` FROM `{joinTable}` WHERE `{targetFkName}` {ops} '{percent}{value}{percent}')"
-            .replace("{sourceFkName}", sourceFkName)
-            .replace("{joinTable}", joinTable)
-            .replace("{targetFkName}", targetFkName)
-            .replace("{ops}", mnOperators[condition.rule])
-            .replace("{value}", condition.value);
+         condition.value =
+            "(SELECT `{sourceFkName}` FROM `{joinTable}` WHERE `{targetFkName}` {ops} '{percent}{value}{percent}')"
+               .replace("{sourceFkName}", sourceFkName)
+               .replace("{joinTable}", joinTable)
+               .replace("{targetFkName}", targetFkName)
+               .replace("{ops}", mnOperators[condition.rule])
+               .replace("{value}", condition.value);
 
          condition.value =
             condition.rule == "contains" || condition.rule == "not_contains"
@@ -2356,3 +2352,4 @@ module.exports = class ABClassObject extends ABObjectCore {
       }
    }
 };
+

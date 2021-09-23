@@ -159,6 +159,8 @@ class ABFactory extends ABFactoryCore {
             let knex = this.Knex.connection();
             return knex.transaction(callback);
          },
+
+         raw: (...params) => this.Knex.connection().raw(...params),
       };
 
       //
@@ -566,3 +568,4 @@ class ABFactory extends ABFactoryCore {
 }
 
 module.exports = ABFactory;
+

@@ -673,11 +673,7 @@ module.exports = class ABModel extends ABModelCore {
             .then((objInstance) => {
                let relateQuery = objInstance
                   .$relatedQuery(relationName)
-                  .alias(
-                     "#column#_#relation#"
-                        .replace("#column#", abField.columnName)
-                        .replace("#relation#", relationName)
-                  ) // FIX: SQL syntax error because alias name includes special characters
+                  .alias(`${abField.columnName}_${relationName}`) // FIX: SQL syntax error because alias name includes special characters
                   .relate(useableValues);
 
                // Used by knex.transaction, the transacting method may be chained to any query and
@@ -1045,9 +1041,7 @@ module.exports = class ABModel extends ABModelCore {
          })[0];
          if (field) {
             // convert field's id to column name
-            condition.key = "{prefix}.`{columnName}`"
-               .replace("{prefix}", field.dbPrefix())
-               .replace("{columnName}", field.columnName);
+            condition.key = `${field.dbPrefix()}.\`${field.columnName}\``;
 
             // if we are searching a multilingual field it is stored in translations so we need to search JSON
             if (field.isMultilingual) {
@@ -1083,9 +1077,10 @@ module.exports = class ABModel extends ABModelCore {
                         .replace("{columnName}", field.columnName);
 
                      // eslint-disable-next-line no-unused-vars  -- Phasing this section out
-                     let languageWhere = '`{prefix}`.`language_code` = "{languageCode}"'
-                        .replace("{prefix}", prefix)
-                        .replace("{languageCode}", userData.languageCode);
+                     let languageWhere =
+                        '`{prefix}`.`language_code` = "{languageCode}"'
+                           .replace("{prefix}", prefix)
+                           .replace("{languageCode}", userData.languageCode);
 
                      // if (glue == "or") Query.orWhereRaw(languageWhere);
                      // else Query.whereRaw(languageWhere);
@@ -1114,11 +1109,8 @@ module.exports = class ABModel extends ABModelCore {
                      transCol = "`" + transCol.split(".").join("`.`") + "`"; // "{prefix}.translations";
                   }
 
-                  condition.key = this.AB.Knex.connection(/* connectionName */).raw(
-                     'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({transCol}, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({transCol}, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
-                        .replace(/{transCol}/g, transCol)
-                        .replace(/{languageCode}/g, userData.languageCode)
-                        .replace(/{columnName}/g, field.columnName)
+                  condition.key = this.AB.Knex.raw(
+                     `JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT(${transCol}, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH(${transCol}, "one", "${userData.languageCode}")), 1, 4)), '$."${field.columnName}"'))`
                   );
                }
             }
@@ -1169,7 +1161,7 @@ module.exports = class ABModel extends ABModelCore {
       // We are going to use the 'raw' queries for knex becuase the '.'
       // for JSON searching is misinterpreted as a sql identifier
       // our basic where statement will be:
-      let whereRaw = "({fieldName} {operator} {input})";
+      var whereRaw = "{fieldName} {operator} {input}";
 
       // make sure a value is properly Quoted:
       function quoteMe(value) {
@@ -1237,8 +1229,8 @@ module.exports = class ABModel extends ABModelCore {
       }
       condition.rule = rule;
       // basic case:  simple conversion
-      let operator = conversionHash[condition.rule];
-      let value = condition.value || "";
+      var operator = conversionHash[condition.rule];
+      var value = condition.value;
 
       // If a function, then ignore quote. like DATE('05-05-2020')
       if (!RegExp("^[A-Z]+[(].*[)]$").test(value)) {
@@ -1267,14 +1259,14 @@ module.exports = class ABModel extends ABModelCore {
             value = quoteMe("%" + condition.value + "%");
             break;
 
-         case "is_empty":
-            operator = `IS NULL OR ${columnName} = ""`;
-            value = "";
+         case "ends_with":
+            operator = "LIKE";
+            value = quoteMe("%" + condition.value);
             break;
 
-         case "is_not_empty":
-            operator = `IS NOT NULL ANqD ${columnName} <> ""`;
-            value = "";
+         case "not_ends_with":
+            operator = "NOT LIKE";
+            value = quoteMe("%" + condition.value);
             break;
 
          case "between":
@@ -1778,22 +1770,18 @@ module.exports = class ABModel extends ABModelCore {
                      prefix = `${orderField.object.dbSchemaName()}.${orderField.object.dbTransTableName()}`;
                   }
 
-                  sortClause = "`{prefix}.translations`".replace(
-                     "{prefix}",
-                     prefix
-                  );
+                  sortClause = `\`${prefix}.translations\``;
                } else {
-                  sortClause = 'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({prefix}.`translations`, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({prefix}.`translations`, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
-                     .replace(/{prefix}/g, orderField.dbPrefix())
-                     .replace("{languageCode}", userData.languageCode)
-                     .replace("{columnName}", orderField.columnName);
+                  sortClause = `JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT(${orderField.dbPrefix()}.\`translations\`, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH(${orderField.dbPrefix()}.\`translations\`, "one", "${
+                     userData.languageCode
+                  }")), 1, 4)), '$."${orderField.columnName}"'))`;
                }
             }
             // If we are just sorting a field it is much simpler
             else {
-               sortClause = "{prefix}.`{columnName}`"
-                  .replace("{prefix}", orderField.dbPrefix())
-                  .replace("{columnName}", orderField.columnName);
+               sortClause = `${orderField.dbPrefix()}.\`${
+                  orderField.columnName
+               }\``;
 
                // ABClassQuery:
                // If this is query who create MySQL view, then column name does not have `
@@ -1842,27 +1830,19 @@ module.exports = class ABModel extends ABModelCore {
                let prefixTran = "";
                let tableTran = "";
                if (f.alias) {
-                  prefix = "{alias}".replace("{alias}", f.alias);
-                  prefixTran = "{alias}_Trans".replace("{alias}", f.alias);
-                  tableTran = "{tableName} AS {alias}"
-                     .replace("{tableName}", f.object.dbTransTableName(true))
-                     .replace("{alias}", prefixTran);
+                  prefix = f.alias;
+                  prefixTran = `${f.alias}_Trans`;
+                  tableTran = `${f.object.dbTransTableName(
+                     true
+                  )} AS ${prefixTran}`;
                } else {
-                  prefix = "{databaseName}.{tableName}"
-                     .replace("{databaseName}", f.object.dbSchemaName())
-                     .replace("{tableName}", f.object.dbTableName());
-                  prefixTran = "{databaseName}.{tableName}"
-                     .replace("{databaseName}", f.object.dbSchemaName())
-                     .replace("{tableName}", transTable);
+                  prefix = `${f.object.dbSchemaName()}.${f.object.dbTableName()}`;
+                  prefixTran = `${f.object.dbSchemaName()}.${transTable}`;
                   tableTran = f.object.dbTransTableName(true);
                }
 
-               let baseClause = "{prefix}.{columnName}"
-                     .replace("{prefix}", prefix)
-                     .replace("{columnName}", f.object.PK()),
-                  connectedClause = "{prefix}.{columnName}"
-                     .replace("{prefix}", prefixTran)
-                     .replace("{columnName}", f.object.transColumnName);
+               let baseClause = `${prefix}.${f.object.PK()}`,
+                  connectedClause = `${prefixTran}.${f.object.transColumnName}`;
 
                if (
                   !(query._statements || []).filter(
@@ -1888,7 +1868,7 @@ module.exports = class ABModel extends ABModelCore {
     *    onto this query builder using query.select()
     */
    querySelectFormulaFields(query, userData, req) {
-      let raw = this.AB.Knex.connection().raw;
+      let raw = this.AB.Knex.raw;
 
       // Formula fields
       let formulaFields = this.object.fields((f) => f.key == "formula");
@@ -1992,10 +1972,10 @@ module.exports = class ABModel extends ABModelCore {
          selectSQL = `(SELECT IFNULL(${type[settings.type]}(\`${
             numberField.columnName
          }\`), 0)
-                  FROM ${connectedObj.dbTableName(true)}
-                  WHERE ${connectedObj.dbTableName(true)}.\`${
+                  FROM ${addBackticks(connectedObj.dbTableName(true))}
+                  WHERE ${addBackticks(connectedObj.dbTableName(true))}.\`${
             linkField.columnName
-         }\` = ${this.object.dbTableName(true)}.\`${
+         }\` = ${addBackticks(this.object.dbTableName(true))}.\`${
             connectedField.indexField
                ? connectedField.indexField.columnName
                : this.object.PK()
@@ -2009,36 +1989,34 @@ module.exports = class ABModel extends ABModelCore {
          selectSQL = `(SELECT IFNULL(${type[settings.type]}(\`${
             numberField.columnName
          }\`), 0)
-                  FROM ${connectedObj.dbTableName(true)}
-                  WHERE ${connectedObj.dbTableName(true)}.\`${
+                  FROM ${addBackticks(connectedObj.dbTableName(true))}
+                  WHERE ${addBackticks(connectedObj.dbTableName(true))}.\`${
             connectedField.indexField
                ? connectedField.indexField.columnName
                : connectedObj.PK()
-         }\` = ${this.object.dbTableName(true)}.\`${
+         }\` = ${addBackticks(this.object.dbTableName(true))}.\`${
             connectedField.columnName
          }\` ${whereClause})`;
       }
       // M:N
       else if (LinkType == "many:many") {
-         let joinPrefixTableName = connectedField
-               .joinTableName(true)
-               .split(".")[0],
-            joinTableName = connectedField.joinTableName(true).split(".")[1],
-            joinTable = `\`${joinPrefixTableName}\`.\`${joinTableName}\``,
+         let joinTable = addBackticks(connectedField.joinTableName(true)),
             joinColumnNames = connectedField.joinColumnNames();
 
          selectSQL = `(SELECT IFNULL(${type[settings.type]}(\`${
             numberField.columnName
          }\`), 0)
-               FROM ${connectedObj.dbTableName(true)}
+               FROM ${addBackticks(connectedObj.dbTableName(true))}
                INNER JOIN ${joinTable}
                ON ${joinTable}.\`${
             joinColumnNames.targetColumnName
-         }\` = ${connectedObj.dbTableName(true)}.${connectedObj.PK()}
+         }\` = ${addBackticks(
+            connectedObj.dbTableName(true)
+         )}.${connectedObj.PK()}
                WHERE ${joinTable}.\`${
             joinColumnNames.sourceColumnName
-         }\` = ${this.object.dbTableName(
-            true
+         }\` = ${addBackticks(
+            this.object.dbTableName(true)
          )}.\`${this.object.PK()}\` ${whereClause})`;
       }
 
@@ -2060,12 +2038,9 @@ module.exports = class ABModel extends ABModelCore {
     */
    convertConnectFieldCondition(field, condition) {
       let getCustomKey = (f, fCustomIndex) => {
-         return "{prefix}.`{columnName}`"
-            .replace("{prefix}", f.dbPrefix())
-            .replace(
-               "{columnName}",
-               fCustomIndex ? fCustomIndex.columnName : f.object.PK()
-            );
+         return `${f.dbPrefix()}.\`${
+            fCustomIndex ? fCustomIndex.columnName : f.object.PK()
+         }\``;
       };
 
       var LinkType = `${field.settings.linkType}:${field.settings.linkViaType}`;
@@ -2564,3 +2539,22 @@ function updateTranslationsValues(AB, object, id, translations, isInsert) {
 
    return Promise.all(tasks);
 }
+
+/**
+ * @function addBackticks
+ * Update MySQL object name to make sure they are valid format
+ * Ex. databaseName.tableName => `databaseName`.`tableName`,
+ *
+ * @param {string} mysqlObjectName - MySQL table or column names
+ * @return {string}
+ */
+function addBackticks(mysqlObjectName = "") {
+   let names = [];
+
+   mysqlObjectName.split(".").forEach((n) => {
+      names.push(`\`${n.replace(/`/g, "")}\``);
+   });
+
+   return names.join(".");
+}
+

@@ -39,7 +39,7 @@ module.exports = class ABModelQuery extends ABModel {
       //    return this.AB.Knex.connection().raw(...params);
       // };
       let raw = (command) => {
-         return this.AB.Knex.connection().raw(command);
+         return this.AB.Knex.raw(command);
       };
 
       return (
@@ -154,7 +154,7 @@ module.exports = class ABModelQuery extends ABModel {
                   options.columnNames = options.columnNames.map((colName) => {
                      if (typeof colName == "string") {
                         colName = "`" + (colName || "").replace(/`/g, "") + "`";
-                        colName = this.AB.Knex.connection().raw(colName);
+                        colName = this.AB.Knex.raw(colName);
                      }
 
                      return colName;
@@ -282,7 +282,7 @@ module.exports = class ABModelQuery extends ABModel {
       opts.ignoreIncludeColumns = true;
 
       // return the count not the full data
-      opts.columnNames = [this.AB.Knex.connection().raw("COUNT(*) as count")];
+      opts.columnNames = [this.AB.Knex.raw("COUNT(*) as count")];
 
       // added tableName to id because of non unique field error
       return this.findAll(opts, userData, req).then((result) => {
@@ -334,3 +334,4 @@ module.exports = class ABModelQuery extends ABModel {
       return Promise.reject(error);
    }
 };
+
