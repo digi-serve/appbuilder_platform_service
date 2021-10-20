@@ -8,36 +8,36 @@
  * Example: 
 array = [
  {
-	name: "Neo",
-	email: "neo@thematrix.com",
-	relationships: [ { morpheous}, {trinity} ]
+   name: "Neo",
+   email: "neo@thematrix.com",
+   relationships: [ { morpheous}, {trinity} ]
  },
  {
-	name: "trinity",
-	email: "trinity@thematrix.com",
-	relationships: [ {neo}, {morpheous} ]
+   name: "trinity",
+   email: "trinity@thematrix.com",
+   relationships: [ {neo}, {morpheous} ]
  },
  {
-	name: "morpheous",
-	email: "morpheous@thematrix.com",
-	relationships: [ {neo}, {trinity}]
+   name: "morpheous",
+   email: "morpheous@thematrix.com",
+   relationships: [ {neo}, {trinity}]
  }
 
 ]
 
 pluck("email") :
-	[
-		"neo@thematrix.com",
-		"trinity@thematrix.com",
-		"morpheous@thematrix.com"
-	]
+   [
+      "neo@thematrix.com",
+      "trinity@thematrix.com",
+      "morpheous@thematrix.com"
+   ]
 
 pluck("relationships"):
-	[
-		{neo},
-		{trinity},
-		{morpheous}
-	]
+   [
+      {neo},
+      {trinity},
+      {morpheous}
+   ]
  *
  */
 
@@ -51,82 +51,149 @@ class ABQLSetPluck extends ABQLSetPluckCore {
    /// Instance Methods
    ///
 
-   /*
-    * @method paramChanged()
-    * respond to an update to the given parameter.
-    * NOTE: the value will ALREADY be saved in this.params[pDef.name].
-    * @param {obj} pDef
-    *        the this.parameterDefinition entry of the parameter that was
-    *        changed.
-    */
-   paramChanged(pDef) {
-      if (pDef.name == "field") {
-         // debugger;
-         this.fieldID = this.params[pDef.name];
-         // v2 method:
-         // this.field = this.object.fieldByID(this.fieldID);
-         this.field = this.object.fieldByID(this.fieldID);
-
-         // v2 method:
-         // if (this.field && this.field.isConnected) {
-         if (this.field && this.field.key == "connectObject") {
-            this.objectOut = this.field.datasourceLink;
-
-            // ?? is this correct?
-            // if we already have created a .next operation, and we have
-            // just changed our .object, pass that information forward.
-            if (this.next) {
-               this.next.object = this.objectOut;
-            }
-         }
-      }
-   }
-
    /**
-    * @method parseRow()
-    * When it is time to pull the information from the properties panel,
-    * use this fn to get the current Row of data.
-    *
-    * This fn() will populate the this.params with the values for each
-    * of our .parameterDefinitions.
-    *
-    * NOTE: in this process our .object and .objectOut isn't as simple
-    * as the other QL node types.  We'll have to interpolate our values
-    * from the given fieldID in our property panel.
-    *
-    * @param {webixNode} row
-    *        the current webix node that contains the ROW defining the
-    *        operation and it's parameters.
-    * @param {string} id
-    *        the unique id for where the properties panel is displayed.
+    * do()
+    * perform the action for this Query Language Operation.
+    * @param {Promise} chain
+    *        The incoming Promise that we need to extend and use to perform
+    *        our action.
+    * @param {obj} instance
+    *        The current process instance values used by our tasks to store
+    *        their state/values.
+    * @param {Knex.Transaction?} trx
+    *        (optional) Knex Transaction instance.
+    * @param {ABUtil.reqService} req
+    *        an instance of the current request object for performing tenant
+    *        based operations.
+    * @return {Promise}
     */
-   parseRow(row, id) {
-      super.parseRow(row, id);
+   do(chain, instance, trx, req) {
+      if (!chain) {
+         throw new Error("ABQLSetPluck.do() called without a Promise chain!");
+      }
 
-      this.fieldID = this.params.field;
+      // capture the new promise from the .then() and
+      // return that as the next link in the chain
+      var nextLink = chain.then((context) => {
+         var nextContext = {
+            label: "ABQLSetPluck",
+            object: context.object,
+            data: null,
+            prev: context,
+         };
 
-      // we now have to build backwards from the current fieldID to set our
-      // relevant .object and .objectOut
-      this.AB.objects((o) => {
-         if (!this.field) {
-            // var field = o.fieldByID(this.fieldID);
-            var field = o.fieldByID(this.fieldID);
-            if (field) {
-               this.field = field;
+         if (!context.data) {
+            // weird!  pass along our context with data == null;
+            nextContext.log = "no data set! can't setPluck() of null.";
+            return nextContext;
+         }
+
+         // make sure we are working with an Array
+         if (Array.isArray(context.data)) {
+            if (this.fieldID == "_PK") {
+               let pkName = context.object.primaryColumnName || "uuid";
+               let newData = [];
+               context.data.forEach((d) => {
+                  if (d) {
+                     newData.push(d[pkName]);
+                  }
+               });
+               nextContext.data = newData;
+               return nextContext;
             }
+
+            // make sure we have a reference to our .field
+            if (!this.field) {
+               this.field = this.object.fieldByID(this.fieldID);
+            }
+            if (!this.field) {
+               // whoops!
+               throw new Error(
+                  "ABQLSetPluck.do(): unable to resolve .fieldID."
+               );
+            }
+
+            // CASE 1:  Connected Objects:
+            if (this.field.isConnection) {
+               var linkObj = this.field.datasourceLink;
+               var PK = linkObj.PK();
+
+               // we need to go lookup the connected values:
+               var ids = [];
+               context.data.forEach((d) => {
+                  var entry = this.field.dataValue(d);
+                  if (!Array.isArray(entry)) entry = [entry];
+                  entry.forEach((e) => {
+                     var id = e[PK] || e;
+                     if (id) {
+                        ids.push(id);
+                     }
+                  });
+               });
+
+               var cond = {};
+               cond[PK] = this.AB.uniq(ids);
+
+               return new Promise((resolve, reject) => {
+                  linkObj
+                     .model()
+                     .find({ where: cond, populate: true }, req)
+                     .then((rows) => {
+                        // Special Formatting for Form.io fields.
+                        // Allow displaying connected data that has been .format()ed
+                        // find any connectedObjects
+                        var linkedConnections = linkObj.connectFields();
+                        (linkedConnections || []).forEach((f) => {
+                           // for each row
+                           (rows || []).forEach((r) => {
+                              // insert a formatted entry
+                              r[`${f.columnName}.format`] = f.format(r);
+                           });
+                        });
+                        // Calculate and TextFormula fields do not have stored
+                        // values so we need to run .format() for each instance
+                        var fieldsToFormat = ["calculate", "TextFormula"];
+                        var formatFields = linkObj.fields((f) => {
+                           return fieldsToFormat.indexOf(f.key) != -1;
+                        });
+                        (formatFields || []).forEach((f) => {
+                           // for each row
+                           (rows || []).forEach((r) => {
+                              // insert a formatted entry
+                              r[f.columnName] = f.format(r);
+                           });
+                        });
+
+                        nextContext._condition = cond;
+                        nextContext.object = linkObj;
+                        nextContext.data = rows;
+                        resolve(nextContext);
+                     })
+                     .catch((err) => {
+                        reject(err);
+                     });
+               });
+            }
+
+            // CASE 2: pluck out single values:
+            var newData = [];
+            context.data.forEach((d) => {
+               newData.push(this.field.dataValue(d));
+            });
+            nextContext.data = newData;
+            return nextContext;
+         } else {
+            // this shouldn't happen!
+            throw new Error("ABQLSetPluck.do() called on non Array of data.");
          }
       });
 
-      if (this.field) {
-         this.object = this.field.object;
-         // v2 method:
-         // if (this.field.isConnected) {
-         if (this.field && this.field.key == "connectObject") {
-            this.objectOut = this.field.datasourceLink;
-         }
+      if (this.next) {
+         return this.next.do(nextLink, instance, trx, req);
+      } else {
+         return nextLink;
       }
    }
 }
-ABQLSetPluck.uiIndentNext = 10;
 
 module.exports = ABQLSetPluck;

@@ -20,13 +20,19 @@ class ABQLSetFirst extends ABQLSetFirstCore {
     * do()
     * perform the action for this Query Language Operation.
     * @param {Promise} chain
-    *         the current promise chain of actions being performed.
+    *        The incoming Promise that we need to extend and use to perform
+    *        our action.
     * @param {obj} instance
     *        The current process instance values used by our tasks to store
     *        their state/values.
+    * @param {Knex.Transaction?} trx
+    *        (optional) Knex Transaction instance.
+    * @param {ABUtil.reqService} req
+    *        an instance of the current request object for performing tenant
+    *        based operations.
     * @return {Promise}
     */
-   do(chain, instance) {
+   do(chain, instance, trx, req) {
       if (!chain) {
          throw new Error("ABQLSetFirst.do() called without a Promise chain!");
       }
@@ -38,7 +44,7 @@ class ABQLSetFirst extends ABQLSetFirstCore {
             label: "ABQLSetFirst",
             object: context.object,
             data: null,
-            prev: context
+            prev: context,
          };
 
          if (!context.data) {
@@ -59,7 +65,7 @@ class ABQLSetFirst extends ABQLSetFirstCore {
       });
 
       if (this.next) {
-         return this.next.do(nextLink, instance);
+         return this.next.do(nextLink, instance, trx, req);
       } else {
          return nextLink;
       }

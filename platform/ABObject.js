@@ -299,7 +299,7 @@ module.exports = class ABClassObject extends ABObjectCore {
       (this.indexes() || []).forEach((indx) => {
          // console.log("       indx:", indx);
          var hasConnect =
-            (indx.fields || []).filter((f) => f.isConnected).length > 0;
+            (indx.fields || []).filter((f) => f.isConnection).length > 0;
          if (hasConnect) {
             console.log(
                `:::: STASHING INDEX O[${this.label}].I[${indx.indexName}]`

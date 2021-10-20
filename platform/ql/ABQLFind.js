@@ -23,9 +23,14 @@ class ABQLFind extends ABQLFindCore {
     * @param {obj} instance
     *        The current process instance values used by our tasks to store
     *        their state/values.
+    * @param {Knex.Transaction?} trx
+    *        (optional) Knex Transaction instance.
+    * @param {ABUtil.reqService} req
+    *        an instance of the current request object for performing tenant
+    *        based operations.
     * @return {Promise}
     */
-   do(chain, instance) {
+   do(chain, instance, trx, req) {
       if (!chain) {
          throw new Error("ABQLFind.do() called without a Promise chain!");
       }
@@ -62,7 +67,7 @@ class ABQLFind extends ABQLFindCore {
             var reducedCondition = this.conditionReduce(cond, instance);
             context.object
                .model()
-               .findAll(reducedCondition)
+               .findAll(reducedCondition, null, req)
                .then((rows) => {
                   nextContext.data = rows;
                   if (!rows) {
@@ -81,7 +86,7 @@ class ABQLFind extends ABQLFindCore {
       });
 
       if (this.next) {
-         return this.next.do(nextLink, instance);
+         return this.next.do(nextLink, instance, trx, req);
       } else {
          return nextLink;
       }

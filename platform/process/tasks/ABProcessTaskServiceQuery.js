@@ -26,12 +26,18 @@ module.exports = class ABProcessTaskServiceQuery extends (
    /**
     * do()
     * this method actually performs the action for this task.
-    * @param {obj} instance  the instance data of the running process
+    * @param {obj} instance
+    *        the instance data of the running process
+    * @param {Knex.Transaction?} trx
+    *        (optional) Knex Transaction instance.
+    * @param {ABUtil.reqService} req
+    *        an instance of the current request object for performing tenant
+    *        based operations.
     * @return {Promise}
     *      resolve(true/false) : true if the task is completed.
     *                            false if task is still waiting
     */
-   do(instance /* , trx, req */) {
+   do(instance, trx, req) {
       return new Promise((resolve, reject) => {
          // var myState = this.myState(instance);
 
@@ -44,7 +50,7 @@ module.exports = class ABProcessTaskServiceQuery extends (
 
          // tell our QueryLanguage Operation to .do() it's thang
          this.qlObj
-            .do(instance)
+            .do(instance, trx, req)
             .then((result) => {
                // this resolves when all the operations are finished
                // so we are done!
