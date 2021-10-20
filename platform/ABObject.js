@@ -73,6 +73,14 @@ module.exports = class ABClassObject extends ABObjectCore {
       }
    }
 
+   fromValues(attributes) {
+      super.fromValues(attributes);
+
+      if (this.tableName === "") {
+         this.tableName = this.AB.rules.toObjectNameFormat(this.name);
+      }
+   }
+
    currentView() {
       return this.objectWorkspace || {};
    }
@@ -435,7 +443,7 @@ module.exports = class ABClassObject extends ABObjectCore {
     *        the Knex connection.
     * @return {Promise}
     */
-   migrateCreate(req, knex) {
+   async migrateCreate(req, knex) {
       knex = knex || this.AB.Knex.connection(this.connName);
 
       var tableName = this.dbTableName();
@@ -503,36 +511,38 @@ module.exports = class ABClassObject extends ABObjectCore {
     *        the knex sql library manager for manipulating the DB.
     * @return {Promise}
     */
-   migrateDrop(req, knex) {
+   async migrateDrop(req, knex) {
+      knex = knex || this.AB.Knex.connection(this.connName);
       var tableName = this.dbTableName();
 
-      return new Promise((resolve, reject) => {
-         //BEFORE we just go drop the table, let's give each of our
-         // fields the chance to perform any clean up actions related
-         // to their columns being removed from the system.
-         //   Image Fields, Attachment Fields, Connection Fields, etc...
+      //BEFORE we just go drop the table, let's give each of our
+      // fields the chance to perform any clean up actions related
+      // to their columns being removed from the system.
+      //   Image Fields, Attachment Fields, Connection Fields, etc...
 
-         // QUESTION: When removing ConnectionFields:  If other objects connect to this object, we
-         // need to decide how to handle that:
-         // - auto remove those fields from other objects?
-         // - perform the corrections here, or alert the USER in the UI and expect them to
-         //   make the changes manually?
+      // QUESTION: When removing ConnectionFields:  If other objects connect to this object, we
+      // need to decide how to handle that:
+      // - auto remove those fields from other objects?
+      // - perform the corrections here, or alert the USER in the UI and expect them to
+      //   make the changes manually?
 
-         let fieldDrops = [];
+      let fieldDrops = [];
 
-         this.fields().forEach((f) => {
-            fieldDrops.push(f.migrateDrop(req, knex));
-         });
-
-         Promise.all(fieldDrops)
-            .then(function () {
-               knex.schema
-                  .dropTableIfExists(tableName)
-                  .then(resolve)
-                  .catch(reject);
-            })
-            .catch(reject);
+      this.fields().forEach((f) => {
+         fieldDrops.push(f.migrateDrop(req, knex));
       });
+
+      try {
+         await Promise.all(fieldDrops);
+         await knex.schema.dropTableIfExists(tableName);
+      } catch (e) {
+         this.AB.notify.developer(e, {
+            context: "ABObject.migrateDrop(): error",
+            req,
+            obj: this.toObj(),
+         });
+         throw e;
+      }
    }
 
    ///
@@ -1002,20 +1012,16 @@ module.exports = class ABClassObject extends ABObjectCore {
     * client.  Our DataFields can do any post conditioning of their data
     * before it is sent back.
     * @param {array} data  array of table rows returned from our table.
-    * @return {Objection.Model}
+    * @return {Promise}
     */
-   postGet(data) {
-      return new Promise((resolve, reject) => {
-         var allActions = [];
-
-         data.forEach((d) => {
-            this.fields().forEach((f) => {
-               allActions.push(f.postGet(d)); // update data in place.
-            });
+   async postGet(data) {
+      var allActions = [];
+      data.forEach((d) => {
+         this.fields().forEach((f) => {
+            allActions.push(f.postGet(d)); // update data in place.
          });
-
-         Promise.all(allActions).then(resolve).catch(reject);
       });
+      await Promise.all(allActions);
    }
 
    convertToQueryBuilderConditions(cond, indx = 0) {

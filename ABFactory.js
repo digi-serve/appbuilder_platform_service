@@ -270,6 +270,17 @@ class ABFactory extends ABFactoryCore {
          },
 
          /**
+          * AppBuilder.rules.toObjectNameFormat
+          * return a properly formatted Object/Table Name
+          * @param {string} objectName
+          *        The {ABObject}.name of the Object we are conditioning.
+          * @return {string}
+          */
+         toObjectNameFormat: function (objectName) {
+            return `AB_${this.nameFilter(objectName)}`;
+         },
+
+         /**
           * AppBuilder.rules.toSQLDate
           *
           * return a properly formatted DateTime string for MYSQL 5.7 but ignore the time information
