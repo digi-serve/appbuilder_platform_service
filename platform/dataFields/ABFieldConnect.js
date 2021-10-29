@@ -104,13 +104,6 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
       return errors;
    }
 
-   get datasourceLink() {
-      let linkObject = this.AB.objects((obj) => {
-         return obj.id == this.settings.linkObject;
-      })[0];
-      return linkObject;
-   }
-
    /**
     * @method exportIDs()
     * export any relevant .ids for the necessary operation of this application.
