@@ -49,69 +49,79 @@ module.exports = class ABFieldNumber extends ABFieldNumberCore {
          var tableName = this.object.dbTableName();
 
          // if this column doesn't already exist (you never know)
-         knex.schema.hasColumn(tableName, this.columnName).then((exists) => {
-            return knex.schema
-               .table(tableName, (t) => {
-                  var currCol;
+         req.retry(() => knex.schema.hasColumn(tableName, this.columnName))
+            .then((exists) => {
+               return req
+                  .retry(() =>
+                     knex.schema.table(tableName, (t) => {
+                        var currCol;
 
-                  // if this is an integer:
-                  if (this.settings.typeDecimals == "none") {
-                     currCol = t.integer(this.columnName);
-                  } else {
-                     var scale = parseInt(this.settings.typeDecimalPlaces);
-                     var precision = scale + 8;
+                        // if this is an integer:
+                        if (this.settings.typeDecimals == "none") {
+                           currCol = t.integer(this.columnName);
+                        } else {
+                           var scale = parseInt(
+                              this.settings.typeDecimalPlaces
+                           );
+                           var precision = scale + 8;
 
-                     currCol = t.decimal(this.columnName, precision, scale);
-                  }
+                           currCol = t.decimal(
+                              this.columnName,
+                              precision,
+                              scale
+                           );
+                        }
 
-                  // field is required (not null)
-                  if (
-                     this.settings.required &&
-                     this.settings.default != null &&
-                     this.settings.default != ""
-                  ) {
-                     currCol.notNullable();
-                  } else {
-                     currCol.nullable();
-                  }
+                        // field is required (not null)
+                        if (
+                           this.settings.required &&
+                           this.settings.default != null &&
+                           this.settings.default != ""
+                        ) {
+                           currCol.notNullable();
+                        } else {
+                           currCol.nullable();
+                        }
 
-                  // set default value
-                  if (
-                     this.settings.default != null &&
-                     this.settings.default != ""
-                  ) {
-                     let defaultTo = parseInt(this.settings.default) || 0;
-                     currCol.defaultTo(defaultTo);
-                  }
-                  // if (defaultTo != null) {
-                  // 	currCol.defaultTo(defaultTo);
-                  // }
-                  // else {
-                  // 	currCol.defaultTo(null);
-                  // }
+                        // set default value
+                        if (
+                           this.settings.default != null &&
+                           this.settings.default != ""
+                        ) {
+                           let defaultTo = parseInt(this.settings.default) || 0;
+                           currCol.defaultTo(defaultTo);
+                        }
+                        // if (defaultTo != null) {
+                        // 	currCol.defaultTo(defaultTo);
+                        // }
+                        // else {
+                        // 	currCol.defaultTo(null);
+                        // }
 
-                  // field is unique
-                  if (this.settings.unique) {
-                     currCol.unique();
-                  }
-                  // NOTE: Wait for dropUniqueIfExists() https://github.com/tgriesser/knex/issues/2167
-                  // else {
-                  // 	t.dropUnique(this.columnName);
-                  // }
+                        // field is unique
+                        if (this.settings.unique) {
+                           currCol.unique();
+                        }
+                        // NOTE: Wait for dropUniqueIfExists() https://github.com/tgriesser/knex/issues/2167
+                        // else {
+                        // 	t.dropUnique(this.columnName);
+                        // }
 
-                  if (exists) {
-                     currCol.alter();
-                  }
-               })
-               .then(() => {
-                  resolve();
-               })
-               .catch((err) => {
-                  // Skip duplicate unique key
-                  if (err.code == "ER_DUP_KEYNAME") resolve();
-                  else reject(err);
-               });
-         });
+                        if (exists) {
+                           currCol.alter();
+                        }
+                     })
+                  )
+                  .then(() => {
+                     resolve();
+                  })
+                  .catch((err) => {
+                     // Skip duplicate unique key
+                     if (err.code == "ER_DUP_KEYNAME") resolve();
+                     else reject(err);
+                  });
+            })
+            .catch(reject);
       });
    }
 

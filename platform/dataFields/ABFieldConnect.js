@@ -198,8 +198,9 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                [
                   // check column already exist
                   (next) => {
-                     knex.schema
-                        .hasColumn(tableName, this.columnName)
+                     req.retry(() =>
+                        knex.schema.hasColumn(tableName, this.columnName)
+                     )
                         .then((exists) => {
                            didExist = exists;
                            if (exists) {
@@ -232,8 +233,8 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                      req.log(
                         `   ... creating O[${this.object.name}].f[${this.columnName}]`
                      );
-                     knex.schema
-                        .table(tableName, (t) => {
+                     req.retry(() =>
+                        knex.schema.table(tableName, (t) => {
                            let linkCol = this.setNewColumnSchema(
                               t,
                               this.columnName,
@@ -262,6 +263,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                               );
                            }
                         })
+                     )
                         .then(() => {
                            next();
                         })
@@ -304,8 +306,9 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                [
                   // check column already exist
                   (next) => {
-                     knex.schema
-                        .hasColumn(tableName, this.columnName)
+                     req.retry(() =>
+                        knex.schema.hasColumn(tableName, this.columnName)
+                     )
                         .then((exists) => {
                            next(null, exists);
                         })
@@ -330,8 +333,8 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                   (exists, next) => {
                      if (exists) return next();
 
-                     knex.schema
-                        .table(tableName, (t) => {
+                     req.retry(() =>
+                        knex.schema.table(tableName, (t) => {
                            let linkCol = this.setNewColumnSchema(
                               t,
                               this.columnName,
@@ -369,6 +372,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                            )}_UNIQUE`;
                            t.unique(this.columnName, uniqueName);
                         })
+                     )
                         .then(() => {
                            next();
                         })
@@ -408,8 +412,9 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                         return;
                      }
 
-                     linkKnex.schema
-                        .hasColumn(linkTableName, linkColumnName)
+                     req.retry(() =>
+                        linkKnex.schema.hasColumn(linkTableName, linkColumnName)
+                     )
                         .then((exists) => {
                            next(null, exists);
                         })
@@ -434,8 +439,8 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                   (exists, next) => {
                      if (exists) return next();
 
-                     linkKnex.schema
-                        .table(linkTableName, (t) => {
+                     req.retry(() =>
+                        linkKnex.schema.table(linkTableName, (t) => {
                            let linkCol = this.setNewColumnSchema(
                               t,
                               linkColumnName,
@@ -464,6 +469,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                               );
                            }
                         })
+                     )
                         .then(() => {
                            next();
                         })
@@ -510,160 +516,164 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
 
             var sourceKnex = this.settings.isSource ? knex : linkKnex;
 
-            sourceKnex.schema.hasTable(joinTableName).then((exists) => {
-               if (exists) {
-                  resolve();
-                  return;
-               }
-
-               // if it doesn't exist, then create it and any known fields:
-               return Promise.resolve()
-                  .then(
-                     () =>
-                        new Promise((next, bad) => {
-                           if (!indexField) return next();
-
-                           this.getIndexColumnType(
-                              knex,
-                              indexField.object.tableName,
-                              indexField.columnName
-                           )
-                              .then((result) => {
-                                 indexType = result;
-                                 next();
-                              })
-                              .catch(bad);
-                        })
-                  )
-                  .then(
-                     () =>
-                        new Promise((next, bad) => {
-                           let indexField2 = this.indexField2;
-                           if (!indexField2) return next();
-
-                           this.getIndexColumnType(
-                              knex,
-                              indexField2.object.tableName,
-                              indexField2.columnName
-                           )
-                              .then((result) => {
-                                 indexType2 = result;
-                                 next();
-                              })
-                              .catch(bad);
-                        })
-                  )
-                  .then(() =>
-                     sourceKnex.schema.createTable(joinTableName, (t) => {
-                        t.increments("id").primary();
-                        t.timestamps();
-                        t.engine("InnoDB");
-                        t.charset("utf8");
-                        t.collate("utf8_unicode_ci");
-
-                        var sourceFkName = getFkName(
-                           this.object.name,
-                           this.columnName
-                        );
-                        var targetFkName = getFkName(
-                           linkObject.name,
-                           linkColumnName
-                        );
-
-                        // create columns
-                        let linkCol;
-                        let linkCol2;
-
-                        let linkFK2 = this.datasourceLink.PK();
-
-                        // check for custom Index field
-                        let indexField2 = this.indexField2;
-                        if (indexField2) {
-                           // verify which Field this custom index relates to:
-                           // if my object then linkFK
-                           if (indexField2.object.id === this.object.id) {
-                              linkFK = indexField2.columnName;
-                           } else {
-                              // else linkFK2
-                              linkFK2 = indexField2.columnName;
-                           }
-                        }
-
-                        linkCol = this.setNewColumnSchema(
-                           t,
-                           this.object.name,
-                           indexType,
-                           linkFK
-                        );
-
-                        linkCol2 = this.setNewColumnSchema(
-                           t,
-                           linkObject.name,
-                           indexType2,
-                           linkFK2
-                        );
-
-                        // NOTE: federated table does not support reference column
-                        if (
-                           !this.object.isExternal &&
-                           !linkObject.isExternal &&
-                           this.object.connName == linkObject.connName
-                        ) {
-                           linkCol
-                              .references(linkFK)
-                              .inTable(tableName)
-                              .withKeyName(sourceFkName)
-                              .onDelete("SET NULL");
-
-                           linkCol2
-                              .references(linkFK2)
-                              .inTable(linkTableName)
-                              .withKeyName(targetFkName)
-                              .onDelete("SET NULL");
-                        } else {
-                           req.log(
-                              `[M:N] object[${this.object.label}]->Field[${this.label}][${this.id}] skipping linkCol creation: !this.object.isExternal[${this.object.isExternal}] && !linkObject.isExternal[${linkObject.isExternal}] && connName[${this.connName}] == linkObj.connName[${linkObject.connName}]`
-                           );
-                        }
-
-                        // // create columns
-                        // t.integer(this.object.name).unsigned().nullable()
-                        // 	.references(this.object.PK())
-                        // 	.inTable(tableName)
-                        // 	.withKeyName(sourceFkName)
-                        // 	.onDelete('SET NULL');
-
-                        // t.integer(linkObject.name).unsigned().nullable()
-                        // 	.references(linkObject.PK())
-                        // 	.inTable(linkTableName)
-                        // 	.withKeyName(targetFkName)
-                        // 	.onDelete('SET NULL');
-                     })
-                  )
-                  .then(() => {
+            req.retry(() => sourceKnex.schema.hasTable(joinTableName)).then(
+               (exists) => {
+                  if (exists) {
                      resolve();
-                  })
-                  .catch((err) => {
-                     var ignoreCodes = [
-                        "ER_DUP_FIELDNAME",
-                        "ER_TABLE_EXISTS_ERROR",
-                     ];
-                     if (ignoreCodes.indexOf(err.code) == -1) {
-                        req.log("[M:N]", err);
-                     }
+                     return;
+                  }
 
-                     // If the table exists, skip the error
-                     if (err.code == "ER_TABLE_EXISTS_ERROR") resolve();
-                     else {
-                        req.notify.developer(err, {
-                           context: "ABFieldConnect.migrateCreate()",
-                           field: this,
-                           AB: this.AB,
-                        });
-                        reject(err);
-                     }
-                  });
-            });
+                  // if it doesn't exist, then create it and any known fields:
+                  return Promise.resolve()
+                     .then(
+                        () =>
+                           new Promise((next, bad) => {
+                              if (!indexField) return next();
+
+                              this.getIndexColumnType(
+                                 knex,
+                                 indexField.object.tableName,
+                                 indexField.columnName
+                              )
+                                 .then((result) => {
+                                    indexType = result;
+                                    next();
+                                 })
+                                 .catch(bad);
+                           })
+                     )
+                     .then(
+                        () =>
+                           new Promise((next, bad) => {
+                              let indexField2 = this.indexField2;
+                              if (!indexField2) return next();
+
+                              this.getIndexColumnType(
+                                 knex,
+                                 indexField2.object.tableName,
+                                 indexField2.columnName
+                              )
+                                 .then((result) => {
+                                    indexType2 = result;
+                                    next();
+                                 })
+                                 .catch(bad);
+                           })
+                     )
+                     .then(() =>
+                        req.retry(() =>
+                           sourceKnex.schema.createTable(joinTableName, (t) => {
+                              t.increments("id").primary();
+                              t.timestamps();
+                              t.engine("InnoDB");
+                              t.charset("utf8");
+                              t.collate("utf8_unicode_ci");
+
+                              var sourceFkName = getFkName(
+                                 this.object.name,
+                                 this.columnName
+                              );
+                              var targetFkName = getFkName(
+                                 linkObject.name,
+                                 linkColumnName
+                              );
+
+                              // create columns
+                              let linkCol;
+                              let linkCol2;
+
+                              let linkFK2 = this.datasourceLink.PK();
+
+                              // check for custom Index field
+                              let indexField2 = this.indexField2;
+                              if (indexField2) {
+                                 // verify which Field this custom index relates to:
+                                 // if my object then linkFK
+                                 if (indexField2.object.id === this.object.id) {
+                                    linkFK = indexField2.columnName;
+                                 } else {
+                                    // else linkFK2
+                                    linkFK2 = indexField2.columnName;
+                                 }
+                              }
+
+                              linkCol = this.setNewColumnSchema(
+                                 t,
+                                 this.object.name,
+                                 indexType,
+                                 linkFK
+                              );
+
+                              linkCol2 = this.setNewColumnSchema(
+                                 t,
+                                 linkObject.name,
+                                 indexType2,
+                                 linkFK2
+                              );
+
+                              // NOTE: federated table does not support reference column
+                              if (
+                                 !this.object.isExternal &&
+                                 !linkObject.isExternal &&
+                                 this.object.connName == linkObject.connName
+                              ) {
+                                 linkCol
+                                    .references(linkFK)
+                                    .inTable(tableName)
+                                    .withKeyName(sourceFkName)
+                                    .onDelete("SET NULL");
+
+                                 linkCol2
+                                    .references(linkFK2)
+                                    .inTable(linkTableName)
+                                    .withKeyName(targetFkName)
+                                    .onDelete("SET NULL");
+                              } else {
+                                 req.log(
+                                    `[M:N] object[${this.object.label}]->Field[${this.label}][${this.id}] skipping linkCol creation: !this.object.isExternal[${this.object.isExternal}] && !linkObject.isExternal[${linkObject.isExternal}] && connName[${this.connName}] == linkObj.connName[${linkObject.connName}]`
+                                 );
+                              }
+
+                              // // create columns
+                              // t.integer(this.object.name).unsigned().nullable()
+                              // 	.references(this.object.PK())
+                              // 	.inTable(tableName)
+                              // 	.withKeyName(sourceFkName)
+                              // 	.onDelete('SET NULL');
+
+                              // t.integer(linkObject.name).unsigned().nullable()
+                              // 	.references(linkObject.PK())
+                              // 	.inTable(linkTableName)
+                              // 	.withKeyName(targetFkName)
+                              // 	.onDelete('SET NULL');
+                           })
+                        )
+                     )
+                     .then(() => {
+                        resolve();
+                     })
+                     .catch((err) => {
+                        var ignoreCodes = [
+                           "ER_DUP_FIELDNAME",
+                           "ER_TABLE_EXISTS_ERROR",
+                        ];
+                        if (ignoreCodes.indexOf(err.code) == -1) {
+                           req.log("[M:N]", err);
+                        }
+
+                        // If the table exists, skip the error
+                        if (err.code == "ER_TABLE_EXISTS_ERROR") resolve();
+                        else {
+                           req.notify.developer(err, {
+                              context: "ABFieldConnect.migrateCreate()",
+                              field: this,
+                              AB: this.AB,
+                           });
+                           reject(err);
+                        }
+                     });
+               }
+            );
          } else {
             resolve();
          }

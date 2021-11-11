@@ -449,8 +449,7 @@ module.exports = class ABClassObject extends ABObjectCore {
       var tableName = this.dbTableName();
 
       return new Promise((resolve, reject) => {
-         knex.schema
-            .hasTable(tableName)
+         req.retry(() => knex.schema.hasTable(tableName))
             .then((exists) => {
                // if it doesn't exist, then create it and any known fields:
                if (!exists) {
@@ -460,25 +459,27 @@ module.exports = class ABClassObject extends ABObjectCore {
                      }]->table[${tableName}]`
                   );
 
-                  return knex.schema
-                     .createTable(tableName, (t) => {
-                        //// NOTE: the table is NOT YET CREATED here
-                        //// we can just modify the table definition
+                  return req
+                     .retry(() =>
+                        knex.schema.createTable(tableName, (t) => {
+                           //// NOTE: the table is NOT YET CREATED here
+                           //// we can just modify the table definition
 
-                        // Use .uuid to be primary key instead
-                        // t.increments('id').primary();
-                        t.string("uuid").primary();
-                        // NOTE: MySQL version 5 does not support default with a function
-                        // .defaultTo(knex.raw('uuid()')));
+                           // Use .uuid to be primary key instead
+                           // t.increments('id').primary();
+                           t.string("uuid").primary();
+                           // NOTE: MySQL version 5 does not support default with a function
+                           // .defaultTo(knex.raw('uuid()')));
 
-                        t.timestamps();
-                        t.engine("InnoDB");
-                        t.charset("utf8");
-                        t.collate("utf8_unicode_ci");
+                           t.timestamps();
+                           t.engine("InnoDB");
+                           t.charset("utf8");
+                           t.collate("utf8_unicode_ci");
 
-                        // Adding a new field to store various item properties in JSON (ex: height)
-                        t.text("properties");
-                     })
+                           // Adding a new field to store various item properties in JSON (ex: height)
+                           t.text("properties");
+                        })
+                     )
                      .then(() => {
                         return this.migrateCreateFields(req, knex);
                      })

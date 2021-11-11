@@ -47,48 +47,52 @@ module.exports = class ABFieldEmail extends ABFieldEmailCore {
          var tableName = this.object.dbTableName();
 
          // if this column doesn't already exist (you never know)
-         knex.schema.hasColumn(tableName, this.columnName).then((exists) => {
-            return knex.schema
-               .table(tableName, (t) => {
-                  var currCol = t.string(this.columnName, 254);
-                  // Technically we are limited to 254 characters in an email:
-                  // https://stackoverflow.com/questions/386294/what-is-the-maximum-length-of-a-valid-email-address
+         req.retry(() => knex.schema.hasColumn(tableName, this.columnName))
+            .then((exists) => {
+               return req
+                  .retry(() =>
+                     knex.schema.table(tableName, (t) => {
+                        var currCol = t.string(this.columnName, 254);
+                        // Technically we are limited to 254 characters in an email:
+                        // https://stackoverflow.com/questions/386294/what-is-the-maximum-length-of-a-valid-email-address
 
-                  // default value
-                  if (this.settings.default)
-                     currCol.defaultTo(this.settings.default);
-                  else currCol.defaultTo(null);
+                        // default value
+                        if (this.settings.default)
+                           currCol.defaultTo(this.settings.default);
+                        else currCol.defaultTo(null);
 
-                  // field is required (not null)
-                  if (this.settings.required && this.settings.default) {
-                     currCol.notNullable();
-                  } else {
-                     currCol.nullable();
-                  }
+                        // field is required (not null)
+                        if (this.settings.required && this.settings.default) {
+                           currCol.notNullable();
+                        } else {
+                           currCol.nullable();
+                        }
 
-                  // field is unique
-                  if (this.settings.unique) {
-                     currCol.unique();
-                  }
-                  // NOTE: Wait for dropUniqueIfExists() https://github.com/tgriesser/knex/issues/2167
-                  // else {
-                  // 	t.dropUnique(this.columnName);
-                  // }
+                        // field is unique
+                        if (this.settings.unique) {
+                           currCol.unique();
+                        }
+                        // NOTE: Wait for dropUniqueIfExists() https://github.com/tgriesser/knex/issues/2167
+                        // else {
+                        // 	t.dropUnique(this.columnName);
+                        // }
 
-                  // alter column when exist:
-                  if (exists) {
-                     currCol.alter();
-                  }
-               })
-               .then(() => {
-                  resolve();
-               })
-               .catch((err) => {
-                  // Skip duplicate unique key
-                  if (err.code == "ER_DUP_KEYNAME") resolve();
-                  else reject(err);
-               });
-         });
+                        // alter column when exist:
+                        if (exists) {
+                           currCol.alter();
+                        }
+                     })
+                  )
+                  .then(() => {
+                     resolve();
+                  })
+                  .catch((err) => {
+                     // Skip duplicate unique key
+                     if (err.code == "ER_DUP_KEYNAME") resolve();
+                     else reject(err);
+                  });
+            })
+            .catch(reject);
       });
    }
 

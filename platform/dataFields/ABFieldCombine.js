@@ -52,24 +52,28 @@ module.exports = class ABFieldCombine extends ABFieldCombineCore {
                () =>
                   new Promise((next, bad) => {
                      // if this column doesn't already exist (you never know)
-                     knex.schema
-                        .hasColumn(tableName, this.columnName)
+                     req.retry(() =>
+                        knex.schema.hasColumn(tableName, this.columnName)
+                     )
                         .then((exists) => {
-                           return knex.schema
-                              .table(tableName, (t) => {
-                                 if (exists) return next();
+                           return req
+                              .retry(() =>
+                                 knex.schema.table(tableName, (t) => {
+                                    if (exists) return next();
 
-                                 // Create a new column here.
-                                 t.specificType(
-                                    this.columnName,
-                                    `VARCHAR(${MAX_VALUE_LENGTH}) NULL`
-                                 );
-                              })
+                                    // Create a new column here.
+                                    t.specificType(
+                                       this.columnName,
+                                       `VARCHAR(${MAX_VALUE_LENGTH}) NULL`
+                                    );
+                                 })
+                              )
                               .then(() => {
                                  next();
                               })
                               .catch(bad);
-                        });
+                        })
+                        .catch(bad);
                   })
             )
             // Create TRIGGER when INSERT
@@ -78,12 +82,13 @@ module.exports = class ABFieldCombine extends ABFieldCombineCore {
                   new Promise((next, bad) => {
                      if (!columnNames || !columnNames.length) return next();
 
-                     knex
-                        .raw(
+                     req.retry(() =>
+                        knex.raw(
                            `CREATE TRIGGER \`${this.createTriggerName}\`
                            BEFORE INSERT ON \`${tableName}\` FOR EACH ROW
                            ${sqlUpdateCommand}`
                         )
+                     )
                         .then(() => {
                            next();
                         })
@@ -102,12 +107,13 @@ module.exports = class ABFieldCombine extends ABFieldCombineCore {
                   new Promise((next, bad) => {
                      if (!columnNames || !columnNames.length) return next();
 
-                     knex
-                        .raw(
+                     req.retry(() =>
+                        knex.raw(
                            `CREATE TRIGGER \`${this.updateTriggerName}\`
                            BEFORE UPDATE ON \`${tableName}\` FOR EACH ROW
                            ${sqlUpdateCommand}`
                         )
+                     )
                         .then(() => {
                            next();
                         })
@@ -124,11 +130,12 @@ module.exports = class ABFieldCombine extends ABFieldCombineCore {
             .then(
                () =>
                   new Promise((next, bad) => {
-                     knex
-                        .raw(
+                     req.retry(() =>
+                        knex.raw(
                            `UPDATE ${tableName} SET \`${this.columnName}\` = \`${this.columnName}\`
                            WHERE \`${this.columnName}\` IS NULL;`
                         )
+                     )
                         .then(() => {
                            next();
                         })
@@ -192,8 +199,11 @@ module.exports = class ABFieldCombine extends ABFieldCombineCore {
          .then(
             () =>
                new Promise((next, bad) => {
-                  knex
-                     .raw(`DROP TRIGGER IF EXISTS ${this.createTriggerName}`)
+                  req.retry(() =>
+                     knex.raw(
+                        `DROP TRIGGER IF EXISTS ${this.createTriggerName}`
+                     )
+                  )
                      .then(() => {
                         next();
                      })
@@ -203,8 +213,11 @@ module.exports = class ABFieldCombine extends ABFieldCombineCore {
          .then(
             () =>
                new Promise((next, bad) => {
-                  knex
-                     .raw(`DROP TRIGGER IF EXISTS ${this.updateTriggerName}`)
+                  req.retry(() =>
+                     knex.raw(
+                        `DROP TRIGGER IF EXISTS ${this.updateTriggerName}`
+                     )
+                  )
                      .then(() => {
                         next();
                      })

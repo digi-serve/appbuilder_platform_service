@@ -47,25 +47,29 @@ module.exports = class ABFieldBoolean extends ABFieldBooleanCore {
          var tableName = this.object.dbTableName();
 
          // if this column doesn't already exist (you never know)
-         knex.schema.hasColumn(tableName, this.columnName).then((exists) => {
-            return knex.schema
-               .table(tableName, (t) => {
-                  var currCol = t.boolean(this.columnName);
+         req.retry(() =>
+            knex.schema.hasColumn(tableName, this.columnName)
+         ).then((exists) => {
+            return req
+               .retry(() =>
+                  knex.schema.table(tableName, (t) => {
+                     var currCol = t.boolean(this.columnName);
 
-                  // Set default value to column
-                  if (this.settings.default) {
-                     currCol.defaultTo(this.settings.default);
-                  } else {
-                     currCol.defaultTo(null);
-                  }
+                     // Set default value to column
+                     if (this.settings.default) {
+                        currCol.defaultTo(this.settings.default);
+                     } else {
+                        currCol.defaultTo(null);
+                     }
 
-                  // not nullable/nullable
-                  if (this.settings.required && this.settings.default)
-                     currCol.notNullable();
-                  else currCol.nullable();
+                     // not nullable/nullable
+                     if (this.settings.required && this.settings.default)
+                        currCol.notNullable();
+                     else currCol.nullable();
 
-                  if (exists) currCol.alter();
-               })
+                     if (exists) currCol.alter();
+                  })
+               )
                .then(() => {
                   resolve();
                })

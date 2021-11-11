@@ -33,19 +33,23 @@ module.exports = class ABFieldJson extends ABFieldJsonCore {
          var tableName = this.object.dbTableName();
 
          // if this column doesn't already exist (you never know)
-         knex.schema.hasColumn(tableName, this.columnName).then((exists) => {
-            return knex.schema
-               .table(tableName, (t) => {
-                  var currCol = t.json(this.columnName);
-                  currCol.nullable();
+         req.retry(() => knex.schema.hasColumn(tableName, this.columnName))
+            .then((exists) => {
+               return req
+                  .retry(() =>
+                     knex.schema.table(tableName, (t) => {
+                        var currCol = t.json(this.columnName);
+                        currCol.nullable();
 
-                  if (exists) currCol.alter();
-               })
-               .then(() => {
-                  resolve();
-               })
-               .catch(reject);
-         });
+                        if (exists) currCol.alter();
+                     })
+                  )
+                  .then(() => {
+                     resolve();
+                  })
+                  .catch(reject);
+            })
+            .catch(reject);
       });
    }
 
