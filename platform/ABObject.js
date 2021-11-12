@@ -378,6 +378,37 @@ module.exports = class ABClassObject extends ABObjectCore {
    }
 
    /**
+    * @method migrateFieldsSequential()
+    * process the given array of fields to migrate sequentially.
+    * NOTE: doing this to reduce the chances of the DB server returning
+    * ER_TABLE_EXISTS_ERROR: Table '`appbuilder-admin`.`#sql-alter-1-67`' already exists"
+    * errors.
+    * @param {array} fieldArray
+    *        the current field we need to perform our migration.
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateCreate().
+    * @param {knex} knex
+    *        the Knex connection.
+    * @return {Promise}
+    */
+   migrateFieldsSequential(fieldArray = [], req, knex) {
+      return new Promise((resolve, reject) => {
+         if (fieldArray.length == 0) {
+            resolve();
+         } else {
+            var field = fieldArray.shift();
+            this.migrateField(field, req, knex)
+               .then(() => {
+                  this.migrateFieldsSequential(fieldArray, req, knex)
+                     .then(resolve)
+                     .catch(reject);
+               })
+               .catch(reject);
+         }
+      });
+   }
+
+   /**
     * @method migrateCreateFields()
     * Step through all our fields and have them perform their .migrateCreate()
     * actions.  These fields need to be created in a specific order:
@@ -407,30 +438,17 @@ module.exports = class ABClassObject extends ABObjectCore {
                   ) /* f.key != "connectObject" */
             );
 
-            normalFields.forEach((f) => {
-               fieldUpdates.push(this.migrateField(f, req, knex));
-            });
-
-            return Promise.all(fieldUpdates);
+            // {fix} ER_TABLE_EXISTS_ERROR: Table '`appbuilder-admin`.`#sql-alter-1-67`' already exists"
+            // switch to performing field migrations in Sequence:
+            return this.migrateFieldsSequential(normalFields, req, knex);
          })
          .then(() => {
             // Now Create our indexes
-
-            let fieldUpdates = [];
-            this.indexes().forEach((idx) => {
-               fieldUpdates.push(this.migrateField(idx, req, knex));
-            });
-            return Promise.all(fieldUpdates);
+            return this.migrateFieldsSequential(this.indexes(), req, knex);
          })
          .then(() => {
             // finally create any connect Fields
-
-            let fieldUpdates = [];
-
-            connectFields.forEach((f) => {
-               fieldUpdates.push(this.migrateField(f, req, knex));
-            });
-            return Promise.all(fieldUpdates);
+            return this.migrateFieldsSequential(connectFields, req, knex);
          });
    }
 
@@ -449,8 +467,7 @@ module.exports = class ABClassObject extends ABObjectCore {
       var tableName = this.dbTableName();
 
       return new Promise((resolve, reject) => {
-         knex.schema
-            .hasTable(tableName)
+         req.retry(() => knex.schema.hasTable(tableName))
             .then((exists) => {
                // if it doesn't exist, then create it and any known fields:
                if (!exists) {
@@ -460,25 +477,27 @@ module.exports = class ABClassObject extends ABObjectCore {
                      }]->table[${tableName}]`
                   );
 
-                  return knex.schema
-                     .createTable(tableName, (t) => {
-                        //// NOTE: the table is NOT YET CREATED here
-                        //// we can just modify the table definition
+                  return req
+                     .retry(() =>
+                        knex.schema.createTable(tableName, (t) => {
+                           //// NOTE: the table is NOT YET CREATED here
+                           //// we can just modify the table definition
 
-                        // Use .uuid to be primary key instead
-                        // t.increments('id').primary();
-                        t.string("uuid").primary();
-                        // NOTE: MySQL version 5 does not support default with a function
-                        // .defaultTo(knex.raw('uuid()')));
+                           // Use .uuid to be primary key instead
+                           // t.increments('id').primary();
+                           t.string("uuid").primary();
+                           // NOTE: MySQL version 5 does not support default with a function
+                           // .defaultTo(knex.raw('uuid()')));
 
-                        t.timestamps();
-                        t.engine("InnoDB");
-                        t.charset("utf8");
-                        t.collate("utf8_unicode_ci");
+                           t.timestamps();
+                           t.engine("InnoDB");
+                           t.charset("utf8");
+                           t.collate("utf8_unicode_ci");
 
-                        // Adding a new field to store various item properties in JSON (ex: height)
-                        t.text("properties");
-                     })
+                           // Adding a new field to store various item properties in JSON (ex: height)
+                           t.text("properties");
+                        })
+                     )
                      .then(() => {
                         return this.migrateCreateFields(req, knex);
                      })

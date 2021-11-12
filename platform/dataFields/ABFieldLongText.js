@@ -57,15 +57,18 @@ module.exports = class ABFieldLongText extends ABFieldLongTextCore {
 
                   // make sure there is a 'translations' json field
                   // included:
-                  knex.schema
-                     .hasColumn(tableName, "translations")
+                  req.retry(() =>
+                     knex.schema.hasColumn(tableName, "translations")
+                  )
                      .then((exists) => {
                         // create one if it doesn't exist:
                         if (!exists) {
-                           return knex.schema
-                              .table(tableName, (t) => {
-                                 t.json("translations");
-                              })
+                           return req
+                              .retry(() =>
+                                 knex.schema.table(tableName, (t) => {
+                                    t.json("translations");
+                                 })
+                              )
                               .then(() => {
                                  next();
                               })
@@ -86,18 +89,21 @@ module.exports = class ABFieldLongText extends ABFieldLongTextCore {
                   // [fix]: don't create a column for a multilingual field
                   if (this.settings.supportMultilingual) return next();
 
-                  knex.schema
-                     .hasColumn(tableName, this.columnName)
+                  req.retry(() =>
+                     knex.schema.hasColumn(tableName, this.columnName)
+                  )
                      .then((exists) => {
-                        return knex.schema
-                           .table(tableName, (t) => {
-                              var currCol = t
-                                 .text(this.columnName, "longtext")
-                                 .defaultTo(this.settings.default);
+                        return req
+                           .retry(() =>
+                              knex.schema.table(tableName, (t) => {
+                                 var currCol = t
+                                    .text(this.columnName, "longtext")
+                                    .defaultTo(this.settings.default);
 
-                              // alter default value of column
-                              if (exists) currCol.alter();
-                           })
+                                 // alter default value of column
+                                 if (exists) currCol.alter();
+                              })
+                           )
                            .then(() => {
                               next();
                            })

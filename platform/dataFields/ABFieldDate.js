@@ -50,44 +50,48 @@ module.exports = class ABFieldDate extends ABFieldDateCore {
          var tableName = this.object.dbTableName();
 
          // if this column doesn't already exist (you never know)
-         knex.schema.hasColumn(tableName, this.columnName).then((exists) => {
-            return knex.schema
-               .table(tableName, (t) => {
-                  var currCol;
+         req.retry(() => knex.schema.hasColumn(tableName, this.columnName))
+            .then((exists) => {
+               return req
+                  .retry(() =>
+                     knex.schema.table(tableName, (t) => {
+                        var currCol;
 
-                  // Need to use date time type to support timezone
-                  currCol = t.date(this.columnName);
+                        // Need to use date time type to support timezone
+                        currCol = t.date(this.columnName);
 
-                  // field is required (not null)
-                  if (this.settings.required && this.settings.default) {
-                     currCol.notNullable();
-                  } else {
-                     currCol.nullable();
-                  }
+                        // field is required (not null)
+                        if (this.settings.required && this.settings.default) {
+                           currCol.notNullable();
+                        } else {
+                           currCol.nullable();
+                        }
 
-                  // set default value
-                  if (
-                     this.settings.default &&
-                     moment(this.settings.default).isValid()
-                  ) {
-                     var defaultDate = this.AB.rules.toSQLDate(
-                        this.settings.default
-                     );
+                        // set default value
+                        if (
+                           this.settings.default &&
+                           moment(this.settings.default).isValid()
+                        ) {
+                           var defaultDate = this.AB.rules.toSQLDate(
+                              this.settings.default
+                           );
 
-                     currCol.defaultTo(defaultDate);
-                  } else {
-                     currCol.defaultTo(null);
-                  }
+                           currCol.defaultTo(defaultDate);
+                        } else {
+                           currCol.defaultTo(null);
+                        }
 
-                  if (exists) {
-                     currCol.alter();
-                  }
-               })
-               .then(() => {
-                  resolve();
-               })
-               .catch(reject);
-         });
+                        if (exists) {
+                           currCol.alter();
+                        }
+                     })
+                  )
+                  .then(() => {
+                     resolve();
+                  })
+                  .catch(reject);
+            })
+            .catch(reject);
       });
    }
 

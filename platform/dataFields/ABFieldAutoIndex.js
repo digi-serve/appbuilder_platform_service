@@ -32,24 +32,28 @@ module.exports = class ABFieldAutoIndex extends ABFieldAutoIndexCore {
          var tableName = this.object.dbTableName();
 
          // if this column doesn't already exist (you never know)
-         knex.schema.hasColumn(tableName, this.columnName).then((exists) => {
-            return knex.schema
-               .table(tableName, (t) => {
-                  // Create a new column here.
-                  if (!exists)
-                     t.specificType(
-                        this.columnName,
-                        "INT UNSIGNED NULL AUTO_INCREMENT UNIQUE"
-                     );
+         req.retry(() =>
+            knex.schema.hasColumn(tableName, this.columnName)
+         ).then((exists) => {
+            return req
+               .retry(() =>
+                  knex.schema.table(tableName, (t) => {
+                     // Create a new column here.
+                     if (!exists)
+                        t.specificType(
+                           this.columnName,
+                           "INT UNSIGNED NULL AUTO_INCREMENT UNIQUE"
+                        );
 
-                  // var currCol = t.integer(this.columnName)
-                  // 				.nullable();
+                     // var currCol = t.integer(this.columnName)
+                     // 				.nullable();
 
-                  // if (exists)
-                  // 	currCol.alter();
-                  // else
-                  // 	currCol.unique();
-               })
+                     // if (exists)
+                     // 	currCol.alter();
+                     // else
+                     // 	currCol.unique();
+                  })
+               )
                .then(() => {
                   resolve();
                })

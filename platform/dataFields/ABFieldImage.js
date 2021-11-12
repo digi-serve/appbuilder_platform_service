@@ -55,25 +55,29 @@ module.exports = class ABFieldImage extends ABFieldImageCore {
          var tableName = this.object.dbTableName();
 
          // check to make sure we don't already have this column:
-         knex.schema.hasColumn(tableName, this.columnName).then((exists) => {
-            // create one if it doesn't exist:
-            if (!exists) {
-               return knex.schema
-                  .table(tableName, (t) => {
-                     // field is required (not null)
-                     if (this.settings.required) {
-                        t.string(this.columnName).notNullable();
-                     } else {
-                        t.string(this.columnName).nullable();
-                     }
-                  })
-                  .then(resolve)
-                  .catch(reject);
-            } else {
-               // if the column already exists, nothing to do:
-               resolve();
-            }
-         });
+         req.retry(() => knex.schema.hasColumn(tableName, this.columnName))
+            .then((exists) => {
+               // create one if it doesn't exist:
+               if (!exists) {
+                  return req
+                     .retry(() =>
+                        knex.schema.table(tableName, (t) => {
+                           // field is required (not null)
+                           if (this.settings.required) {
+                              t.string(this.columnName).notNullable();
+                           } else {
+                              t.string(this.columnName).nullable();
+                           }
+                        })
+                     )
+                     .then(resolve)
+                     .catch(reject);
+               } else {
+                  // if the column already exists, nothing to do:
+                  resolve();
+               }
+            })
+            .catch(reject);
       });
    }
 

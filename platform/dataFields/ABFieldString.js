@@ -57,15 +57,18 @@ module.exports = class ABFieldString extends ABFieldStringCore {
                   if (this.settings.supportMultilingual) {
                      // make sure there is a 'translations' json field
                      // included:
-                     knex.schema
-                        .hasColumn(tableName, "translations")
+                     req.retry(() =>
+                        knex.schema.hasColumn(tableName, "translations")
+                     )
                         .then((exists) => {
                            // create one if it doesn't exist:
                            if (!exists) {
-                              return knex.schema
-                                 .table(tableName, (t) => {
-                                    t.json("translations");
-                                 })
+                              return req
+                                 .retry(() =>
+                                    knex.schema.table(tableName, (t) => {
+                                       t.json("translations");
+                                    })
+                                 )
                                  .then(() => {
                                     next();
                                  })
@@ -86,41 +89,45 @@ module.exports = class ABFieldString extends ABFieldStringCore {
                (next) => {
                   // [fix]: don't create a column for a multilingual field
                   if (!this.settings.supportMultilingual) {
-                     knex.schema
-                        .hasColumn(tableName, this.columnName)
+                     req.retry(() =>
+                        knex.schema.hasColumn(tableName, this.columnName)
+                     )
                         .then((exists) => {
-                           return knex.schema
-                              .table(tableName, (t) => {
-                                 var currCol = t.string(this.columnName);
+                           return req
+                              .retry(() =>
+                                 knex.schema.table(tableName, (t) => {
+                                    var currCol = t.string(this.columnName);
 
-                                 // default value
-                                 if (
-                                    this.settings.default &&
-                                    this.settings.default.indexOf("{uuid}") ==
-                                       -1
-                                 )
-                                    currCol.defaultTo(this.settings.default);
-                                 else currCol.defaultTo(null);
+                                    // default value
+                                    if (
+                                       this.settings.default &&
+                                       this.settings.default.indexOf(
+                                          "{uuid}"
+                                       ) == -1
+                                    )
+                                       currCol.defaultTo(this.settings.default);
+                                    else currCol.defaultTo(null);
 
-                                 // not nullable/nullable
-                                 if (
-                                    this.settings.required &&
-                                    this.settings.default
-                                 )
-                                    currCol.notNullable();
-                                 else currCol.nullable();
+                                    // not nullable/nullable
+                                    if (
+                                       this.settings.required &&
+                                       this.settings.default
+                                    )
+                                       currCol.notNullable();
+                                    else currCol.nullable();
 
-                                 // field is unique
-                                 if (this.settings.unique) {
-                                    currCol.unique();
-                                 }
-                                 // NOTE: Wait for dropUniqueIfExists() https://github.com/tgriesser/knex/issues/2167
-                                 // else {
-                                 // 	t.dropUnique(this.columnName);
-                                 // }
+                                    // field is unique
+                                    if (this.settings.unique) {
+                                       currCol.unique();
+                                    }
+                                    // NOTE: Wait for dropUniqueIfExists() https://github.com/tgriesser/knex/issues/2167
+                                    // else {
+                                    // 	t.dropUnique(this.columnName);
+                                    // }
 
-                                 if (exists) currCol.alter();
-                              })
+                                    if (exists) currCol.alter();
+                                 })
+                              )
                               .then(() => {
                                  return next();
                               })

@@ -48,63 +48,67 @@ module.exports = class ABFieldList extends ABFieldListCore {
          var tableName = this.object.dbTableName();
 
          // if this column doesn't already exist (you never know)
-         knex.schema.hasColumn(tableName, this.columnName).then((exists) => {
-            return knex.schema
-               .table(tableName, (t) => {
-                  var currCol;
+         req.retry(() => knex.schema.hasColumn(tableName, this.columnName))
+            .then((exists) => {
+               return req
+                  .retry(() =>
+                     knex.schema.table(tableName, (t) => {
+                        var currCol;
 
-                  // multiple select list
-                  if (this.settings.isMultiple == true) {
-                     // field is required (not null)
-                     // if (this.settings.required) {
-                     // 	currCol = t.json(this.columnName).notNullable();
-                     // }
-                     // else {
-                     currCol = t.json(this.columnName).nullable();
-                     // }
+                        // multiple select list
+                        if (this.settings.isMultiple == true) {
+                           // field is required (not null)
+                           // if (this.settings.required) {
+                           // 	currCol = t.json(this.columnName).notNullable();
+                           // }
+                           // else {
+                           currCol = t.json(this.columnName).nullable();
+                           // }
 
-                     // TODO: Set default to multiple select
-                     // MySQL - BLOB and TEXT columns cannot have DEFAULT values.
-                     // Error Code: 1101. BLOB, TEXT, GEOMETRY or JSON column 'Type' can't have a default value
+                           // TODO: Set default to multiple select
+                           // MySQL - BLOB and TEXT columns cannot have DEFAULT values.
+                           // Error Code: 1101. BLOB, TEXT, GEOMETRY or JSON column 'Type' can't have a default value
 
-                     // if (this.settings.multipleDefault && this.settings.multipleDefault.length > 0) {
-                     // 	currCol.defaultTo(JSON.stringify(this.settings.multipleDefault));
-                     // }
-                  }
-                  // single select list
-                  else {
-                     // Changed to string to fix issue where new items could not be added because type of field was ENUM and we do not support field modifications
-                     // field is required (not null)
-                     if (
-                        this.settings.required &&
-                        this.settings.default &&
-                        this.settings.default != "none"
-                     ) {
-                        currCol = t.string(this.columnName).notNullable();
-                     } else {
-                        currCol = t.string(this.columnName).nullable();
-                     }
+                           // if (this.settings.multipleDefault && this.settings.multipleDefault.length > 0) {
+                           // 	currCol.defaultTo(JSON.stringify(this.settings.multipleDefault));
+                           // }
+                        }
+                        // single select list
+                        else {
+                           // Changed to string to fix issue where new items could not be added because type of field was ENUM and we do not support field modifications
+                           // field is required (not null)
+                           if (
+                              this.settings.required &&
+                              this.settings.default &&
+                              this.settings.default != "none"
+                           ) {
+                              currCol = t.string(this.columnName).notNullable();
+                           } else {
+                              currCol = t.string(this.columnName).nullable();
+                           }
 
-                     if (
-                        this.settings.default &&
-                        this.settings.default != "none"
-                     ) {
-                        currCol.defaultTo(this.settings.default);
-                     } else {
-                        currCol.defaultTo(null);
-                     }
-                  }
+                           if (
+                              this.settings.default &&
+                              this.settings.default != "none"
+                           ) {
+                              currCol.defaultTo(this.settings.default);
+                           } else {
+                              currCol.defaultTo(null);
+                           }
+                        }
 
-                  // create one if it doesn't exist:
-                  if (exists) {
-                     currCol.alter();
-                  }
-               })
-               .then(() => {
-                  resolve();
-               })
-               .catch(reject);
-         });
+                        // create one if it doesn't exist:
+                        if (exists) {
+                           currCol.alter();
+                        }
+                     })
+                  )
+                  .then(() => {
+                     resolve();
+                  })
+                  .catch(reject);
+            })
+            .catch(reject);
       });
    }
 

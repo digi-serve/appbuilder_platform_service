@@ -44,38 +44,42 @@ module.exports = class ABFieldDateTime extends ABFieldDateTimeCore {
          var tableName = this.object.dbTableName();
 
          // if this column doesn't already exist (you never know)
-         knex.schema.hasColumn(tableName, this.columnName).then((exists) => {
-            return knex.schema
-               .table(tableName, (t) => {
-                  var currCol;
+         req.retry(() => knex.schema.hasColumn(tableName, this.columnName))
+            .then((exists) => {
+               return req
+                  .retry(() =>
+                     knex.schema.table(tableName, (t) => {
+                        var currCol;
 
-                  // Need to use date time type to support timezone
-                  currCol = t.dateTime(this.columnName);
+                        // Need to use date time type to support timezone
+                        currCol = t.dateTime(this.columnName);
 
-                  // field is required (not null)
-                  if (this.settings.required && this.settings.default) {
-                     currCol.notNullable();
-                  } else {
-                     currCol.nullable();
-                  }
+                        // field is required (not null)
+                        if (this.settings.required && this.settings.default) {
+                           currCol.notNullable();
+                        } else {
+                           currCol.nullable();
+                        }
 
-                  // set default value
-                  let defaultValue = this.getDefaultValue();
-                  if (defaultValue) {
-                     currCol.defaultTo(defaultValue);
-                  } else {
-                     currCol.defaultTo(null);
-                  }
+                        // set default value
+                        let defaultValue = this.getDefaultValue();
+                        if (defaultValue) {
+                           currCol.defaultTo(defaultValue);
+                        } else {
+                           currCol.defaultTo(null);
+                        }
 
-                  if (exists) {
-                     currCol.alter();
-                  }
-               })
-               .then(() => {
-                  resolve();
-               })
-               .catch(reject);
-         });
+                        if (exists) {
+                           currCol.alter();
+                        }
+                     })
+                  )
+                  .then(() => {
+                     resolve();
+                  })
+                  .catch(reject);
+            })
+            .catch(reject);
       });
    }
 
