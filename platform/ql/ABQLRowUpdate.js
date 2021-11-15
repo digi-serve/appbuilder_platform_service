@@ -105,9 +105,9 @@ class ABQLRowUpdate extends ABQLRowUpdateCore {
             updateParams = context.object.requestParams(updateParams);
 
             // Perform the update.
-            context.object
-               .model()
-               .update(id, updateParams, null, trx)
+            req.retry(() =>
+               context.object.model().update(id, updateParams, null, trx)
+            )
                .then((updatedRow) => {
                   // this returns the fully populated & updated row
                   nextContext.data = updatedRow;
