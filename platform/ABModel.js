@@ -1,5 +1,5 @@
 const ABModelCore = require("../core/ABModelCore");
-const Model = require("objection").Model;
+const { Model, raw } = require("objection");
 
 const ABFieldDateTime = require("../core/dataFields/ABFieldDateTimeCore");
 
@@ -1083,9 +1083,10 @@ module.exports = class ABModel extends ABModelCore {
                         .replace("{columnName}", field.columnName);
 
                      // eslint-disable-next-line no-unused-vars  -- Phasing this section out
-                     let languageWhere = '`{prefix}`.`language_code` = "{languageCode}"'
-                        .replace("{prefix}", prefix)
-                        .replace("{languageCode}", userData.languageCode);
+                     let languageWhere =
+                        '`{prefix}`.`language_code` = "{languageCode}"'
+                           .replace("{prefix}", prefix)
+                           .replace("{languageCode}", userData.languageCode);
 
                      // if (glue == "or") Query.orWhereRaw(languageWhere);
                      // else Query.whereRaw(languageWhere);
@@ -1114,12 +1115,13 @@ module.exports = class ABModel extends ABModelCore {
                      transCol = "`" + transCol.split(".").join("`.`") + "`"; // "{prefix}.translations";
                   }
 
-                  condition.key = this.AB.Knex.connection(/* connectionName */).raw(
-                     'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({transCol}, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({transCol}, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
-                        .replace(/{transCol}/g, transCol)
-                        .replace(/{languageCode}/g, userData.languageCode)
-                        .replace(/{columnName}/g, field.columnName)
-                  );
+                  condition.key =
+                     this.AB.Knex.connection(/* connectionName */).raw(
+                        'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({transCol}, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({transCol}, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
+                           .replace(/{transCol}/g, transCol)
+                           .replace(/{languageCode}/g, userData.languageCode)
+                           .replace(/{columnName}/g, field.columnName)
+                     );
                }
             }
 
@@ -1783,10 +1785,11 @@ module.exports = class ABModel extends ABModelCore {
                      prefix
                   );
                } else {
-                  sortClause = 'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({prefix}.`translations`, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({prefix}.`translations`, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
-                     .replace(/{prefix}/g, orderField.dbPrefix())
-                     .replace("{languageCode}", userData.languageCode)
-                     .replace("{columnName}", orderField.columnName);
+                  sortClause =
+                     'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({prefix}.`translations`, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({prefix}.`translations`, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
+                        .replace(/{prefix}/g, orderField.dbPrefix())
+                        .replace("{languageCode}", userData.languageCode)
+                        .replace("{columnName}", orderField.columnName);
                }
             }
             // If we are just sorting a field it is much simpler
@@ -1888,7 +1891,7 @@ module.exports = class ABModel extends ABModelCore {
     *    onto this query builder using query.select()
     */
    querySelectFormulaFields(query, userData, req) {
-      let raw = this.AB.Knex.connection().raw;
+      // let raw = this.AB.Knex.connection().raw;
 
       // Formula fields
       let formulaFields = this.object.fields((f) => f.key == "formula");
@@ -1984,6 +1987,9 @@ module.exports = class ABModel extends ABModelCore {
       // represent the connection type as a string:
       // values: [ "one:one", "many:one", "one:many", "many:many" ]
 
+      let connectedObjTable = `\`${connectedObj.dbSchemaName()}\`.\`${connectedObj.dbTableName()}\``;
+      let objTable = `\`${this.object.dbSchemaName()}\`.\`${this.object.dbTableName()}\``;
+
       // M:1 or ( 1:1 & ! source)
       if (
          LinkType == "many:one" ||
@@ -1992,10 +1998,10 @@ module.exports = class ABModel extends ABModelCore {
          selectSQL = `(SELECT IFNULL(${type[settings.type]}(\`${
             numberField.columnName
          }\`), 0)
-                  FROM ${connectedObj.dbTableName(true)}
-                  WHERE ${connectedObj.dbTableName(true)}.\`${
+                  FROM ${connectedObjTable}
+                  WHERE ${connectedObjTable}.\`${
             linkField.columnName
-         }\` = ${this.object.dbTableName(true)}.\`${
+         }\` = ${objTable}.\`${
             connectedField.indexField
                ? connectedField.indexField.columnName
                : this.object.PK()
@@ -2009,33 +2015,29 @@ module.exports = class ABModel extends ABModelCore {
          selectSQL = `(SELECT IFNULL(${type[settings.type]}(\`${
             numberField.columnName
          }\`), 0)
-                  FROM ${connectedObj.dbTableName(true)}
-                  WHERE ${connectedObj.dbTableName(true)}.\`${
+                  FROM ${connectedObjTable}
+                  WHERE ${connectedObjTable}.\`${
             connectedField.indexField
                ? connectedField.indexField.columnName
                : connectedObj.PK()
-         }\` = ${this.object.dbTableName(true)}.\`${
-            connectedField.columnName
-         }\` ${whereClause})`;
+         }\` = ${objTable}.\`${connectedField.columnName}\` ${whereClause})`;
       }
       // M:N
       else if (LinkType == "many:many") {
-         let joinTable = connectedField.joinTableName(true),
+         let joinTable = `\`${connectedField.object.dbSchemaName()}\`.\`${connectedField.joinTableName()}\``,
             joinColumnNames = connectedField.joinColumnNames();
 
          selectSQL = `(SELECT IFNULL(${type[settings.type]}(\`${
             numberField.columnName
          }\`), 0)
-               FROM ${connectedObj.dbTableName(true)}
+               FROM ${connectedObjTable}
                INNER JOIN ${joinTable}
                ON ${joinTable}.\`${
             joinColumnNames.targetColumnName
-         }\` = ${connectedObj.dbTableName(true)}.${connectedObj.PK()}
+         }\` = ${connectedObjTable}.${connectedObj.PK()}
                WHERE ${joinTable}.\`${
             joinColumnNames.sourceColumnName
-         }\` = ${this.object.dbTableName(
-            true
-         )}.\`${this.object.PK()}\` ${whereClause})`;
+         }\` = ${objTable}.\`${this.object.PK()}\` ${whereClause})`;
       }
 
       return selectSQL;
@@ -2560,3 +2562,4 @@ function updateTranslationsValues(AB, object, id, translations, isInsert) {
 
    return Promise.all(tasks);
 }
+
