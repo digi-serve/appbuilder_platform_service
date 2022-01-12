@@ -109,9 +109,23 @@ class ABQLRowUpdate extends ABQLRowUpdateCore {
                context.object.model().update(id, updateParams, null, trx)
             )
                .then((updatedRow) => {
-                  // this returns the fully populated & updated row
-                  nextContext.data = updatedRow;
-                  resolve(nextContext);
+                  let jobData = {
+                     objectID: context.object.id,
+                     ID: id,
+                     values: updateParams,
+                  };
+                  req.serviceRequest(
+                     "appbuilder.model-update",
+                     jobData,
+                     (err, updatedRow) => {
+                        if (err) {
+                           return reject(err);
+                        }
+                        // this returns the fully populated & updated row
+                        nextContext.data = updatedRow;
+                        resolve(nextContext);
+                     }
+                  );
                })
                .catch(reject);
          });
