@@ -83,9 +83,7 @@ class ABQLRowUpdate extends ABQLRowUpdateCore {
             var updateParams = {};
             for (var v = 0; v < this.params.values.length; v++) {
                var value = this.params.values[v];
-               var field = context.object.fields((f) => {
-                  return f.id == value.fieldId;
-               })[0];
+               var field = context.object.fieldByID(value.fieldId);
                if (!field) {
                   var missingFieldError = new Error(
                      `ABQLRowUpdate could not find field[${value.fieldId}] in provided object[${context.object.id}]`
@@ -105,29 +103,39 @@ class ABQLRowUpdate extends ABQLRowUpdateCore {
             updateParams = context.object.requestParams(updateParams);
 
             // Perform the update.
-            req.retry(() =>
-               context.object.model().update(id, updateParams, null, trx)
-            )
-               .then((updatedRow) => {
-                  let jobData = {
-                     objectID: context.object.id,
-                     ID: id,
-                     values: updateParams,
-                  };
-                  req.serviceRequest(
-                     "appbuilder.model-update",
-                     jobData,
-                     (err, updatedRow) => {
-                        if (err) {
-                           return reject(err);
-                        }
-                        // this returns the fully populated & updated row
-                        nextContext.data = updatedRow;
-                        resolve(nextContext);
-                     }
-                  );
-               })
-               .catch(reject);
+
+            // NOTE: if we implement the Knex Transactions, then we will have to
+            // Refactor this so that we play well with transactions.
+            //
+            // req.retry(() =>
+            //    context.object.model().update(id, updateParams, null, trx)
+            // )
+            //    .then((updatedRow) => {
+            //       // this returns the fully populated & updated row
+            //       nextContext.data = updatedRow;
+            //       resolve(nextContext);
+            //    })
+            //    .catch(reject);
+
+            // Calling the service to perform the update will implement all the
+            // additional Process Lifecycle actions of the update:
+            let jobData = {
+               objectID: context.object.id,
+               ID: id,
+               values: updateParams,
+            };
+            req.serviceRequest(
+               "appbuilder.model-update",
+               jobData,
+               (err, updatedRow) => {
+                  if (err) {
+                     return reject(err);
+                  }
+                  // this returns the fully populated & updated row
+                  nextContext.data = updatedRow;
+                  resolve(nextContext);
+               }
+            );
          });
       });
 
