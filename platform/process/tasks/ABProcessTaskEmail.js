@@ -220,44 +220,47 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
                   },
                };
 
-               req.serviceRequest("notification_email.email", jobData, (
-                  err /*, results */
-               ) => {
-                  if (err) {
-                     var error = null;
+               req.serviceRequest(
+                  "notification_email.email",
+                  jobData,
+                  (err /*, results */) => {
+                     if (err) {
+                        var error = null;
 
-                     // if ECONNREFUSED
-                     var eStr = err.toString();
-                     if (eStr.indexOf("ECONNREFUSED")) {
-                        error = this.AB.toError(
-                           "NotificationEmail: The server specified in config.local is refusing to connect.",
-                           err
-                        );
-                        this.AB.notify.builder(error, { task: this });
+                        // if ECONNREFUSED
+                        var eStr = err.toString();
+                        if (eStr.indexOf("ECONNREFUSED")) {
+                           error = this.AB.toError(
+                              "NotificationEmail: The server specified in config.local is refusing to connect.",
+                              err
+                           );
+                           this.AB.notify.builder(error, { task: this });
+                        }
+
+                        // err objects are returned as simple {} not instances of {Error}
+                        if (!error) {
+                           error = this.AB.toError(
+                              `NotificationEmail responded with an error (${
+                                 err.code || err.toString()
+                              })`,
+                              err
+                           );
+                           this.AB.notify.developer(error, { task: this });
+                        }
+
+                        reject(error);
+                        return;
                      }
 
-                     // err objects are returned as simple {} not instances of {Error}
-                     if (!error) {
-                        error = this.AB.toError(
-                           `NotificationEmail responded with an error (${
-                              err.code || err.toString()
-                           })`,
-                           err
-                        );
-                        this.AB.notify.developer(error, { task: this });
-                     }
-
-                     reject(error);
-                     return;
+                     this.stateCompleted(instance);
+                     this.log(instance, "Email Sent successfully");
+                     resolve(true);
                   }
-
-                  this.stateCompleted(instance);
-                  this.log(instance, "Email Sent successfully");
-                  resolve(true);
-               });
+               );
             })
             .catch((error) => {
-               console.error(error);
+               this.log(instance, "Error processing Email Task");
+               this.onError(instance, error);
                reject(error);
             });
       });
