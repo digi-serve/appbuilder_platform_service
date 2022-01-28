@@ -135,9 +135,9 @@ class ABQLSetPluck extends ABQLSetPluckCore {
                cond[PK] = this.AB.uniq(ids);
 
                return new Promise((resolve, reject) => {
-                  linkObj
-                     .model()
-                     .find({ where: cond, populate: true }, req)
+                  req.retry(() =>
+                     linkObj.model().find({ where: cond, populate: true }, req)
+                  )
                      .then((rows) => {
                         // Special Formatting for Form.io fields.
                         // Allow displaying connected data that has been .format()ed

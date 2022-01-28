@@ -5,7 +5,9 @@ const AccountingBatchProcessingCore = require(path.join(__dirname, "..", "..", "
 const async = require("async");
 // const uuid = require("uuid/v4");
 
-module.exports = class AccountingBatchProcessing extends AccountingBatchProcessingCore {
+module.exports = class AccountingBatchProcessing extends (
+   AccountingBatchProcessingCore
+) {
    ////
    //// Process Instance Methods
    ////
@@ -25,6 +27,7 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
    do(instance, trx, req) {
       this._dbTransaction = trx;
       this._req = req;
+      this._instance = instance;
 
       // Setup references to the ABObject and Fields that we will use in our
       // operations.
@@ -114,17 +117,19 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
 
                var accountObject = this.jeAccountField.datasourceLink;
 
-               return accountObject
-                  .model()
-                  .findAll({ where: {}, populate: true }, null, req)
+               return this._req
+                  .retry(() =>
+                     accountObject
+                        .model()
+                        .findAll({ where: {}, populate: true }, null, req)
+                  )
                   .then((list) => {
                      this.allAccountRecords = list;
                   });
             })
             .then(() => {
-               return this.batchObj
-                  .model()
-                  .findAll(cond, null, req)
+               return this._req
+                  .retry(() => this.batchObj.model().findAll(cond, null, req))
                   .then((rows) => {
                      if (!rows || rows.length != 1) {
                         var msg = `unable to find Batch data for batchID[${currentBatchID}]`;
@@ -150,15 +155,18 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
                         );
                      });
 
-                     return Promise.all(allEntries);
+                     return Promise.all(allEntries).catch((err) => {
+                        this.onError(this._instance, err);
+                        throw err;
+                     });
                   })
                   .catch((error) => {
                      this.log(
                         instance,
                         `error processing Batch data for batchID[${currentBatchID}]`
                      );
-                     this.log(instance, error.toString());
-                     reject(error);
+                     this.onError(this._instance, error);
+                     throw error;
                   });
             })
             .then(() => {
@@ -171,7 +179,7 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
                resolve(true);
             })
             .catch((error) => {
-               this.log(instance, error.toString());
+               this.onError(this._instance, error);
                reject(error);
             });
       });
@@ -209,21 +217,22 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
                if (this.jeStatusField == null) return resolve();
 
                // set JE.status = Complete
-               journalEntry[
-                  this.jeStatusField.columnName
-               ] = this.fieldJEStatusComplete;
+               journalEntry[this.jeStatusField.columnName] =
+                  this.fieldJEStatusComplete;
 
                var updateValue = {};
-               updateValue[
-                  this.jeStatusField.columnName
-               ] = this.fieldJEStatusComplete;
-               this.jeObject
-                  .model()
-                  .update(
-                     journalEntry[this.jeObject.PK()],
-                     updateValue,
-                     null,
-                     this._dbTransaction
+               updateValue[this.jeStatusField.columnName] =
+                  this.fieldJEStatusComplete;
+               this._req
+                  .retry(() =>
+                     this.jeObject
+                        .model()
+                        .update(
+                           journalEntry[this.jeObject.PK()],
+                           updateValue,
+                           null,
+                           this._dbTransaction
+                        )
                   )
                   .then((/* updatedJE */) => {
                      // Broadcast
@@ -238,12 +247,22 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
                      this._req.broadcast
                         .dcUpdate(this.jeObject.id, updateValue)
                         .then(resolve)
-                        .catch(reject);
+                        .catch((error) => {
+                           this.log(
+                              this._instance,
+                              "Error broadcasting JE Object update"
+                           );
+                           this.onError(this._instance, error);
+                           reject(error);
+                        });
                   })
-                  .catch(reject);
+                  .catch((error) => {
+                     this.onError(this._instance, error);
+                     reject(error);
+                  });
             })
             .catch((error) => {
-               console.error(error);
+               this.onError(this._instance, error);
                reject(error);
             });
       });
@@ -296,19 +315,22 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
                      });
                   }
                   // try to find existing BalanceRecord matching our balCond
-                  this.brObject
-                     .model()
-                     .findAll(
-                        { where: balCond, populate: true },
-                        null,
-                        this._req
+                  this._req
+                     .retry(() =>
+                        this.brObject
+                           .model()
+                           .findAll(
+                              { where: balCond, populate: true },
+                              null,
+                              this._req
+                           )
                      )
                      .then((rows) => {
                         balanceRecord = rows[0];
                         done();
                      })
                      .catch((err) => {
-                        // TODO: need to pass in .instance so we can do a this.log()
+                        this.onError(this._instance, err);
                         done(err);
                      });
                },
@@ -335,7 +357,7 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
                         done();
                      })
                      .catch((err) => {
-                        // TODO: need to pass in .instance so we can do a this.log()
+                        this.onError(this._instance, err);
                         done(err);
                      });
                },
@@ -404,7 +426,10 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
                         .then(() => {
                            done();
                         })
-                        .catch(done);
+                        .catch((err) => {
+                           this.onError(this._instance, err);
+                           done(err);
+                        });
                   } else {
                      done();
                   }
@@ -445,19 +470,22 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
                uuid: this.AB.uuid(),
                "Starting Balance": 0,
             };
-            balValues[
-               this.brFinancialPeriodField.columnName
-            ] = financialPeriodID;
+            balValues[this.brFinancialPeriodField.columnName] =
+               financialPeriodID;
             balValues[this.brAccountField.columnName] = AccountID;
             if (RCID) {
                balValues[this.brRCField.columnName] = RCID;
             } else {
                balValues[this.brRCField.columnName] = null;
             }
-            this.brObject
-               .model()
-               // .create(balValues, this._dbTransaction)
-               .create(balValues, null, null, this._req) // NOTE: Ignore MySQL transaction because client needs id of entry.
+            this._req
+               .retry(() =>
+                  this.brObject
+                     .model()
+                     // .create(balValues, this._dbTransaction)
+                     // NOTE: Ignore MySQL transaction because client needs id of entry.
+                     .create(balValues, null, null, this._req)
+               )
                .then((newEntry) => {
                   // Broadcast
 
@@ -474,10 +502,21 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
                      .then(() => {
                         resolve(newEntry);
                      })
-                     .catch(reject);
+                     .catch((err) => {
+                        this.log(
+                           this._instance,
+                           "Error broadcasting BR Object update"
+                        );
+                        this.onError(this._instance, err);
+                        reject(err);
+                     });
                })
                .catch((err) => {
-                  // TODO: need to pass in .instance so we can do a this.log()
+                  this.log(
+                     this._instance,
+                     ".parallelSafeCreateBalance(): Error creating BR Object:"
+                  );
+                  this.onError(this._instance, err);
                   reject(err);
                });
          });
@@ -514,9 +553,10 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
                },
                populate: true,
             };
-            return this.brObject
-               .model()
-               .findAll(cond, null, this._req)
+            return this._req
+               .retry(() =>
+                  this.brObject.model().findAll(cond, null, this._req)
+               )
                .then((list) => {
                   allBalanceRecords = list;
                });
@@ -587,9 +627,8 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
                   let categoryOption = categoryOptions.find(
                      (o) => o.id == account["Category"]
                   );
-                  accountType = (categoryOption
-                     ? categoryOption.text
-                     : ""
+                  accountType = (
+                     categoryOption ? categoryOption.text : ""
                   ).toLowerCase();
                }
 
@@ -624,9 +663,17 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
                // now perform the UPDATE
                allUpdates.push(
                   new Promise((next, bad) => {
-                     this.brObject
-                        .model()
-                        .update(brID, balanceRecord, null, this._dbTransaction)
+                     this._req
+                        .retry(() =>
+                           this.brObject
+                              .model()
+                              .update(
+                                 brID,
+                                 balanceRecord,
+                                 null,
+                                 this._dbTransaction
+                              )
+                        )
                         .then(() => {
                            // Broadcast
 
@@ -641,14 +688,32 @@ module.exports = class AccountingBatchProcessing extends AccountingBatchProcessi
                            this._req.broadcast
                               .dcUpdate(this.brObject.id, balanceRecord)
                               .then(next)
-                              .catch(bad);
+                              .catch((error) => {
+                                 this.log(
+                                    this._instance,
+                                    "Error broadcasting BR Object update"
+                                 );
+                                 this.onError(this._instance, error);
+                                 bad(error);
+                              });
                         })
-                        .catch(bad);
+                        .catch((error) => {
+                           this.onError(this._instance, error);
+                           bad(error);
+                        });
                   })
                );
             });
 
-            return Promise.all(allUpdates);
+            return Promise.all(allUpdates).catch((err) => {
+               this.onError(this._instance, err);
+               throw err;
+            });
+         })
+         .catch((err) => {
+            this.log(this._instance, "Error in .recalculateBalances()");
+            this.onError(this._instance, err);
+            throw err;
          });
    }
 

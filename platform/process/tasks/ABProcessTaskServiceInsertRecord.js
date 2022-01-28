@@ -19,6 +19,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
     *                            false if task is still waiting
     */
    do(instance, trx, req) {
+      this._req = req;
       this.object = this.AB.objectByID(this.objectID);
       if (!this.object) {
          return this.errorConfig(
@@ -45,27 +46,26 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                pullDataTasks.push(
                   () =>
                      new Promise((next, bad) => {
-                        fieldRepeat.datasourceLink
-                           .model()
-                           .findAll(
-                              {
-                                 where: {
-                                    glue: "and",
-                                    rules: [
-                                       {
-                                          key: fieldRepeat.datasourceLink.PK(),
-                                          rule: "equals",
-                                          value:
-                                             rData[
-                                                fieldRepeat.datasourceLink.PK()
-                                             ],
-                                       },
-                                    ],
+                        let PK = fieldRepeat.datasourceLink.PK();
+                        this._req
+                           .retry(() =>
+                              fieldRepeat.datasourceLink.model().findAll(
+                                 {
+                                    where: {
+                                       glue: "and",
+                                       rules: [
+                                          {
+                                             key: PK,
+                                             rule: "equals",
+                                             value: rData[PK],
+                                          },
+                                       ],
+                                    },
+                                    populate: true,
                                  },
-                                 populate: true,
-                              },
-                              null,
-                              req
+                                 null,
+                                 req
+                              )
                            )
                            .then((result) => {
                               next(this.getDataValue(instance, result[0]));
@@ -76,7 +76,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
             });
          }
       }
-      // Pull a data to insert
+      // Pull a single data entry to insert
       else {
          pullDataTasks.push(() => Promise.resolve(this.getDataValue(instance)));
       }
@@ -85,40 +85,28 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
          tasks.push(
             Promise.resolve()
                .then(() => pullTask())
-               .then((val) => this.object.model().create(val))
-               // NOTE: .create() returns the fully populated instance already.
-               // .then((record) =>
-               //    this.object.model().findAll({
-               //       where: {
-               //          glue: "and",
-               //          rules: [
-               //             {
-               //                key: this.object.PK(),
-               //                rule: "equals",
-               //                value: record[this.object.PK()],
-               //             },
-               //          ],
-               //       },
-               //       populate: true,
-               //    }, null, req)
-               // )
+               .then((val) =>
+                  this._req.retry(() => this.object.model().create(val))
+               )
                .then((result) => {
                   results.push(result);
-                  return Promise.resolve();
                })
          );
       });
 
-      return Promise.all(tasks).then(
-         () =>
-            new Promise((next, bad) => {
-               this.stateUpdate(instance, {
-                  data: results,
-               });
-               this.stateCompleted(instance);
-               next(true);
-            })
-      );
+      return Promise.all(tasks)
+         .then(() => {
+            this.stateUpdate(instance, {
+               data: results,
+            });
+            this.stateCompleted(instance);
+            return true;
+         })
+         .catch((err) => {
+            this.log(instance, "Error completing Insert Record");
+            this.onError(instance, err);
+            throw err;
+         });
    }
 
    /**

@@ -25,27 +25,25 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
    do(instance, trx, req) {
       this._req = req;
 
-      this.fpYearObject = this.AB.objects((o) => o.id == this.objectFPYear)[0];
+      this.fpYearObject = this.AB.objectByID(this.objectFPYear);
       if (!this.fpYearObject) {
          this.log(instance, "Could not find FP Year object");
          return Promise.reject(new Error("Could not find FP Year object"));
       }
 
-      this.fpMonthObject = this.AB.objects(
-         (o) => o.id == this.objectFPMonth
-      )[0];
+      this.fpMonthObject = this.AB.objectByID(this.objectFPMonth);
       if (!this.fpMonthObject) {
          this.log(instance, "Could not find FP Month object");
          return Promise.reject(new Error("Could not find FP Month object"));
       }
 
-      this.glObject = this.AB.objects((o) => o.id == this.objectGL)[0];
+      this.glObject = this.AB.objectByID(this.objectGL);
       if (!this.glObject) {
          this.log(instance, "Could not find Balance object");
          return Promise.reject(new Error("Could not find Balance object"));
       }
 
-      this.accObject = this.AB.objects((o) => o.id == this.objectAccount)[0];
+      this.accObject = this.AB.objectByID(this.objectAccount);
       if (!this.accObject) {
          this.log(instance, "Could not find Account object");
          return Promise.reject(new Error("Could not find Account object"));
@@ -83,21 +81,26 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
                         populate: true,
                      };
 
-                     this.fpYearObject
-                        .model()
-                        .findAll(cond, null, req)
+                     this._req
+                        .retry(() =>
+                           this.fpYearObject.model().findAll(cond, null, req)
+                        )
                         .then((rows) => {
                            this.currentFPYear = rows[0];
-                           this.log(instance, "Found FPYearObj");
 
                            if (this.currentFPYear) {
+                              this.log(instance, "Found FPYearObj");
                               next();
                            } else {
                               this.log(instance, "Not Found FPYearObj");
                               bad(new Error("Not Found FPYearObj"));
                            }
                         })
-                        .catch(bad);
+                        .catch((err) => {
+                           this.log(instance, "Error finding FP Year Object");
+                           this.onError(instance, err);
+                           bad(err);
+                        });
                   })
             )
             // 1. Find last fiscal month in fiscal year (M12)
@@ -114,9 +117,9 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
                         return bad(new Error("Not Found fpMonthField"));
                      }
 
-                     let fpMonthEndField = this.fpMonthObject.fields(
-                        (f) => f.id == this.fieldFPMonthEnd
-                     )[0];
+                     let fpMonthEndField = this.fpMonthObject.fieldByID(
+                        this.fieldFPMonthEnd
+                     );
                      if (!fpMonthEndField) {
                         this.log(instance, "Not Found fpMonthEndField");
                         return bad(new Error("Not Found fpMonthEndField"));
@@ -151,14 +154,15 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
                         populate: true,
                      };
 
-                     this.fpMonthObject
-                        .model()
-                        .findAll(cond, null, req)
+                     this._req
+                        .retry(() =>
+                           this.fpMonthObject.model().findAll(cond, null, req)
+                        )
                         .then((rows) => {
                            this.lastFPMonth = rows[0];
-                           this.log(instance, "Found the last FP Month");
 
                            if (this.lastFPMonth) {
+                              this.log(instance, "Found the last FP Month");
                               next();
                            } else {
                               this.log(
@@ -172,16 +176,23 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
                               );
                            }
                         })
-                        .catch(bad);
+                        .catch((err) => {
+                           this.log(
+                              instance,
+                              "Error Finding last FP Month with balances"
+                           );
+                           this.onError(this._instance, err);
+                           bad(err);
+                        });
                   })
             )
             // 2. Find M12 Balances with Account Number = 3500 or 3991
             .then(
                () =>
                   new Promise((next, bad) => {
-                     let accNumberField = this.accObject.fields(
-                        (f) => f.id == this.fieldAccNumber
-                     )[0];
+                     let accNumberField = this.accObject.fieldByID(
+                        this.fieldAccNumber
+                     );
                      if (!accNumberField) {
                         this.log(instance, "Not Found Account Number Field");
                         return bad(new Error("Not Found Account Number Field"));
@@ -207,17 +218,17 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
                      };
 
                      // find id of accounts with Account Number = 3500 or 3991
-                     this.accObject
-                        .model()
-                        .findAll(cond, null, req)
+                     this._req
+                        .retry(() =>
+                           this.accObject.model().findAll(cond, null, req)
+                        )
                         .then((rows) => {
                            // { AccuntNumber: AccountRow, ..., AccuntNumberN: AccountRowN }
                            this.accounts = {};
                            (rows || []).forEach(
                               (r) =>
-                                 (this.accounts[
-                                    r[accNumberField.columnName]
-                                 ] = r)
+                                 (this.accounts[r[accNumberField.columnName]] =
+                                    r)
                            );
 
                            let fpBalanceField = this.fpMonthObject.fields(
@@ -246,10 +257,8 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
 
                            this.balances = balances.filter((b) => {
                               // Filter by Account
-                              let fkAccounts = Object.values(
-                                 this.accounts
-                              ).map((acc) =>
-                                 glAccountField.getRelationValue(acc)
+                              let fkAccounts = Object.values(this.accounts).map(
+                                 (acc) => glAccountField.getRelationValue(acc)
                               );
 
                               return (
@@ -263,19 +272,23 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
 
                            next();
                         })
-                        .catch(bad);
+                        .catch((err) => {
+                           this.log(instance, "Error Finding M12 Balances");
+                           this.onError(instance, err);
+                           bad(err);
+                        });
                   })
             )
             // 3. Find the next fiscal year
             .then(
                () =>
                   new Promise((next, bad) => {
-                     let fpStartField = this.fpYearObject.fields(
-                        (f) => f.id == this.fieldFPYearStart
-                     )[0];
-                     let fpEndField = this.fpYearObject.fields(
-                        (f) => f.id == this.fieldFPYearEnd
-                     )[0];
+                     let fpStartField = this.fpYearObject.fieldByID(
+                        this.fieldFPYearStart
+                     );
+                     let fpEndField = this.fpYearObject.fieldByID(
+                        this.fieldFPYearEnd
+                     );
 
                      if (!fpStartField) {
                         this.log(instance, "Not Found FP Year Start Field");
@@ -318,9 +331,10 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
                         populate: true,
                      };
 
-                     this.fpYearObject
-                        .model()
-                        .findAll(cond, null, req)
+                     this._req
+                        .retry(() =>
+                           this.fpYearObject.model().findAll(cond, null, req)
+                        )
                         .then((rows) => {
                            this.nextFpYear = rows[0];
 
@@ -331,16 +345,20 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
 
                            next();
                         })
-                        .catch(bad);
+                        .catch((err) => {
+                           this.log(instance, "Error finding next FP year");
+                           this.onError(this._instance, err);
+                           bad(err);
+                        });
                   })
             )
             // 3.1 set the next FP Year to Status = Active
             .then(
                () =>
                   new Promise((next, bad) => {
-                     let fieldFPYearStatus = this.fpYearObject.fields(
-                        (f) => f.id == this.fieldFPYearStatus
-                     )[0];
+                     let fieldFPYearStatus = this.fpYearObject.fieldByID(
+                        this.fieldFPYearStatus
+                     );
                      if (!fieldFPYearStatus) {
                         this.log(instance, "Could not found FP status field");
                         return bad(
@@ -349,34 +367,35 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
                      }
 
                      let values = {};
-                     values[
-                        fieldFPYearStatus.columnName
-                     ] = this.fieldFPYearActive;
+                     values[fieldFPYearStatus.columnName] =
+                        this.fieldFPYearActive;
 
-                     this.fpYearObject
-                        .model()
-                        .update(
-                           this.nextFpYear[this.fpYearObject.PK()],
-                           values,
-                           null,
-                           trx
+                     this._req
+                        .retry(() =>
+                           this.fpYearObject
+                              .model()
+                              .update(
+                                 this.nextFpYear[this.fpYearObject.PK()],
+                                 values,
+                                 null,
+                                 trx
+                              )
                         )
                         .then((updatedNextFP) => {
                            // Broadcast the update
-                           // sails.sockets.broadcast(
-                           //    this.fpYearObject.id,
-                           //    "ab.datacollection.update",
-                           //    {
-                           //       objectId: this.fpYearObject.id,
-                           //       data: updatedNextFP,
-                           //    }
-                           // );
                            this._req.broadcast
                               .dcUpdate(this.fpYearObject.id, updatedNextFP)
                               .then(next)
                               .catch(bad);
                         })
-                        .catch(bad);
+                        .catch((err) => {
+                           this.log(
+                              this._instance,
+                              "Error setting next FP Year Status = Active"
+                           );
+                           this.onError(this._instance, err);
+                           bad(err);
+                        });
                   })
             )
             // 4. Find first fiscal month in the next fiscal year (M1)
@@ -394,9 +413,9 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
                         return bad(new Error("Could not found FP month field"));
                      }
 
-                     let fpMonthStartField = this.fpMonthObject.fields(
-                        (f) => f.id == this.fieldFPMonthStart
-                     )[0];
+                     let fpMonthStartField = this.fpMonthObject.fieldByID(
+                        this.fieldFPMonthStart
+                     );
 
                      if (!fpMonthStartField) {
                         this.log(
@@ -466,16 +485,21 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
                         populate: true,
                      };
 
-                     this.glObject
-                        .model()
-                        .findAll(cond, null, req)
+                     this._req
+                        .retry(() =>
+                           this.glObject.model().findAll(cond, null, req)
+                        )
                         .then((rows) => {
                            this.nextBalances = rows || [];
 
                            this.log(instance, "Found next M1 Balances");
                            next();
                         })
-                        .catch(bad);
+                        .catch((err) => {
+                           this.log(instance, "Error finding M1 Balances");
+                           this.onError(this._instance, err);
+                           bad(err);
+                        });
                   })
             )
             // 6. Update M1 Balances
@@ -497,9 +521,9 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
                         );
                      }
 
-                     let accNumberField = this.accObject.fields(
-                        (f) => f.id == this.fieldAccNumber
-                     )[0];
+                     let accNumberField = this.accObject.fieldByID(
+                        this.fieldAccNumber
+                     );
                      if (!accNumberField) {
                         this.log(
                            instance,
@@ -510,9 +534,9 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
                         );
                      }
 
-                     let accTypeField = this.accObject.fields(
-                        (f) => f.id == this.fieldAccType
-                     )[0];
+                     let accTypeField = this.accObject.fieldByID(
+                        this.fieldAccType
+                     );
                      if (!accTypeField) {
                         this.log(
                            instance,
@@ -523,9 +547,9 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
                         );
                      }
 
-                     let glStartField = this.glObject.fields(
-                        (f) => f.id == this.fieldGLStartBalance
-                     )[0];
+                     let glStartField = this.glObject.fieldByID(
+                        this.fieldGLStartBalance
+                     );
                      if (!glStartField) {
                         this.log(
                            instance,
@@ -536,9 +560,9 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
                         );
                      }
 
-                     let glRunningField = this.glObject.fields(
-                        (f) => f.id == this.fieldGLRunningBalance
-                     )[0];
+                     let glRunningField = this.glObject.fieldByID(
+                        this.fieldGLRunningBalance
+                     );
                      if (!glRunningField) {
                         this.log(
                            instance,
@@ -549,9 +573,7 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
                         );
                      }
 
-                     let glRcField = this.glObject.fields(
-                        (f) => f.id == this.fieldGLrc
-                     )[0];
+                     let glRcField = this.glObject.fieldByID(this.fieldGLrc);
                      if (!glRcField) {
                         this.log(instance, "Could not found GL RC field");
                         return bad(new Error("Could not found GL RC field"));
@@ -625,43 +647,55 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
                         if (values) {
                            tasks.push(
                               new Promise((go, fail) => {
-                                 this.glObject
-                                    .model()
-                                    .update(
-                                       b[this.glObject.PK()],
-                                       values,
-                                       null,
-                                       trx
+                                 this._req
+                                    .retry(() =>
+                                       this.glObject
+                                          .model()
+                                          .update(
+                                             b[this.glObject.PK()],
+                                             values,
+                                             null,
+                                             trx
+                                          )
                                     )
                                     .then((updatedGL) => {
                                        // Broadcast the update
-                                       // sails.sockets.broadcast(
-                                       //    this.glObject.id,
-                                       //    "ab.datacollection.update",
-                                       //    {
-                                       //       objectId: this.glObject.id,
-                                       //       data: updatedGL,
-                                       //    }
-                                       // );
                                        this._req.broadcast
                                           .dcUpdate(this.glObject.id, updatedGL)
                                           .then(go)
                                           .catch(fail);
                                     })
-                                    .catch(fail);
+                                    .catch((err) => {
+                                       this.onError(this._instance, err);
+                                       fail(err);
+                                    });
                               })
                            );
                         }
                      });
 
-                     Promise.all(tasks).then(() => next());
+                     Promise.all(tasks)
+                        .then(() => next())
+                        .catch((err) => {
+                           this.log(
+                              instance,
+                              "Error Updating GL Object Values"
+                           );
+                           this.onError(instance, err);
+                           bad(err);
+                        });
                   })
             )
             // Final step
             .then(() => {
                this.log(instance, "I'm done.");
                this.stateCompleted(instance);
-               return Promise.resolve(true);
+               return true;
+            })
+            .catch((err) => {
+               this.log(instance, "Error FPYearClose");
+               this.onError(instance, err);
+               throw err;
             })
       );
    }
