@@ -225,7 +225,8 @@ module.exports = class ABIndex extends ABIndexCore {
                   // Create new Index
                   else {
                      // ALTER TABLE {tableName} ADD INDEX {indexName} ({columnNames})
-                     return table.index(columnNames, indexName).catch((err) => {
+                     return table.index(columnNames, indexName);
+                     /*.catch((err) => {
                         // if it is a duplicate keyname error, this is probably already created?
                         if (err.code == "ER_DUP_KEYNAME") return;
 
@@ -239,6 +240,7 @@ module.exports = class ABIndex extends ABIndexCore {
 
                         throw err;
                      });
+                     */
                   }
                });
             })

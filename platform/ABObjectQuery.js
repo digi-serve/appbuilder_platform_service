@@ -3,6 +3,13 @@ const _ = require("lodash");
 const ABObjectQueryCore = require("../core/ABObjectQueryCore");
 const ABFieldConnect = require("./dataFields/ABFieldConnect");
 
+function quoteMe(text) {
+   return text
+      .split(".")
+      .map((t) => "`" + t + "`")
+      .join(".");
+}
+
 module.exports = class ABClassQuery extends ABObjectQueryCore {
    ///
    /// Migration Services
@@ -632,7 +639,10 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
                whereClause = "{table}.`{column}` = {linkTable}.`{linkId}`"
                   .replace("{table}", f.dbPrefix())
                   .replace("{column}", fieldConnect.columnName)
-                  .replace("{linkTable}", objectNumber.dbTableName(true))
+                  .replace(
+                     "{linkTable}",
+                     quoteMe(objectNumber.dbTableName(true))
+                  )
                   .replace(
                      "{linkId}",
                      fieldCustomIndex
@@ -655,7 +665,10 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
                if (!connectedField) return;
 
                whereClause = "{linkTable}.`{linkColumn}` = {table}.`{id}`"
-                  .replace("{linkTable}", objectNumber.dbTableName(true))
+                  .replace(
+                     "{linkTable}",
+                     quoteMe(objectNumber.dbTableName(true))
+                  )
                   .replace("{linkColumn}", connectedField.columnName)
                   .replace("{table}", f.dbPrefix())
                   .replace(
@@ -674,19 +687,27 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
                let fieldLink = fieldConnect.fieldLink;
                if (!fieldLink) return;
 
-               joinClause = " INNER JOIN {joinTable} ON {joinTable}.`{linkObjectName}` = {linkTable}.`{linkColumn}` "
-                  .replace(/{joinTable}/g, fieldConnect.joinTableName(true))
-                  .replace(/{linkObjectName}/g, objectNumber.name)
-                  .replace(/{linkTable}/g, objectNumber.dbTableName(true))
-                  .replace(/{linkColumn}/g, objectNumber.PK());
+               joinClause =
+                  " INNER JOIN {joinTable} ON {joinTable}.`{linkObjectName}` = {linkTable}.`{linkColumn}` "
+                     .replace(/{joinTable}/g, fieldConnect.joinTableName(true))
+                     .replace(/{linkObjectName}/g, objectNumber.name)
+                     .replace(
+                        /{linkTable}/g,
+                        quoteMe(objectNumber.dbTableName(true))
+                     )
+                     .replace(/{linkColumn}/g, objectNumber.PK());
 
-               whereClause = "{joinTable}.`{joinColumn}` = {table}.`{id}` AND {linkTable}.`{column}` IS NOT NULL"
-                  .replace(/{joinTable}/g, fieldConnect.joinTableName(true))
-                  .replace(/{joinColumn}/g, fieldConnect.object.name)
-                  .replace(/{table}/g, f.dbPrefix())
-                  .replace(/{id}/g, fieldConnect.object.PK())
-                  .replace(/{linkTable}/g, objectNumber.dbTableName(true))
-                  .replace(/{column}/g, fieldNumber.columnName);
+               whereClause =
+                  "{joinTable}.`{joinColumn}` = {table}.`{id}` AND {linkTable}.`{column}` IS NOT NULL"
+                     .replace(/{joinTable}/g, fieldConnect.joinTableName(true))
+                     .replace(/{joinColumn}/g, fieldConnect.object.name)
+                     .replace(/{table}/g, f.dbPrefix())
+                     .replace(/{id}/g, fieldConnect.object.PK())
+                     .replace(
+                        /{linkTable}/g,
+                        quoteMe(objectNumber.dbTableName(true))
+                     )
+                     .replace(/{column}/g, fieldNumber.columnName);
             }
 
             let colFormat = (
@@ -698,7 +719,7 @@ module.exports = class ABClassQuery extends ABObjectQueryCore {
                " ) as `{displayPrefix}.{displayName}`"
             ) // add object's name to alias
                .replace(/{FN}/g, functionName)
-               .replace(/{linkTable}/g, objectNumber.dbTableName(true))
+               .replace(/{linkTable}/g, quoteMe(objectNumber.dbTableName(true)))
                .replace(/{linkColumn}/g, fieldNumber.columnName)
                .replace(/{displayPrefix}/g, f.alias ? f.alias : obj.name)
                .replace(/{displayName}/g, f.columnName);

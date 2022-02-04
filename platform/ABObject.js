@@ -423,24 +423,30 @@ module.exports = class ABClassObject extends ABObjectCore {
     * @return {Promise}
     */
    migrateCreateFields(req, knex) {
+      // normal fields don't depend on other fields to be created first.
+      // connect and combine fields depend on other fields being created 1st.
+      // so we track them to be created in later steps.
       var connectFields = this.connectFields();
+      var combinedFields = this.fields((f) => f?.key == "combined");
+      var nonNormalFields = connectFields.concat(combinedFields);
+
       return Promise.resolve()
          .then(() => {
             //// NOTE: NOW the table is created
-            //// let's go add our Fields to it:
+            //// let's go add our normal fields to it:
             let fieldUpdates = [];
 
             let normalFields = this.fields(
-               (f) =>
-                  f &&
-                  !connectFields.find(
-                     (c) => c.id == f.id
-                  ) /* f.key != "connectObject" */
+               (f) => f && !nonNormalFields.find((c) => c.id == f.id)
             );
 
             // {fix} ER_TABLE_EXISTS_ERROR: Table '`appbuilder-admin`.`#sql-alter-1-67`' already exists"
             // switch to performing field migrations in Sequence:
             return this.migrateFieldsSequential(normalFields, req, knex);
+         })
+         .then(() => {
+            // Now our base fields are there, create our combined fields
+            return this.migrateFieldsSequential(combinedFields, req, knex);
          })
          .then(() => {
             // Now Create our indexes
@@ -449,6 +455,13 @@ module.exports = class ABClassObject extends ABObjectCore {
          .then(() => {
             // finally create any connect Fields
             return this.migrateFieldsSequential(connectFields, req, knex);
+         })
+         .catch((err) => {
+            this.AB.notify.developer(err, {
+               context:
+                  "ABObject:migrateCreateFields(): Error migrating fields",
+            });
+            throw err;
          });
    }
 
@@ -2358,12 +2371,13 @@ module.exports = class ABClassObject extends ABObjectCore {
          };
 
          // create sub-query to get values from MN table
-         condition.value = "(SELECT `{sourceFkName}` FROM `{joinTable}` WHERE `{targetFkName}` {ops} '{percent}{value}{percent}')"
-            .replace("{sourceFkName}", sourceFkName)
-            .replace("{joinTable}", joinTable)
-            .replace("{targetFkName}", targetFkName)
-            .replace("{ops}", mnOperators[condition.rule])
-            .replace("{value}", condition.value);
+         condition.value =
+            "(SELECT `{sourceFkName}` FROM `{joinTable}` WHERE `{targetFkName}` {ops} '{percent}{value}{percent}')"
+               .replace("{sourceFkName}", sourceFkName)
+               .replace("{joinTable}", joinTable)
+               .replace("{targetFkName}", targetFkName)
+               .replace("{ops}", mnOperators[condition.rule])
+               .replace("{value}", condition.value);
 
          condition.value =
             condition.rule == "contains" || condition.rule == "not_contains"
