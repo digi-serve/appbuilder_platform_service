@@ -102,6 +102,7 @@ module.exports = class SubProcess extends SubProcessCore {
          while (subTasks && subTasks.length > 0) {
             for (let t of subTasks) {
                try {
+                  taskElements.push(t);
                   let isDone = await t.do(instance, dbTransaction);
                   if (isDone) {
                      let nextTasks = t.nextTasks(
