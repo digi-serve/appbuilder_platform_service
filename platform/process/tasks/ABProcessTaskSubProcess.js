@@ -20,7 +20,7 @@ module.exports = class SubProcess extends SubProcessCore {
    async do(instance, trx) {
       if (!this.isEnable || !this.parameterId) {
          this.stateCompleted(instance);
-         return Promise.resolve(true);
+         return true;
       }
 
       // Pull the entry data to sub process
@@ -31,7 +31,7 @@ module.exports = class SubProcess extends SubProcessCore {
 
       if (processData == null) {
          this.stateCompleted(instance);
-         return Promise.resolve(true);
+         return true;
       }
       // Convert the entry data to an array
       else if (processData && !Array.isArray(processData)) {
@@ -136,6 +136,6 @@ module.exports = class SubProcess extends SubProcessCore {
       }
 
       this.stateCompleted(instance);
-      return Promise.resolve(true);
+      return true;
    }
 };
