@@ -7,6 +7,7 @@
  */
 
 const ABQLRowUpdateCore = require("../../core/ql/ABQLRowUpdateCore.js");
+const _ = require("lodash");
 
 class ABQLRowUpdate extends ABQLRowUpdateCore {
    // constructor(attributes, prevOP, task, application) {
@@ -111,7 +112,7 @@ class ABQLRowUpdate extends ABQLRowUpdateCore {
                         field.columnName
                      ] = this.task.process.processData(this.task, [
                         instance,
-                        processField.key
+                        processField.key,
                      ]);
                   }
                }
@@ -126,7 +127,10 @@ class ABQLRowUpdate extends ABQLRowUpdateCore {
             var id = context.data[PK];
 
             // call .requestParams to set default values and reformat value properly
-            updateParams = context.object.requestParams(updateParams);
+            var updateParams = _.merge(
+               context.object.requestParams(updateParams),
+               context.object.requestRelationParams(updateParams)
+            );
 
             // Perform the update.
 
