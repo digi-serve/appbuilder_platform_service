@@ -1083,10 +1083,9 @@ module.exports = class ABModel extends ABModelCore {
                         .replace("{columnName}", field.columnName);
 
                      // eslint-disable-next-line no-unused-vars  -- Phasing this section out
-                     let languageWhere =
-                        '`{prefix}`.`language_code` = "{languageCode}"'
-                           .replace("{prefix}", prefix)
-                           .replace("{languageCode}", userData.languageCode);
+                     let languageWhere = '`{prefix}`.`language_code` = "{languageCode}"'
+                        .replace("{prefix}", prefix)
+                        .replace("{languageCode}", userData.languageCode);
 
                      // if (glue == "or") Query.orWhereRaw(languageWhere);
                      // else Query.whereRaw(languageWhere);
@@ -1115,13 +1114,12 @@ module.exports = class ABModel extends ABModelCore {
                      transCol = "`" + transCol.split(".").join("`.`") + "`"; // "{prefix}.translations";
                   }
 
-                  condition.key =
-                     this.AB.Knex.connection(/* connectionName */).raw(
-                        'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({transCol}, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({transCol}, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
-                           .replace(/{transCol}/g, transCol)
-                           .replace(/{languageCode}/g, userData.languageCode)
-                           .replace(/{columnName}/g, field.columnName)
-                     );
+                  condition.key = this.AB.Knex.connection(/* connectionName */).raw(
+                     'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({transCol}, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({transCol}, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
+                        .replace(/{transCol}/g, transCol)
+                        .replace(/{languageCode}/g, userData.languageCode)
+                        .replace(/{columnName}/g, field.columnName)
+                  );
                }
             }
 
@@ -1694,6 +1692,7 @@ module.exports = class ABModel extends ABModelCore {
       // query relation data
       if (query.withGraphFetched) {
          var relationNames = [];
+         var nameHash = {};
          if (populate) {
             this.object
                .connectFields()
@@ -1713,6 +1712,8 @@ module.exports = class ABModel extends ABModelCore {
                   }
 
                   relationNames.push(relationName);
+                  nameHash[relationName] = nameHash[relationName] || [];
+                  nameHash[relationName].push(f);
 
                   // Get translation data of External object
                   if (
@@ -1734,13 +1735,42 @@ module.exports = class ABModel extends ABModelCore {
             relationNames.push("translations");
          }
 
+         var finalRelationNames = _.uniq(relationNames);
+
+         // TODO: test for faulty relationNames
+         /*
+         if (finalRelationNames.length != relationNames.length) {
+            var duplicateRelations = Object.keys(nameHash)
+               .map((k) =>
+                  nameHash[k].length > 1
+                     ? { relation: k, fields: nameHash[k] }
+                     : null
+               )
+               .filter((m) => m);
+            this.AB.notify.builder(
+               new Error(
+                  `Object[${this.object.name}] seems to have duplicate relations defined.`
+               ),
+               {
+                  context:
+                     "ABModel.queryPopulate(): duplicate relations defined",
+                  object: this.object,
+                  relationNames,
+                  duplicateRelations,
+               }
+            );
+         }
+         */
+
          // if (relationNames.length > 0) console.log(relationNames);
-         query.withGraphFetched(`[${relationNames.join(", ")}]`).modifiers({
-            // if the linked object's PK is uuid, then exclude .id
-            unselectId: (builder) => {
-               builder.omit(["id"]);
-            },
-         });
+         query
+            .withGraphFetched(`[${finalRelationNames.join(", ")}]`)
+            .modifiers({
+               // if the linked object's PK is uuid, then exclude .id
+               unselectId: (builder) => {
+                  builder.omit(["id"]);
+               },
+            });
 
          // Exclude .id column
          if (this.object.PK() === "uuid") query.omit(this.modelKnex(), ["id"]);
@@ -1785,11 +1815,10 @@ module.exports = class ABModel extends ABModelCore {
                      prefix
                   );
                } else {
-                  sortClause =
-                     'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({prefix}.`translations`, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({prefix}.`translations`, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
-                        .replace(/{prefix}/g, orderField.dbPrefix())
-                        .replace("{languageCode}", userData.languageCode)
-                        .replace("{columnName}", orderField.columnName);
+                  sortClause = 'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({prefix}.`translations`, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({prefix}.`translations`, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
+                     .replace(/{prefix}/g, orderField.dbPrefix())
+                     .replace("{languageCode}", userData.languageCode)
+                     .replace("{columnName}", orderField.columnName);
                }
             }
             // If we are just sorting a field it is much simpler
