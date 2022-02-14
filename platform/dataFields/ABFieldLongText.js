@@ -143,6 +143,10 @@ module.exports = class ABFieldLongText extends ABFieldLongTextCore {
     */
    jsonSchemaProperties(obj) {
       // take a look here:  http://json-schema.org/example1.html
+      var maxLength = 4294967295;
+      // {int}
+      // a longtext type can support up to 4,294,967,295 characters.
+      // (https://blog.softhints.com/mysql-varchar-or-text-for-long-text-fields/)
 
       if (this.settings.supportMultilingual) {
          // make sure our translations  column is setup:
@@ -166,7 +170,7 @@ module.exports = class ABFieldLongText extends ABFieldLongTextCore {
          if (!obj.translations.items.properties[this.columnName]) {
             obj.translations.items.properties[this.columnName] = {
                type: "string",
-               maxLength: 5000,
+               maxLength,
             };
          }
       } else {
@@ -174,7 +178,7 @@ module.exports = class ABFieldLongText extends ABFieldLongTextCore {
          if (!obj[this.columnName]) {
             obj[this.columnName] = {
                anyOf: [
-                  { type: "string", maxLength: 5000 },
+                  { type: "string", maxLength },
                   { type: "number" },
                   { type: "null" },
                ],

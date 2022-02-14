@@ -598,10 +598,10 @@ module.exports = class ABModel extends ABModelCore {
     *
     * @param {string} id
     *       the uuid of this object that is relating to these values
-    * @param {string} field
+    * @param {string} fieldRef
     *       a reference to the object.fields() that we are connecting to
     *       can be either .uuid or .columnName
-    * @param {array} values
+    * @param {array} value
     *       one or more values to create a connection to.
     *       these can be either .uuid values, or full {obj} values.
     * @param {Knex.Transaction?} trx - [optional]
@@ -2562,4 +2562,3 @@ function updateTranslationsValues(AB, object, id, translations, isInsert) {
 
    return Promise.all(tasks);
 }
-
