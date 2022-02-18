@@ -240,7 +240,14 @@ module.exports = class ABClassObject extends ABObjectCore {
                // pluck the filter that refer to a field in this object
                var myFieldIDs = this.fields().map((f) => f.id);
                var relatedRules = [];
+               var isAllowAll = false;
+               // {bool}
+               // if the user has a role that allows all access, then skip any
+               // filters.
                (list || []).forEach((scope) => {
+                  if (scope.allowAll) {
+                     isAllowAll = true;
+                  }
                   if (scope.Filters && scope.Filters.rules) {
                      (scope.Filters.rules || []).forEach((r) => {
                         if (myFieldIDs.indexOf(r.key) > -1) {
@@ -251,7 +258,7 @@ module.exports = class ABClassObject extends ABObjectCore {
                });
 
                // if there are Rules that relate to this object
-               if (relatedRules.length > 0) {
+               if (!isAllowAll && relatedRules.length > 0) {
                   // we now have to apply our ScopeRules
                   var ScopeRules = {
                      glue: "or",
@@ -1090,9 +1097,11 @@ module.exports = class ABClassObject extends ABObjectCore {
     *          username: {string},
     *          languageCode: {string}, - 'en', 'th'
     *       }
+    * @param {ABUtil.reqService} req
+    *        the request object for the job driving the migrateCreate().
     * @return {Promise}
     */
-   reduceConditions(_where, userData) {
+   reduceConditions(_where, userData, req) {
       // run the options.where through our existing policy filters
       // get array of policies to run through
       let processPolicy = (indx, cb) => {
@@ -1102,14 +1111,21 @@ module.exports = class ABClassObject extends ABObjectCore {
             // load the policy
             let policy = PolicyList[indx];
 
-            policy(this.AB, _where, this, userData, (err) => {
-               if (err) {
-                  cb(err);
-               } else {
-                  // try the next one
-                  processPolicy(indx + 1, cb);
-               }
-            });
+            policy(
+               this.AB,
+               _where,
+               this,
+               userData,
+               (err) => {
+                  if (err) {
+                     cb(err);
+                  } else {
+                     // try the next one
+                     processPolicy(indx + 1, cb);
+                  }
+               },
+               req
+            );
             /*
              * OLD FORMAT:
              *
@@ -2371,13 +2387,12 @@ module.exports = class ABClassObject extends ABObjectCore {
          };
 
          // create sub-query to get values from MN table
-         condition.value =
-            "(SELECT `{sourceFkName}` FROM `{joinTable}` WHERE `{targetFkName}` {ops} '{percent}{value}{percent}')"
-               .replace("{sourceFkName}", sourceFkName)
-               .replace("{joinTable}", joinTable)
-               .replace("{targetFkName}", targetFkName)
-               .replace("{ops}", mnOperators[condition.rule])
-               .replace("{value}", condition.value);
+         condition.value = "(SELECT `{sourceFkName}` FROM `{joinTable}` WHERE `{targetFkName}` {ops} '{percent}{value}{percent}')"
+            .replace("{sourceFkName}", sourceFkName)
+            .replace("{joinTable}", joinTable)
+            .replace("{targetFkName}", targetFkName)
+            .replace("{ops}", mnOperators[condition.rule])
+            .replace("{value}", condition.value);
 
          condition.value =
             condition.rule == "contains" || condition.rule == "not_contains"

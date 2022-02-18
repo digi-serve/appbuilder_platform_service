@@ -9,7 +9,7 @@
  *
  */
 
-module.exports = function (AB, where, object, userData, next) {
+module.exports = function (AB, where, object, userData, next, req) {
    // Transition: AB, where, object, userConditions
 
    // our QB Conditions look like:
@@ -59,9 +59,16 @@ module.exports = function (AB, where, object, userData, next) {
       return;
    }
 
-   parseQueryCondition(AB, where, object, userData, (err) => {
-      next(err);
-   });
+   parseQueryCondition(
+      AB,
+      where,
+      object,
+      userData,
+      (err) => {
+         next(err);
+      },
+      req
+   );
 };
 
 function findDcEntry(_where) {
@@ -87,7 +94,7 @@ function findDcEntry(_where) {
    }
 }
 
-function parseQueryCondition(AB, _where, object, userData, cb) {
+function parseQueryCondition(AB, _where, object, userData, cb, req) {
    var cond = findDcEntry(_where);
    if (!cond) {
       cb();
@@ -151,7 +158,7 @@ function parseQueryCondition(AB, _where, object, userData, cb) {
                newKey = object.PK(); // 'id';  // the final filter needs to be 'id IN []', so 'id'
                parseColumn = object.PK(); // 'id';  // make sure we pull our 'id' values from the query
 
-               continueSingle(newKey, parseColumn, objectColumn);
+               continueSingle(newKey, parseColumn, objectColumn, req);
             } else {
                // this is a linkField IN QUERY filter:
 
@@ -161,9 +168,7 @@ function parseQueryCondition(AB, _where, object, userData, cb) {
                })[0];
                if (!field) {
                   // ok, maybe we passed in a field.id:
-                  field = object.fields((f) => {
-                     return f.id == cond.key;
-                  })[0];
+                  field = object.fieldByID(cond.key);
                   if (!field) {
                      var err = AB.toError(
                         "Unable to resolve condition field.",
@@ -200,7 +205,7 @@ function parseQueryCondition(AB, _where, object, userData, cb) {
                      // make this the queryColumn:
                      objectColumn =
                         sourceObject.dbTableName(true) + "." + parseColumn;
-                     continueSingle(newKey, parseColumn, objectColumn);
+                     continueSingle(newKey, parseColumn, objectColumn, req);
                      break;
 
                   case "many:one":
@@ -220,7 +225,7 @@ function parseQueryCondition(AB, _where, object, userData, cb) {
                      // make this the queryColumn:
                      objectColumn =
                         sourceObject.dbTableName(true) + "." + parseColumn;
-                     continueSingle(newKey, parseColumn, objectColumn);
+                     continueSingle(newKey, parseColumn, objectColumn, req);
                      break;
 
                   case "many:many":
@@ -285,12 +290,13 @@ function parseQueryCondition(AB, _where, object, userData, cb) {
                                     myPK = field.indexField2.columnName;
                                  }
 
-                                 buildCondition(myPK, myIds);
+                                 buildCondition(myPK, myIds, req);
                               })
                               .catch((err) => {
                                  cb(err);
                               });
-                        }
+                        },
+                        req
                      );
                      break;
                }
@@ -299,7 +305,7 @@ function parseQueryCondition(AB, _where, object, userData, cb) {
             // buildCondition
             // final step of recreating the condition into the
             // proper Field IN []  format;
-            function buildCondition(newKey, ids) {
+            function buildCondition(newKey, ids, req) {
                // convert cond into an IN or NOT IN
                cond.key = newKey;
                var convert = {
@@ -312,19 +318,21 @@ function parseQueryCondition(AB, _where, object, userData, cb) {
                // console.log(".... new Condition:", cond);
 
                // final step, so parse another condition:
-               parseQueryCondition(AB, _where, object, userData, cb);
+               parseQueryCondition(AB, _where, object, userData, cb, req);
             }
 
             // processQueryValues
             // this step runs the specified Query and pulls out an array of
             // ids that can be used for filtering.
-            // @param {string} parseColumn  the name of the column of data to pull from the Query
-            // @param {string} objectColumn  [table].[column] format of the data to pull from Query
-            // @param {fn} done  a callback routine  done(err, data);
-            function processQueryValues(parseColumn, objectColumn, done) {
-               sourceObject
-                  .model()
-                  .findAll(
+            // @param {string} parseColumn
+            //        the name of the column of data to pull from the Query
+            // @param {string} objectColumn
+            //        [table].[column] format of the data to pull from Query
+            // @param {fn} done
+            //        a callback routine  done(err, data);
+            function processQueryValues(parseColumn, objectColumn, done, req) {
+               req.retry(() =>
+                  sourceObject.model().findAll(
                      {
                         columnNames: [objectColumn],
                         // {array} columnNames
@@ -334,8 +342,10 @@ function parseQueryCondition(AB, _where, object, userData, cb) {
                         where: defDC.settings.objectWorkspace.filterConditions,
                         sort: defDC.settings.objectWorkspace.sortFields || [],
                      },
-                     userData
+                     userData,
+                     req
                   )
+               )
                   .then((data) => {
                      // console.log(".... query data : ", data);
                      var ids = data
@@ -349,6 +359,12 @@ function parseQueryCondition(AB, _where, object, userData, cb) {
                      // buildCondition(newKey, ids);
                   })
                   .catch((err) => {
+                     // this.AB.notify.developer(err, {
+                     //    context: `ABModelConvertDataCollectionCondition:processQueryValues()`,
+                     //    parseColumn,
+                     //    objectColumn,
+                     // });
+
                      var error = AB.toError("Error running query:", {
                         location: "ABModelConvertDataCollectionCondition",
                         message: err.toString(),
@@ -400,14 +416,19 @@ function parseQueryCondition(AB, _where, object, userData, cb) {
             // continueSingle
             // in 3 of our 4 cases we only need to run a single Query to
             // finish our conversion.
-            function continueSingle(newKey, parseColumn, queryColumn) {
-               processQueryValues(parseColumn, queryColumn, (err, ids) => {
-                  if (err) {
-                     cb(err);
-                  } else {
-                     buildCondition(newKey, ids);
-                  }
-               });
+            function continueSingle(newKey, parseColumn, queryColumn, req) {
+               processQueryValues(
+                  parseColumn,
+                  queryColumn,
+                  (err, ids) => {
+                     if (err) {
+                        cb(err);
+                     } else {
+                        buildCondition(newKey, ids, req);
+                     }
+                  },
+                  req
+               );
             }
          });
    } // if !cond

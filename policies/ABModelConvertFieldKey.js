@@ -12,12 +12,11 @@ module.exports = function (req, res, next) {
 
    AppBuilder.routes
       .verifyAndReturnObject(req, res)
-      .catch(next)
       .then(function (object) {
          where.rules
             .filter((r) => AppBuilder.rules.isUuid(r.key))
             .forEach((r) => {
-               var field = object.fields((f) => f.id == r.key)[0];
+               var field = object.fieldByID(r.key);
                if (field) {
                   // convert field's id to column name
                   r.key = "`{dbName}`.`{tableName}`.`{columnName}`"
@@ -76,5 +75,6 @@ module.exports = function (req, res, next) {
             });
 
          next();
-      });
+      })
+      .catch(next);
 };

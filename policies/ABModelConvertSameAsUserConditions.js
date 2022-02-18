@@ -9,7 +9,7 @@
  *
  */
 
-module.exports = function (AB, where, object, userData, next) {
+module.exports = function (AB, where, object, userData, next, req) {
    // our QB Conditions look like:
    // {
    //   "glue": "and",
@@ -57,9 +57,16 @@ module.exports = function (AB, where, object, userData, next) {
       return;
    }
 
-   parseCondition(AB, where, object, userData, (err) => {
-      next(err);
-   });
+   parseCondition(
+      AB,
+      where,
+      object,
+      userData,
+      (err) => {
+         next(err);
+      },
+      req
+   );
 };
 
 /**
@@ -91,7 +98,7 @@ function findEntry(_where) {
    }
 }
 
-function parseCondition(AB, where, object, userData, cb) {
+function parseCondition(AB, where, object, userData, cb, req) {
    var cond = findEntry(where);
    if (!cond) {
       cb();
@@ -101,114 +108,156 @@ function parseCondition(AB, where, object, userData, cb) {
       // for one.  continue DepthFirstSearch until you do find one.
       // return @lookups which is an array of object lookup operations to translate the
       // data from the found object to our current object.
-      processObjectWithUser(object, [], userData, (err, lookups) => {
-         // if an error results, cancel process.
-         if (err) {
-            cb(err);
-            return;
-         }
-
-         // process each of the lookups and return the final set of data values
-         // that represent the current users version of the data.
-         processLookup(AB, lookups, userData, (err, data) => {
+      processObjectWithUser(
+         object,
+         [],
+         userData,
+         (err, lookups) => {
+            // if an error results, cancel process.
             if (err) {
                cb(err);
                return;
             }
 
-            if (!data) {
-               // looks like we did not return any data form the lookups.
-               // this means the connected user didn't have any relevant data.
+            // process each of the lookups and return the final set of data values
+            // that represent the current users version of the data.
+            processLookup(
+               AB,
+               lookups,
+               userData,
+               (err, data) => {
+                  if (err) {
+                     cb(err);
+                     return;
+                  }
 
-               // so if 'same_as_user' was the rule:
-               // we return a false statement:
-               // 1 == 0
+                  if (!data) {
+                     // looks like we did not return any data form the lookups.
+                     // this means the connected user didn't have any relevant data.
 
-               // otherwise we return a true statement:
-               // 1 == 1
+                     // so if 'same_as_user' was the rule:
+                     // we return a false statement:
+                     // 1 == 0
 
-               cond.key = "1";
+                     // otherwise we return a true statement:
+                     // 1 == 1
 
-               if (cond.rule == "same_as_user") {
-                  cond.value = "0";
-               } else {
-                  cond.value = "1";
-               }
+                     cond.key = "1";
 
-               cond.rule = "equals";
-
-               // we've updated this condition, now try to process another one:
-               parseCondition(AB, where, object, userData, cb);
-            } else {
-               //// QUESTION:  if data == [], what does this mean?
-               // we want entries that either match / or don't match
-
-               // current cond should be in format:
-               //  cond.key   : the sql column name
-               //  cond.rule  : the rule key:
-               //  cond.value :  (empty)
-
-               // cond.key = cond.key;     // cond.key can either be field.columnName or field.id
-               // convert cond.key into the columnName for the query (if it is an .id )
-               var field = object.fields().filter((f) => {
-                  return f.id == cond.key;
-               })[0];
-               if (field) {
-                  cond.key = field.columnName;
-               }
-
-               // cond.rule  : should be either ["in", "not_in"]
-               var convert = {
-                  same_as_user: "in",
-                  not_same_as_user: "not_in",
-               };
-               cond.rule = convert[cond.rule];
-
-               // cond.value : should be an [] of values that matched the [user]
-               // cond.key is the field in data that we want to match on
-               var fieldValues;
-
-               // if this is a Query, and the field is a connectObject
-               // then we have to decode the data:
-               if (object.joins && field.key == "connectObject") {
-                  var relationKey = cond.alias + "." + field.relationName();
-                  var connectedObjects = data.map((d) => {
-                     return d[relationKey];
-                  });
-                  fieldValues = connectedObjects.map((d) => {
-                     if (typeof d == "string") {
-                        d = JSON.parse(d);
+                     if (cond.rule == "same_as_user") {
+                        cond.value = "0";
+                     } else {
+                        cond.value = "1";
                      }
-                     return d.id || d["uuid"];
-                  });
-               } else {
-                  fieldValues = data.map((d) => {
-                     return d[cond.key];
-                  });
-               }
 
-               // return an array of unique values (no repeats)
-               cond.value = AB.uniq(fieldValues);
+                     cond.rule = "equals";
 
-               // we've updated this condition, now try to process another one:
-               parseCondition(AB, where, object, userData, cb);
-            }
-         }); // processLookup()
-      }); // processObjectWithUser()
+                     // we've updated this condition, now try to process another one:
+                     parseCondition(AB, where, object, userData, cb, req);
+                  } else {
+                     //// QUESTION:  if data == [], what does this mean?
+                     // we want entries that either match / or don't match
+
+                     // current cond should be in format:
+                     //  cond.key   : the sql column name / "this_object"
+                     //  cond.rule  : the rule key:
+                     //  cond.value :  (empty)
+
+                     // cond.value : should be an [] of values that matched the [user]
+                     // cond.key is the field in data that we want to match on
+                     var fieldValues;
+
+                     // special Case:
+                     if (cond.key == "this_object") {
+                        // We need to convert the condition into a obj.PK IN []
+                        cond.key = object.PK();
+                        if (object.isQuery) {
+                           cond.key = `BASE_OBJECT.${cond.key}`;
+                        }
+
+                        fieldValues = data.map((d) => {
+                           return d[cond.key];
+                        });
+                     } else {
+                        // cond.key = cond.key;     // cond.key can either be field.columnName or field.id
+                        // convert cond.key into the columnName for the query (if it is an .id )
+                        var field = object.fieldByID(cond.key);
+                        if (field) {
+                           cond.key = field.columnName;
+                        } else {
+                           var error = new Error(
+                              `Unable to resolve [${cond.key}] into a valid field for object[${object.label}][${object.id}]`
+                           );
+                           AB.notify.developer(error, {
+                              context:
+                                 "ABModelConvertSameAsUserConditions:ParseCondition(): process result",
+                              cond,
+                              object: object.toObj(),
+                           });
+                           cb(error);
+                           return;
+                        }
+
+                        // if this is a Query, and the field is a connectObject
+                        // then we have to decode the data:
+                        if (object.isQuery && field.key == "connectObject") {
+                           var relationKey =
+                              cond.alias + "." + field.relationName();
+                           var connectedObjects = data.map((d) => {
+                              return d[relationKey];
+                           });
+                           fieldValues = connectedObjects.map((d) => {
+                              if (typeof d == "string") {
+                                 d = JSON.parse(d);
+                              }
+                              return d.id || d["uuid"];
+                           });
+                        } else {
+                           fieldValues = data.map((d) => {
+                              return d[cond.key];
+                           });
+                        }
+                     }
+
+                     // cond.rule  : should be either ["in", "not_in"]
+                     var convert = {
+                        same_as_user: "in",
+                        not_same_as_user: "not_in",
+                     };
+                     cond.rule = convert[cond.rule];
+
+                     // return an array of unique values (no repeats)
+                     cond.value = AB.uniq(fieldValues);
+
+                     // we've updated this condition, now try to process another one:
+                     parseCondition(AB, where, object, userData, cb, req);
+                  }
+               },
+               [],
+               req
+            ); // processLookup()
+         },
+         req
+      ); // processObjectWithUser()
    } // if !cond
 }
 
-// processObjectWithUser
-// attempt to find the closest object to the provided obj, that has a [user] field.
-// @param {ABObj} obj The current obj to evaluate
-// @param {array} listAlreadyChecked  an array of obj.id's that have already been checked.
-//                                    To prevent circular searches
-// @param {obj} userData
-//       The SiteUser information from the person making this request
-// @param {fn}    cb  A node style callback (err, data)  that is called when we have finished
-// @return  null if no object with a [user] field is found.
-//          {array} of lookup definitions from found obj
-function processObjectWithUser(obj, listAlreadyChecked, userData, cb) {
+/**
+ * @function processObjectWithUser
+ * attempt to find the closest object to the provided obj, that has a [user] field.
+ * @param {ABObj} obj
+ *        The current obj to evaluate
+ * @param {array} listAlreadyChecked
+ *        an array of obj.id's that have already been checked.
+ *        To prevent circular searches
+ * @param {obj} userData
+ *        The SiteUser information from the person making this request
+ * @param {fn} cb
+ *        A node style callback (err, data)  that is called when we have finished
+ * @return  null if no object with a [user] field is found.
+ *          {array} of lookup definitions from found obj
+ */
+function processObjectWithUser(obj, listAlreadyChecked, userData, cb, req) {
    // add the current obj into our list of objects being checked:
    listAlreadyChecked.push(obj.id);
 
@@ -218,12 +267,20 @@ function processObjectWithUser(obj, listAlreadyChecked, userData, cb) {
    if (userField) {
       // this obj has a USER field!!!
 
+      var colName = userField.columnName;
+      if (obj.isQuery) {
+         // be sure to dereference the alias on a Query:
+         if (userField.alias) {
+            colName = `${userField.alias}.${userField.columnName}`;
+         }
+      }
+
       // return a lookup for this object, with entries where userField == current user
       var cond = {
          glue: "and",
          rules: [
             {
-               key: userField.columnName,
+               key: colName,
                rule: "equals",
                value: userData.username,
             },
@@ -241,9 +298,7 @@ function processObjectWithUser(obj, listAlreadyChecked, userData, cb) {
       cb(null, stack);
       return;
    } else {
-      var connectionFields = obj.fields((f) => {
-         return f.key == "connectObject";
-      });
+      var connectionFields = obj.connectFields();
 
       if (connectionFields.length == 0) {
          cb(null, null);
@@ -251,20 +306,33 @@ function processObjectWithUser(obj, listAlreadyChecked, userData, cb) {
       }
 
       // search through a list of fields to find a connected obj that has a User field
-      ProcessField(connectionFields, obj, listAlreadyChecked, userData, cb);
+      ProcessField(
+         connectionFields,
+         obj,
+         listAlreadyChecked,
+         userData,
+         cb,
+         req
+      );
    } // if !user
 } // function  processObjectWithUser()
 
 /**
  * @function ProcessField
  * process a list of connected fields for obj that might have a User Field.
- * @param {array} list of connectedObj fields to search for User Fields
- * @param {ABObject} obj the current obj that these fields are a part of
- * @param {array} listAlreadyChecked an array of obj.id's that have already been checked
- * @param {req} req  the sails request object (that contains our user info)
- * @param {fn} cb  the callback to call once we found our Obj.UserField
+ * @param {array} list
+ *        connectedObj fields to search for User Fields
+ * @param {ABObject} obj
+ *        the current obj that these fields are a part of
+ * @param {array} listAlreadyChecked
+ *        an array of obj.id's that have already been checked
+ * @param {obj} userData
+ * @param {fn} cb
+ *        the callback to call once we found our Obj.UserField
+ * @param {ABUtils.request} req
+ *        the request object that represents the current job we are performing.
  */
-function ProcessField(list, obj, listAlreadyChecked, userData, cb) {
+function ProcessField(list, obj, listAlreadyChecked, userData, cb, req) {
    // if we got to the end, then there were no successful fields:
    if (list.length == 0) {
       cb(null, null);
@@ -276,13 +344,13 @@ function ProcessField(list, obj, listAlreadyChecked, userData, cb) {
       var connectedObj = currField.datasourceLink; // obj.application.objects((o)=>{ return o.id == currField.linkObject; })[0];
       if (!connectedObj) {
          // if no connectedObj, then on to next field:
-         ProcessField(list, obj, listAlreadyChecked, userData, cb);
+         ProcessField(list, obj, listAlreadyChecked, userData, cb, req);
          return;
       }
 
       // if this object has already been checked, then continue to next Field:
       if (listAlreadyChecked.indexOf(connectedObj.id) != -1) {
-         ProcessField(list, obj, listAlreadyChecked, userData, cb);
+         ProcessField(list, obj, listAlreadyChecked, userData, cb, req);
          return;
       }
 
@@ -294,7 +362,7 @@ function ProcessField(list, obj, listAlreadyChecked, userData, cb) {
          (err, result) => {
             // if no results with this object, move on to next Field:
             if (!result) {
-               ProcessField(list, obj, listAlreadyChecked, userData, cb);
+               ProcessField(list, obj, listAlreadyChecked, userData, cb, req);
             } else {
                // we now have a solution.  So figure out how to decode the data returned
                // by connectedObj to limit the current obj:
@@ -359,7 +427,8 @@ function ProcessField(list, obj, listAlreadyChecked, userData, cb) {
                      break;
                } // end switch
             } // end if(result)
-         }
+         },
+         req
       ); // ProcessObjectWithUser()
    } // if list.length > 0
 } // end ProcessField()
@@ -379,7 +448,7 @@ function ProcessField(list, obj, listAlreadyChecked, userData, cb) {
  * @param {fn}    cb    call back for when the processing is finished.
  * @param {array} data  array of rows of data returned from previous lookup.
  */
-function processLookup(AB, list, userData, cb, data) {
+function processLookup(AB, list, userData, cb, data, req) {
    if (!list) {
       // this is the case where there were no objects found.
       cb(null, null);
@@ -414,12 +483,20 @@ function processLookup(AB, list, userData, cb, data) {
    //     }
    // }
    if (lookup.cond) {
-      lookup.object
-         .model()
-         .findAll({ where: lookup.cond }, userData)
+      // NOTE: .findAll() : here we only want to lookup our provided condition, so skip
+      // any existing conditions tied to the object.
+      req.retry(() =>
+         lookup.object
+            .model()
+            .findAll(
+               { where: lookup.cond, skipExistingConditions: true },
+               userData,
+               req
+            )
+      )
          .then((rows) => {
             // now pass these back to the next lookup:
-            processLookup(AB, list, userData, cb, rows);
+            processLookup(AB, list, userData, cb, rows, req);
 
             // TODO: refactor to not use cb, but instead chain promises???
             return null;
@@ -452,12 +529,19 @@ function processLookup(AB, list, userData, cb, data) {
          ],
       };
 
-      lookup.obj
-         .model()
-         .findAll({ where: cond }, userData) // just send the user data
+      req.retry(
+         () =>
+            lookup.obj
+               .model()
+               .findAll(
+                  { where: cond, skipExistingConditions: true },
+                  userData,
+                  req
+               ) // just send the user data
+      )
          .then((items) => {
             // now pass these back to the next lookup:
-            processLookup(AB, list, userData, cb, items);
+            processLookup(AB, list, userData, cb, items, req);
             return null;
          })
          .catch((err) => {
@@ -485,7 +569,7 @@ function processLookup(AB, list, userData, cb, data) {
          .where(lookup.field, "IN", values2)
          .then((items) => {
             // now pass these back to the next lookup:
-            processLookup(AB, list, userData, cb, items);
+            processLookup(AB, list, userData, cb, items, req);
             return null;
          })
          .catch((err) => {

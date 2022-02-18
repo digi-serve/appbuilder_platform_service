@@ -129,10 +129,15 @@ module.exports = class ABModelQuery extends ABModel {
                      options.where.rules.length
                   ) {
                      this.object
-                        .reduceConditions(options.where, userData)
+                        .reduceConditions(options.where, userData, req)
                         .then(() => {
                            // when finished populate our Find Conditions
-                           this.queryConditions(query, options.where, userData);
+                           this.queryConditions(
+                              query,
+                              options.where,
+                              userData,
+                              req
+                           );
                            next();
                         })
                         .catch(bad);
@@ -203,9 +208,7 @@ module.exports = class ABModelQuery extends ABModel {
                                  Object.keys(tran).forEach((tranKey) => {
                                     if (tranKey == "language_code") return;
 
-                                    var newTranKey = "{objectName}.{propertyName}"
-                                       .replace("{objectName}", objectName)
-                                       .replace("{propertyName}", tranKey);
+                                    var newTranKey = `${objectName}.${tranKey}`;
 
                                     // add new property name
                                     newTran[newTranKey] = tran[tranKey];

@@ -27,7 +27,7 @@ const ABFieldUser = require("../platform/dataFields/ABFieldUser");
  * @param {fn} next
  *       The node style callback(err, data) for this process.
  */
-module.exports = function (AB, where, object, userData, next) {
+module.exports = function (AB, where, object, userData, next, req) {
    // our QB Conditions look like:
    // {
    //   "glue": "and",
@@ -75,9 +75,16 @@ module.exports = function (AB, where, object, userData, next) {
       return;
    }
 
-   parseQueryCondition(AB, where, object, userData, (err) => {
-      next(err);
-   });
+   parseQueryCondition(
+      AB,
+      where,
+      object,
+      userData,
+      (err) => {
+         next(err);
+      },
+      req
+   );
 };
 
 /**
@@ -109,8 +116,6 @@ module.exports = function (AB, where, object, userData, next) {
  *       [table].[column] format of the data to pull from Query
  * @param {fn} done
  *       a callback routine  done(err, data);
- * @param {int} numRetries
- *       a running count of how many times this query has been attempted.
  */
 function processQuery(
    AB,
@@ -121,18 +126,20 @@ function processQuery(
    queryField,
    queryColumn,
    cb,
-   numRetries = 1
+   req
 ) {
    // run the Query, and parse out that data
    // var query = null;
-   QueryObj.model()
-      .findAll(
+   req.retry(() =>
+      QueryObj.model().findAll(
          {
             columnNames: [queryColumn],
             ignoreIncludeId: true, // we want real id
          },
-         userData
+         userData,
+         req
       )
+   )
       .then((data) => {
          // sails.log.info(".... query data : ", data);
          var values = data
@@ -191,30 +198,9 @@ function processQuery(
          cb();
       })
       .catch((err) => {
-         // Retry if the error was a Time Out:
-         var errString = err.toString();
-         if (errString.indexOf("ETIMEDOUT") > -1) {
-            if (numRetries <= 5) {
-               processQuery(
-                  AB,
-                  userData,
-                  QueryObj,
-                  cond,
-                  field,
-                  queryField,
-                  queryColumn,
-                  cb,
-                  numRetries + 1
-               );
-
-               return;
-            }
-         }
-
          var error = AB.toError("Error running query:", {
             location: "ABModelConvertQueryFieldConditions",
             sql: err._sql || "-- unknown --",
-            numRetries: numRetries,
             error: err,
          });
 
@@ -269,7 +255,7 @@ function findQueryEntry(where) {
  * @param {fn} cb
  *       The node style callback(err, data) for this process.
  */
-function parseQueryCondition(AB, where, object, userData, cb) {
+function parseQueryCondition(AB, where, object, userData, cb, req) {
    var cond = findQueryEntry(where);
    if (!cond) {
       cb();
@@ -344,7 +330,7 @@ function parseQueryCondition(AB, where, object, userData, cb) {
             newKey = object.PK(); // 'id';  // the final filter needs to be 'id IN []', so 'id'
             parseColumn = object.PK(); // 'id';  // make sure we pull our 'id' values from the query
 
-            continueSingle(newKey, parseColumn, queryColumn);
+            continueSingle(newKey, parseColumn, queryColumn, req);
          } else {
             // this is a linkField IN QUERY filter:
 
@@ -395,8 +381,9 @@ function parseQueryCondition(AB, where, object, userData, cb) {
                      cb(err);
                      return;
                   }
-                  parseQueryCondition(AB, where, object, userData, cb);
-               }
+                  parseQueryCondition(AB, where, object, userData, cb, req);
+               },
+               req
             );
          }
       } // if !QueryObj

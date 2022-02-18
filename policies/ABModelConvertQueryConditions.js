@@ -24,7 +24,7 @@
  * @param {fn} next
  *       The node style callback(err, data) for this process.
  */
-module.exports = function (AB, where, object, userData, next) {
+module.exports = function (AB, where, object, userData, next, req) {
    // our QB Conditions look like:
    // {
    //   "glue": "and",
@@ -72,9 +72,16 @@ module.exports = function (AB, where, object, userData, next) {
       return;
    }
 
-   parseQueryCondition(AB, where, object, userData, (err) => {
-      next(err);
-   });
+   parseQueryCondition(
+      AB,
+      where,
+      object,
+      userData,
+      (err) => {
+         next(err);
+      },
+      req
+   );
 };
 
 /**
@@ -94,25 +101,18 @@ module.exports = function (AB, where, object, userData, next) {
  *       [table].[column] format of the data to pull from Query
  * @param {fn} done
  *       a callback routine  done(err, data);
- * @param {int} numRetries
- *       a running count of how many times this query has been attempted.
  */
-function processQueryValues(
-   AB,
-   userData,
-   QueryObj,
-   queryColumn,
-   done,
-   numRetries = 1
-) {
-   QueryObj.model()
-      .findAll(
+function processQueryValues(AB, userData, QueryObj, queryColumn, done, req) {
+   req.retry(() =>
+      QueryObj.model().findAll(
          {
             columnNames: [queryColumn],
             ignoreIncludeId: true, // we want real id
          },
-         userData
+         userData,
+         req
       )
+   )
       .then((data) => {
          // sails.log.info(".... query data : ", data);
          var ids = data
@@ -125,26 +125,9 @@ function processQueryValues(
          done(null, ids);
       })
       .catch((err) => {
-         // Retry if the error was a Time Out:
-         var errString = err.toString();
-         if (errString.indexOf("ETIMEDOUT") > -1) {
-            if (numRetries <= 5) {
-               processQueryValues(
-                  AB,
-                  userData,
-                  QueryObj,
-                  queryColumn,
-                  done,
-                  numRetries + 1
-               );
-               return;
-            }
-         }
-
          var error = AB.toError("Error running query:", {
             location: "ABModelConvertQueryConditions",
             sql: err._sql || "-- unknown --",
-            numRetries: numRetries,
             error: err,
          });
 
@@ -166,34 +149,56 @@ function continueSingle(
    cond,
    newKey,
    queryColumn,
-   linkCase
+   linkCase,
+   req
 ) {
    // let the processQueryValues() perform any retris then format the result
-   processQueryValues(AB, userData, QueryObj, queryColumn, (err, ids) => {
-      if (err) {
-         cb(err);
-      } else {
-         // convert cond into an IN or NOT IN
-         cond.key = newKey;
-         var convert = {
-            in_query: "in",
-            not_in_query: "not_in",
-         };
-         cond.rule = convert[cond.rule];
-         cond.value = AB.uniq(ids); // use _.uniq() to only return unique values (no duplicates)
+   processQueryValues(
+      AB,
+      userData,
+      QueryObj,
+      queryColumn,
+      (err, ids) => {
+         if (err) {
+            cb(err);
+         } else {
+            // convert cond into an IN or NOT IN
+            cond.key = newKey;
+            var convert = {
+               in_query: "in",
+               not_in_query: "not_in",
+            };
+            cond.rule = convert[cond.rule];
+            cond.value = AB.uniq(ids); // use _.uniq() to only return unique values (no duplicates)
 
-         // M:1 - filter __relation column in MySQL view with string
-         if (linkCase == "many:one") {
-            cond.rule = "contains";
-            cond.value = ids[0] || "";
+            // M:1 - filter __relation column in MySQL view with string
+            if (linkCase == "many:one") {
+               cond.rule = "contains";
+               cond.value = ids[0] || "";
+            }
+
+            // if we didn't recover any values, then Simplify
+            if (!cond.value || cond.value.length < 1) {
+               // we need to negate this ...
+
+               if (cond.rule == "in") {
+                  // prevent any matches
+                  cond.value = "0";
+               } else {
+                  // allow all matches
+                  cond.value = "1";
+               }
+
+               cond.key = "1";
+               cond.rule = "equals";
+            }
+
+            // final step, so parse another condition:
+            parseQueryCondition(AB, where, object, userData, cb, req);
          }
-
-         // sails.log.info(".... new Condition:", cond);
-
-         // final step, so parse another condition:
-         parseQueryCondition(AB, where, object, userData, cb);
-      }
-   });
+      },
+      req
+   );
 }
 
 /**
@@ -230,17 +235,19 @@ function findQueryEntry(_where) {
  * Find a Rule entry and convert it.  If none found, then return from
  * our filter.
  * @param {ABFactory} AB
- *       the tenant based ABFactory for this Request
+ *        the tenant based ABFactory for this Request
  * @param {obj} where
- *       the QB condition object being evaluated
+ *        the QB condition object being evaluated
  * @param {ABObject|ABObjectQuery} object
- *       the ABObjectXXX object evaluating the query conditions.
+ *        the ABObjectXXX object evaluating the query conditions.
  * @param {obj} userData
- *       Any specific information relate to the user making this request.
+ *        Any specific information relate to the user making this request.
  * @param {fn} cb
- *       The node style callback(err, data) for this process.
+ *        The node style callback(err, data) for this process.
+ * @param {ABUtil.request} req
+ *        The request object that represents this job.
  */
-function parseQueryCondition(AB, where, object, userData, cb) {
+function parseQueryCondition(AB, where, object, userData, cb, req) {
    var cond = findQueryEntry(where);
    if (!cond) {
       cb();
@@ -293,7 +300,7 @@ function parseQueryCondition(AB, where, object, userData, cb) {
 
             let alias = QueryObj.objectAlias(object.id);
 
-            queryColumn = alias + "." + object.PK();
+            queryColumn = `${alias}.${object.PK()}`;
             newKey = object.PK(); // 'id';  // the final filter needs to be 'id IN []', so 'id'
             parseColumn = object.PK(); // 'id';  // make sure we pull our 'id' values from the query
 
@@ -307,7 +314,8 @@ function parseQueryCondition(AB, where, object, userData, cb) {
                cond,
                newKey,
                queryColumn,
-               "this_object"
+               "this_object",
+               req
             );
          } else {
             // this is a linkField IN QUERY filter:
@@ -318,9 +326,7 @@ function parseQueryCondition(AB, where, object, userData, cb) {
             })[0];
             if (!field) {
                // ok, maybe we passed in a field.id:
-               field = object.fields((f) => {
-                  return f.id == cond.key;
-               })[0];
+               field = object.fieldByID(cond.key);
                if (!field) {
                   var err3 = AB.toError("Unable to resolve condition field.", {
                      location: "ABModelConvertQueryConditions",
@@ -397,7 +403,8 @@ function parseQueryCondition(AB, where, object, userData, cb) {
                         cond,
                         newKey,
                         queryColumn,
-                        linkCase
+                        linkCase,
+                        req
                      );
                      break;
 
@@ -444,7 +451,8 @@ function parseQueryCondition(AB, where, object, userData, cb) {
                         cond,
                         newKey,
                         queryColumn,
-                        linkCase
+                        linkCase,
+                        req
                      );
                      break;
 
@@ -467,8 +475,18 @@ function parseQueryCondition(AB, where, object, userData, cb) {
                   //     break;
 
                   case "many:many":
+                     // Transition Question:
+                     // is this first case correct?  not sure that newKey is being
+                     // generated correctly.
+                     // or that we shouldn't be using field.datasourceLink.xxx instead.
+
                      // ABObjectQuery
                      if (object.objectAlias) {
+                        debugger;
+                        console.error(
+                           "!!! FOUND A IN_QUERY with an object.objectAlias"
+                        );
+
                         newKey = `${object.objectAlias(
                            field.object.id
                         )}.${field.object.PK()}`;
@@ -481,17 +499,44 @@ function parseQueryCondition(AB, where, object, userData, cb) {
                      }
                      // ABObject
                      else {
-                        newKey = field.object.PK();
+                        // newKey = field.object.PK();
 
-                        let dbTableName = field.object.dbTableName(true);
-                        if (dbTableName) {
-                           newKey = `${dbTableName}.${newKey}`;
-                        }
+                        // let dbTableName = field.object.dbTableName(true);
+                        // if (dbTableName) {
+                        //    newKey = `${dbTableName}.${newKey}`;
+                        // }
 
-                        parseColumn = field.object.PK();
+                        // parseColumn = field.object.PK();
 
+                        // queryColumn = `${QueryObj.objectAlias(
+                        //    field.object.id
+                        // )}.${parseColumn}`;
+
+                        // Q: does this need to be the current field.id?
+                        // newKey = field.object.PK();
+
+                        // let dbTableName = field.object.dbTableName(true);
+                        // if (dbTableName) {
+                        //    newKey = `${dbTableName}.${newKey}`;
+                        // }
+
+                        // on an M:N connection we need our condition to
+                        // be a
+                        // cond.key = this Connect field.id
+                        // cond.rule = [in, not_in]
+                        // cond.values = [ ids ]
+                        //
+                        newKey = field.id;
+
+                        // the parseColumn is the data pulled from our
+                        // datasourceLink
+                        parseColumn = field.datasourceLink.PK();
+
+                        // if this is a query, be sure to de-reference the
+                        // object alias:
+                        // BASE_OBJECT.[PK]
                         queryColumn = `${QueryObj.objectAlias(
-                           field.object.id
+                           field.datasourceLink.id
                         )}.${parseColumn}`;
                      }
 
@@ -505,7 +550,8 @@ function parseQueryCondition(AB, where, object, userData, cb) {
                         cond,
                         newKey,
                         queryColumn,
-                        linkCase
+                        linkCase,
+                        req
                      );
                      break;
                   // case "many:many":
@@ -587,7 +633,7 @@ function parseQueryCondition(AB, where, object, userData, cb) {
          //    // sails.log.info(".... new Condition:", cond);
 
          //    // final step, so parse another condition:
-         //    parseQueryCondition(AB, _where, object, userData, cb);
+         //    parseQueryCondition(AB, _where, object, userData, cb, req);
          // }
       } // if !QueryObj
    } // if !cond
