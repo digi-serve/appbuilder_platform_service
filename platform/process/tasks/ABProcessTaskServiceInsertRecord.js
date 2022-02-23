@@ -196,7 +196,14 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
          // data[__relation][COLUMN_NAME]
          if (fieldId.indexOf("|") > -1) {
             let linkFieldIds = fieldId.split("|");
-            let field = object.fields((f) => f.id == linkFieldIds[0])[0];
+            let field = object.fields(
+               (f) =>
+                  f.id == linkFieldIds[0] ||
+                  f.columnName == linkFieldIds[0] ||
+                  (f.translations || []).filter(
+                     (tran) => tran.label == linkFieldIds[0]
+                  ).length
+            )[0];
             if (!field) return null;
 
             let objectLink = field.datasourceLink;
@@ -206,7 +213,12 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                columnName = objectLink.PK();
             } else {
                let fieldLink = objectLink.fields(
-                  (f) => f.id == linkFieldIds[1]
+                  (f) =>
+                     f.id == linkFieldIds[1] ||
+                     f.columnName == linkFieldIds[1] ||
+                     (f.translations || []).filter(
+                        (tran) => tran.label == linkFieldIds[1]
+                     ).length
                )[0];
                if (!fieldLink) return null;
 
