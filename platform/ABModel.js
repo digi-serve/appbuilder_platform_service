@@ -666,7 +666,7 @@ module.exports = class ABModel extends ABModelCore {
       if (!Array.isArray(value)) value = [value];
       value.forEach((v) => {
          if (typeof v == "object") {
-            var val = v[fieldPK];
+            let val = v[fieldPK] || v["id"] || v;
             if (val) {
                useableValues.push(val);
             }
