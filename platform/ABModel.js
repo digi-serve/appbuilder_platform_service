@@ -75,6 +75,11 @@ module.exports = class ABModel extends ABModelCore {
                   }
 
                   addRelationParams[colName].forEach((val) => {
+                     // no insert row
+                     if (returnVals == null) {
+                        return;
+                     }
+
                      // insert relation values of relation
                      // NOTE: doing the fn call here to properly preserve the
                      // closure(val) property.
@@ -94,6 +99,12 @@ module.exports = class ABModel extends ABModelCore {
                doSequential(relateTasks, (err) => {
                   if (err) {
                      return reject(err);
+                  }
+
+                  // no insert row
+                  if (returnVals == null) {
+                     resolve(null);
+                     return;
                   }
 
                   // make sure we get a fully updated value for
@@ -1173,6 +1184,10 @@ module.exports = class ABModel extends ABModelCore {
 
       // make sure a value is properly Quoted:
       function quoteMe(value) {
+         if (value && value.replace) {
+            // FIX: You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near '
+            value = value.replace(/'/g, "''");
+         }
          return "'" + value + "'";
       }
 
