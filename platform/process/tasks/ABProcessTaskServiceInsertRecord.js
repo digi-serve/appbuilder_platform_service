@@ -148,7 +148,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
       let startElement = this.startElement;
       if (!startElement) return null;
 
-      return startElement.myState(instance).data;
+      return (startElement.myState(instance) || {}).data;
    }
 
    /**
