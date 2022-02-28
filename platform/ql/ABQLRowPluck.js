@@ -46,7 +46,9 @@ class ABQLRowPluck extends ABQLRowPluckCore {
                      {
                         fieldID: this.fieldID,
                      },
-                     this
+                     this,
+                     null,
+                     this.AB
                   );
                   setPluck.object = this.object;
                   return setPluck.do(prepareChain, instance, trx, req);
