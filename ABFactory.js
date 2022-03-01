@@ -72,6 +72,12 @@ class ABFactory extends ABFactoryCore {
       // This is a cached Objection(knex) cache of our Object Models for
       // interacting with our DB tables using Objection.js
 
+      this.__Cache = {};
+      // {hash} { serviceKey : { serviceCacheData } }
+      // allow a service to store temporary cache information associated
+      // with the current ABFactory.  This data is only around as long as
+      // this factory is.
+
       //
       // Config Data
       //
@@ -462,6 +468,28 @@ class ABFactory extends ABFactoryCore {
             return newDef;
          }
       );
+   }
+
+   //
+   // Cached Data
+   //
+
+   /**
+    * @method cache()
+    * provide an interface for a service to store cached data.
+    * This data persists as long as the current ABFactory exists.
+    * @param {string} key
+    *        The unique key to retrieve the cached data.
+    * @param {various} data
+    *        Any type of data you want to store.
+    * @return {undefined | various}
+    */
+   cache(key, data) {
+      if (typeof data != "undefined") {
+         this.__Cache[key] = data;
+         return;
+      }
+      return this.__Cache[key];
    }
 
    /**

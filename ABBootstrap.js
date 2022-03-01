@@ -40,9 +40,17 @@ var Listener = null;
  */
 function staleHandler(req) {
    var tenantID = req.tenantID();
+   Factories[tenantID]?.emit("bootstrap.stale.reset");
    delete Factories[tenantID];
    req.log(`:: Definitions reset for tenant[${tenantID}]`);
 }
+
+var PendingFactory = {
+   /* tenantID : Promise */
+};
+// {hash}
+// A lookup of Pending Factory builds.  This prevents the SAME factory from
+// being built at the same time.
 
 module.exports = {
    init: (req) => {
@@ -66,49 +74,60 @@ module.exports = {
                   return;
                }
                req.log(`:: Loading Definitions for tenant[${tenantID}]`);
-               return queryAllDefinitions(req).then((defs) => {
-                  if (defs && Array.isArray(defs) && defs.length) {
-                     var hashDefs = {};
-                     defs.forEach((d) => {
-                        hashDefs[d.id] = d;
-                     });
+               if (!PendingFactory[tenantID]) {
+                  PendingFactory[tenantID] = queryAllDefinitions(req).then(
+                     (defs) => {
+                        if (defs && Array.isArray(defs) && defs.length) {
+                           var hashDefs = {};
+                           defs.forEach((d) => {
+                              hashDefs[d.id] = d;
+                           });
 
-                     var newFactory = new ABFactory(
-                        hashDefs,
-                        DefinitionManager,
-                        req.toABFactoryReq()
-                     );
+                           var newFactory = new ABFactory(
+                              hashDefs,
+                              DefinitionManager,
+                              req.toABFactoryReq()
+                           );
 
-                     // Reload our ABFactory whenever we detect any changes in
-                     // our definitions.  This should result in correct operation
-                     // even though changing definitions become an "expensive"
-                     // operation. (but only for designers)
-                     var resetOnEvents = [
-                        "definition.created",
-                        "definition.destroyed",
-                        "definition.updated",
-                     ];
-                     resetOnEvents.forEach((event) => {
-                        newFactory.on(event, () => {
-                           delete Factories[tenantID];
-                        });
-                     });
+                           newFactory.id = tenantID;
 
-                     Factories[tenantID] = newFactory;
+                           // Reload our ABFactory whenever we detect any changes in
+                           // our definitions.  This should result in correct operation
+                           // even though changing definitions become an "expensive"
+                           // operation. (but only for designers)
+                           var resetOnEvents = [
+                              "definition.created",
+                              "definition.destroyed",
+                              "definition.updated",
+                           ];
+                           resetOnEvents.forEach((event) => {
+                              newFactory.on(event, () => {
+                                 Factories[tenantID]?.emit(
+                                    "bootstrap.stale.reset"
+                                 );
+                                 delete Factories[tenantID];
+                              });
+                           });
 
-                     return newFactory.init();
-                  }
-                  req.notify.developer(
-                     new Error(
-                        `No Definitions returned for tenant[${tenantID}]`
-                     ),
-                     {
-                        context: "ABBootstrap.queryAllDefinitions()",
-                        tenantID,
-                        req,
+                           Factories[tenantID] = newFactory;
+                           delete PendingFactory[tenantID];
+
+                           return newFactory.init();
+                        }
+                        req.notify.developer(
+                           new Error(
+                              `No Definitions returned for tenant[${tenantID}]`
+                           ),
+                           {
+                              context: "ABBootstrap.queryAllDefinitions()",
+                              tenantID,
+                              req,
+                           }
+                        );
                      }
                   );
-               });
+               }
+               return PendingFactory[tenantID];
             })
             .then(() => {
                // initialize Listener if not initialized
