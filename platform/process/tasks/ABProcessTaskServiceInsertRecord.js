@@ -46,6 +46,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                pullDataTasks.push(
                   () =>
                      new Promise((next, bad) => {
+                        let PK = fieldRepeat.datasourceLink.PK();
                         this._req
                            .retry(() =>
                               fieldRepeat.datasourceLink.model().findAll(
@@ -54,15 +55,12 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                                        glue: "and",
                                        rules: [
                                           {
-                                             key: fieldRepeat.datasourceLink.PK(),
+                                             key: PK,
                                              rule: "equals",
-                                             value:
-                                                rData[
-                                                   fieldRepeat.datasourceLink.PK()
-                                                ],
+                                             value: rData[PK],
                                           },
                                        ],
-                                    }
+                                    },
                                  },
                                  null,
                                  req
@@ -86,7 +84,9 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
          tasks.push(
             Promise.resolve()
                .then(() => pullTask())
-               .then((val) => this._req.retry(() => this.object.model().create(val)))
+               .then((val) =>
+                  this._req.retry(() => this.object.model().create(val))
+               )
                // NOTE: .create() returns the fully populated instance already.
                // .then((record) =>
                //    this.object.model().findAll({
@@ -129,11 +129,19 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
     * @method processData()
     * return the current value requested for the given data key.
     * @param {obj} instance
+    * @param {string} key  (optional)
+    *        A reference for which data field we are wanting to return.
+    *        The format is `{task.id}.{key}`  where data[key] will result
+    *        in a stored value by this task.
+    *        If key is not provided, then we return our whole data value.
+    *        (see processDataPrevious() )
     * @return {mixed} | null
     */
    processData(instance, key) {
-      const parts = key.split(".");
-      if (parts[0] != this.id) return null;
+      if (key) {
+         const parts = key.split(".");
+         if (parts[0] != this.id) return null;
+      }
 
       let myState = this.myState(instance) || {};
       let data = myState.data;
@@ -365,7 +373,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                         if (processField) {
                            let processData = this.process.processData(this, [
                               instance,
-                              processField.key
+                              processField.key,
                            ]);
 
                            if (Array.isArray(processData))
@@ -387,7 +395,6 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                            "ABProcessTaskServiceInsertRecord:getDataValue():Case 4:  Invalid formula",
                         formula,
                         match,
-                        
                      });
                      evalValue = `!!Error [${formula}] !!`;
                   }
@@ -418,7 +425,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
 
                   let processData = this.process.processData(this, [
                      instance,
-                     key
+                     key,
                   ]);
                   if (processData == null) {
                      result[field.columnName] =
@@ -454,9 +461,8 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                         data = processData;
                      }
 
-                     result[field.columnName] = result[field.columnName].concat(
-                        data
-                     );
+                     result[field.columnName] =
+                        result[field.columnName].concat(data);
                   }
                   // If .field supports a single value, then it pull only the first value item.
                   else if (
