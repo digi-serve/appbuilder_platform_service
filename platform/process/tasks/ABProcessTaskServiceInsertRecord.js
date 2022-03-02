@@ -19,6 +19,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
     *                            false if task is still waiting
     */
    do(instance, trx, req) {
+      this._req = req;
       this.object = this.AB.objectByID(this.objectID);
       if (!this.object) {
          return this.errorConfig(
@@ -45,27 +46,27 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                pullDataTasks.push(
                   () =>
                      new Promise((next, bad) => {
-                        fieldRepeat.datasourceLink
-                           .model()
-                           .findAll(
-                              {
-                                 where: {
-                                    glue: "and",
-                                    rules: [
-                                       {
-                                          key: fieldRepeat.datasourceLink.PK(),
-                                          rule: "equals",
-                                          value:
-                                             rData[
-                                                fieldRepeat.datasourceLink.PK()
-                                             ],
-                                       },
-                                    ],
+                        this._req
+                           .retry(() =>
+                              fieldRepeat.datasourceLink.model().findAll(
+                                 {
+                                    where: {
+                                       glue: "and",
+                                       rules: [
+                                          {
+                                             key: fieldRepeat.datasourceLink.PK(),
+                                             rule: "equals",
+                                             value:
+                                                rData[
+                                                   fieldRepeat.datasourceLink.PK()
+                                                ],
+                                          },
+                                       ],
+                                    }
                                  },
-                                 populate: true,
-                              },
-                              null,
-                              req
+                                 null,
+                                 req
+                              )
                            )
                            .then((result) => {
                               next(this.getDataValue(instance, result[0]));
