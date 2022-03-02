@@ -86,7 +86,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
          tasks.push(
             Promise.resolve()
                .then(() => pullTask())
-               .then((val) => this.object.model().create(val))
+               .then((val) => this._req.retry(() => this.object.model().create(val)))
                // NOTE: .create() returns the fully populated instance already.
                // .then((record) =>
                //    this.object.model().findAll({
