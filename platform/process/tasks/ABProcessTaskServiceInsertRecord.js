@@ -110,16 +110,19 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
          );
       });
 
-      return Promise.all(tasks).then(
-         () =>
-            new Promise((next, bad) => {
-               this.stateUpdate(instance, {
-                  data: results,
-               });
-               this.stateCompleted(instance);
-               next(true);
-            })
-      );
+      return Promise.all(tasks)
+         .then(() => {
+            this.stateUpdate(instance, {
+               data: results,
+            });
+            this.stateCompleted(instance);
+            return true;
+         })
+         .catch((err) => {
+            this.log(instance, "Error completing Insert Record");
+            this.onError(instance, err);
+            throw err;
+         });
    }
 
    /**
