@@ -378,7 +378,19 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                      }
                   });
 
-                  let evalValue = eval(formula);
+                  let evalValue;
+                  try {
+                     evalValue = eval(formula);
+                  } catch (e) {
+                     this.AB.notify.builder(e, {
+                        context:
+                           "ABProcessTaskServiceInsertRecord:getDataValue():Case 4:  Invalid formula",
+                        formula,
+                        match,
+                        
+                     });
+                     evalValue = `!!Error [${formula}] !!`;
+                  }
 
                   if (
                      evalValue.toString &&
