@@ -46,7 +46,6 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                pullDataTasks.push(
                   () =>
                      new Promise((next, bad) => {
-                        let PK = fieldRepeat.datasourceLink.PK();
                         this._req
                            .retry(() =>
                               fieldRepeat.datasourceLink.model().findAll(
@@ -55,13 +54,15 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                                        glue: "and",
                                        rules: [
                                           {
-                                             key: PK,
+                                             key: fieldRepeat.datasourceLink.PK(),
                                              rule: "equals",
-                                             value: rData[PK],
+                                             value:
+                                                rData[
+                                                   fieldRepeat.datasourceLink.PK()
+                                                ],
                                           },
                                        ],
-                                    },
-                                    populate: true,
+                                    }
                                  },
                                  null,
                                  req
@@ -76,7 +77,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
             });
          }
       }
-      // Pull a single data entry to insert
+      // Pull a data to insert
       else {
          pullDataTasks.push(() => Promise.resolve(this.getDataValue(instance)));
       }
@@ -85,11 +86,26 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
          tasks.push(
             Promise.resolve()
                .then(() => pullTask())
-               .then((val) =>
-                  this._req.retry(() => this.object.model().create(val))
-               )
+               .then((val) => this._req.retry(() => this.object.model().create(val)))
+               // NOTE: .create() returns the fully populated instance already.
+               // .then((record) =>
+               //    this.object.model().findAll({
+               //       where: {
+               //          glue: "and",
+               //          rules: [
+               //             {
+               //                key: this.object.PK(),
+               //                rule: "equals",
+               //                value: record[this.object.PK()],
+               //             },
+               //          ],
+               //       },
+               //       populate: true,
+               //    }, null, req)
+               // )
                .then((result) => {
                   results.push(result);
+                  return Promise.resolve();
                })
          );
       });
@@ -116,7 +132,10 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
     * @return {mixed} | null
     */
    processData(instance, key) {
-      let myState = this.myState(instance);
+      const parts = key.split(".");
+      if (parts[0] != this.id) return null;
+
+      let myState = this.myState(instance) || {};
       let data = myState.data;
       if (data == null) return null;
 
@@ -133,7 +152,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
       let startElement = this.startElement;
       if (!startElement) return null;
 
-      return startElement.myState(instance).data;
+      return (startElement.myState(instance) || {}).data;
    }
 
    /**
@@ -181,7 +200,14 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
          // data[__relation][COLUMN_NAME]
          if (fieldId.indexOf("|") > -1) {
             let linkFieldIds = fieldId.split("|");
-            let field = object.fields((f) => f.id == linkFieldIds[0])[0];
+            let field = object.fields(
+               (f) =>
+                  f.id == linkFieldIds[0] ||
+                  f.columnName == linkFieldIds[0] ||
+                  (f.translations || []).filter(
+                     (tran) => tran.label == linkFieldIds[0]
+                  ).length
+            )[0];
             if (!field) return null;
 
             let objectLink = field.datasourceLink;
@@ -191,7 +217,12 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                columnName = objectLink.PK();
             } else {
                let fieldLink = objectLink.fields(
-                  (f) => f.id == linkFieldIds[1]
+                  (f) =>
+                     f.id == linkFieldIds[1] ||
+                     f.columnName == linkFieldIds[1] ||
+                     (f.translations || []).filter(
+                        (tran) => tran.label == linkFieldIds[1]
+                     ).length
                )[0];
                if (!fieldLink) return null;
 
@@ -208,7 +239,14 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
             if (fieldId == "PK") {
                columnName = object.PK();
             } else {
-               let field = object.fields((f) => f.id == fieldId)[0];
+               let field = object.fields(
+                  (f) =>
+                     f.id == fieldId ||
+                     f.columnName == fieldId ||
+                     (f.translations || []).filter(
+                        (tran) => tran.label == fieldId
+                     ).length
+               )[0];
                if (!field) return null;
 
                columnName = field.columnName;
@@ -245,7 +283,114 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                break;
             case "4": // formula value
                if (item.value) {
-                  let evalValue = eval(item.value);
+                  let formula = item.value || "";
+
+                  // pull [PARAMETER NAME] names
+                  let paramNames = formula.match(/\[(.*?)\]/g) || [];
+                  paramNames.forEach((match) => {
+                     let param = match.replace(/\[/g, "").replace(/\]/g, "");
+
+                     let sourceName = param.split(".")[0];
+                     let fieldName = param.split(".")[1];
+
+                     // Pull data from the start trigger
+                     // or a previous insert process task
+                     if (
+                        fieldName &&
+                        (sourceName == "startData" ||
+                           sourceName == "previousData")
+                     ) {
+                        // Pull an object
+                        let sourceObj =
+                           sourceName == "startData"
+                              ? this.objectOfStartElement
+                              : this.objectOfPrevElement;
+                        if (!sourceObj) return;
+
+                        // Pull a field
+                        let sourceField = sourceObj.fields((f) => {
+                           return (
+                              f.id == fieldName ||
+                              f.columnName == fieldName ||
+                              (f.translations || []).filter(
+                                 (tran) => tran.label == fieldName
+                              ).length
+                           );
+                        })[0];
+                        if (!sourceField) return;
+
+                        // Get value from a field that calculates value on fly
+                        if (sourceField.key == "calculate") {
+                           formula = formula.replace(
+                              match,
+                              sourceName == "startData"
+                                 ? sourceField.format(startData)
+                                 : sourceField.format(previousData)
+                           );
+                        } else {
+                           formula = formula.replace(
+                              match,
+                              sourceName == "startData"
+                                 ? startData[fieldName]
+                                 : previousData[fieldName]
+                           );
+                        }
+                     }
+                     // Pull data from the repeat data
+                     else if (sourceName == "repeatData") {
+                        let fieldRepeat = this.fieldRepeat;
+                        if (fieldRepeat || fieldRepeat.datasourceLink) {
+                           formula = formula.replace(
+                              match,
+                              getFieldValue(
+                                 fieldRepeat.datasourceLink,
+                                 fieldName,
+                                 rawData
+                              )
+                           );
+                        }
+                     }
+                     // Pull data from a saved parameter in the query task
+                     else {
+                        let processField = (
+                           this.process.processDataFields(this) || []
+                        ).filter(
+                           (opt) =>
+                              opt &&
+                              (opt.key == param ||
+                                 opt.value == param ||
+                                 opt.label == param)
+                        )[0];
+
+                        if (processField) {
+                           let processData = this.process.processData(this, [
+                              instance,
+                              processField.key
+                           ]);
+
+                           if (Array.isArray(processData))
+                              processData = processData.filter(
+                                 (d) => d != null
+                              );
+
+                           formula = formula.replace(match, processData);
+                        }
+                     }
+                  });
+
+                  let evalValue;
+                  try {
+                     evalValue = eval(formula);
+                  } catch (e) {
+                     this.AB.notify.builder(e, {
+                        context:
+                           "ABProcessTaskServiceInsertRecord:getDataValue():Case 4:  Invalid formula",
+                        formula,
+                        match,
+                        
+                     });
+                     evalValue = `!!Error [${formula}] !!`;
+                  }
 
                   if (
                      evalValue.toString &&
@@ -265,6 +410,65 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                   item.value,
                   rawData
                );
+               break;
+            case "6":
+               var paramKeys = (item.value || "").split(",");
+               (paramKeys || []).forEach((key) => {
+                  if (key == null) return;
+
+                  let processData = this.process.processData(this, [
+                     instance,
+                     key
+                  ]);
+                  if (processData == null) {
+                     result[field.columnName] =
+                        result[field.columnName] != null &&
+                        result[field.columnName] != ""
+                           ? result[field.columnName]
+                           : null;
+                     return;
+                  }
+
+                  // If .field is a connect field who has M:1 or M:N relations, then it will set value with an array
+                  let isMultipleValue =
+                     field.key == "connectObject" &&
+                     field.settings &&
+                     field.settings.linkType == "many";
+                  if (isMultipleValue) {
+                     result[field.columnName] = result[field.columnName] || [];
+
+                     // Reformat processData to be M:1 connect data value
+                     let data = [];
+                     if (data == null) {
+                        data = [];
+                     } else if (Array.isArray(processData)) {
+                        data = processData.filter((d) => d != null);
+                     } else if (
+                        typeof processData == "string" ||
+                        typeof processData == "number"
+                     ) {
+                        data = {};
+                        data["id"] = processData;
+                        data["uuid"] = processData;
+                     } else {
+                        data = processData;
+                     }
+
+                     result[field.columnName] = result[field.columnName].concat(
+                        data
+                     );
+                  }
+                  // If .field supports a single value, then it pull only the first value item.
+                  else if (
+                     result[field.columnName] == null ||
+                     result[field.columnName] == ""
+                  ) {
+                     result[field.columnName] =
+                        (Array.isArray(processData)
+                           ? processData.filter((d) => d != null)[0]
+                           : processData) || null;
+                  }
+               });
                break;
          }
       });

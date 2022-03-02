@@ -551,6 +551,10 @@ class ABFactory extends ABFactoryCore {
    //
    // Utilities
    //
+   clone(value) {
+      return _.clone(value);
+   }
+
    cloneDeep(value) {
       return _.cloneDeep(value);
    }
