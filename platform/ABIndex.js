@@ -150,77 +150,86 @@ module.exports = class ABIndex extends ABIndexCore {
                   // Create new Unique to table
                   if (this.unique) {
                      // Create Unique & Index
-                     return Promise.resolve()
-                        .then(() => {
-                           // NOTE: additional Promise.resolve() trying to catch a thrown error
-                           //       with knex.schema.raw()
-                           // Getting Error:
-                           // TypeError: Cannot read property 'queryContext' of undefined
-                           //  at Formatter.wrapAsIdentifier (/app/node_modules/knex/lib/formatter.js:190:39)
-                           //  at Formatter.wrapString (/app/node_modules/knex/lib/formatter.js:288:27)
-                           //  at Formatter.wrap (/app/node_modules/knex/lib/formatter.js:185:21)
-                           //  at Formatter.columnize (/app/node_modules/knex/lib/formatter.js:77:19)
-                           //  at /app/AppBuilder/platform/ABIndex.js:183:41
-                           //
-                           //  knex.client.formatter().columnize() :=> seems to be missing a '.builder'
-                           //  object in it's context.  This is causing the error.
-                           //
-                           //  Q: Is there a proper way to ensure the .builder object is established
-                           //     before we call this fn() ?
-                           //
-                           //       -> knex.queryBuilder().client.formatter().columnize() doesn't help.
-                           //
-                           //  A: current workaround (but not sure this is the RIGHT way to do it)
-                           //       knex.client.wrapIdentifier() for each columnName:
-                           // NOTE: using try{}catch(){} to help debug this problem:
-                           // try {
-                           return knex.schema
-                              .raw(
-                                 `ALTER TABLE ${tableName} ADD UNIQUE INDEX ${indexName}(${columnNames
-                                    .map((c) => knex.client.wrapIdentifier(c))
-                                    .join(", ")})`
-                              )
-                              .catch((err) => {
-                                 // if it is a duplicate keyname error, this is probably already created?
-                                 if (err.code == "ER_DUP_KEYNAME") return;
+                     return Promise.resolve().then(() => {
+                        // NOTE: additional Promise.resolve() trying to catch a thrown error
+                        //       with knex.schema.raw()
+                        // Getting Error:
+                        // TypeError: Cannot read property 'queryContext' of undefined
+                        //  at Formatter.wrapAsIdentifier (/app/node_modules/knex/lib/formatter.js:190:39)
+                        //  at Formatter.wrapString (/app/node_modules/knex/lib/formatter.js:288:27)
+                        //  at Formatter.wrap (/app/node_modules/knex/lib/formatter.js:185:21)
+                        //  at Formatter.columnize (/app/node_modules/knex/lib/formatter.js:77:19)
+                        //  at /app/AppBuilder/platform/ABIndex.js:183:41
+                        //
+                        //  knex.client.formatter().columnize() :=> seems to be missing a '.builder'
+                        //  object in it's context.  This is causing the error.
+                        //
+                        //  Q: Is there a proper way to ensure the .builder object is established
+                        //     before we call this fn() ?
+                        //
+                        //       -> knex.queryBuilder().client.formatter().columnize() doesn't help.
+                        //
+                        //  A: current workaround (but not sure this is the RIGHT way to do it)
+                        //       knex.client.wrapIdentifier() for each columnName:
+                        // NOTE: using try{}catch(){} to help debug this problem:
+                        // try {
+                        return knex.schema
+                           .raw(
+                              `ALTER TABLE ${tableName} ADD UNIQUE INDEX ${indexName}(${columnNames
+                                 .map((c) => knex.client.wrapIdentifier(c))
+                                 .join(", ")})`
+                           )
+                           .catch((err) => {
+                              // if it is a duplicate keyname error, this is probably already created?
+                              if (err.code == "ER_DUP_KEYNAME") return;
 
-                                 // otherwise we alert our developers
-                                 req.notify.developer(err, {
-                                    context: `ABIndex.migrateCreate() Unique: Table[${tableName}] Column[${columnNames.join(
-                                       ", "
-                                    )}] Index[${indexName}] `,
-                                    field: this,
-                                    AB: this.AB,
-                                 });
+                              // retry on Connection Error
+                              if (req.shouldRetry(err)) {
+                                 return this.migrateCreate(req, knex);
+                              }
 
-                                 throw err;
+                              // otherwise we alert our developers
+                              req.notify.developer(err, {
+                                 context: `ABIndex.migrateCreate() Unique: Table[${tableName}] Column[${columnNames.join(
+                                    ", "
+                                 )}] Index[${indexName}] `,
+                                 field: this,
+                                 AB: this.AB,
                               });
-                           // } catch (err) {
-                           //    req.notify.developer(err, {
-                           //       context: `.CATCH():  ABIndex.migrateCreate() Unique: Table[${tableName}] Column[${columnNames.join(
-                           //          ", "
-                           //       )}] Index[${indexName}] `,
-                           //       field: this,
-                           //       AB: this.AB,
-                           //    });
-                           //    return Promise.resolve();
-                           // }
-                        })
-                        .catch((err) => {
-                           // if it is a duplicate keyname error, this is probably already created?
-                           if (err.code == "ER_DUP_KEYNAME") return;
 
-                           // alert us of anything else:
-                           req.notify.developer(err, {
-                              context: `ABIndex.migrateCreate() Unique: Table[${tableName}] Column[${columnNames.join(
-                                 ", "
-                              )}] Index[${indexName}] `,
-                              field: this,
-                              AB: this.AB,
+                              throw err;
                            });
+                        // } catch (err) {
+                        //    req.notify.developer(err, {
+                        //       context: `.CATCH():  ABIndex.migrateCreate() Unique: Table[${tableName}] Column[${columnNames.join(
+                        //          ", "
+                        //       )}] Index[${indexName}] `,
+                        //       field: this,
+                        //       AB: this.AB,
+                        //    });
+                        //    return Promise.resolve();
+                        // }
+                     });
+                     // .catch((err) => {
+                     //    // if it is a duplicate keyname error, this is probably already created?
+                     //    if (err.code == "ER_DUP_KEYNAME") return;
 
-                           throw err;
-                        });
+                     //    // retry on Connection Error
+                     //    if (req.shouldRetry(err)) {
+                     //       return this.migrateCreate(req, knex);
+                     //    }
+
+                     //    // alert us of anything else:
+                     //    req.notify.developer(err, {
+                     //       context: `ABIndex.migrateCreate() Unique: Table[${tableName}] Column[${columnNames.join(
+                     //          ", "
+                     //       )}] Index[${indexName}] `,
+                     //       field: this,
+                     //       AB: this.AB,
+                     //    });
+
+                     //    throw err;
+                     // });
                   }
                   // Create new Index
                   else {
@@ -262,6 +271,11 @@ module.exports = class ABIndex extends ABIndexCore {
             .catch((err) => {
                // Not exists
                if (err.code == "ER_CANT_DROP_FIELD_OR_KEY") return resolve();
+
+               // retry on Connection Error
+               if (req.shouldRetry(err)) {
+                  return this.migrateDrop(req, knex).then(() => resolve());
+               }
 
                req.notify.developer(err, {
                   context: `ABIndex.migrateDrop(): Table[${tableName}] Index[${indexName}] `,
