@@ -76,8 +76,21 @@ module.exports = class ABClassObject extends ABObjectCore {
    fromValues(attributes) {
       super.fromValues(attributes);
 
+      // Make sure our table name is defined.
       if (this.tableName === "") {
-         this.tableName = this.AB.rules.toObjectNameFormat(this.name);
+         let app = this.AB.applicationByID(this.createdInAppID);
+         if (!app) {
+            this.tableName = this.AB.rules.toObjectNameFormat(this.name);
+         } else {
+            let appName = app.name || "GEN";
+            this.tableName = this.AB.rules.toObjectNameFormat(
+               `${appName}_${this.name}`
+            );
+         }
+
+         // knex does not like .(dot) in table and column names
+         // https://github.com/knex/knex/issues/2762
+         this.tableName = this.tableName.replace(/[^a-zA-Z0-9_ ]/gi, "");
       }
    }
 
@@ -2387,12 +2400,13 @@ module.exports = class ABClassObject extends ABObjectCore {
          };
 
          // create sub-query to get values from MN table
-         condition.value = "(SELECT `{sourceFkName}` FROM `{joinTable}` WHERE `{targetFkName}` {ops} '{percent}{value}{percent}')"
-            .replace("{sourceFkName}", sourceFkName)
-            .replace("{joinTable}", joinTable)
-            .replace("{targetFkName}", targetFkName)
-            .replace("{ops}", mnOperators[condition.rule])
-            .replace("{value}", condition.value);
+         condition.value =
+            "(SELECT `{sourceFkName}` FROM `{joinTable}` WHERE `{targetFkName}` {ops} '{percent}{value}{percent}')"
+               .replace("{sourceFkName}", sourceFkName)
+               .replace("{joinTable}", joinTable)
+               .replace("{targetFkName}", targetFkName)
+               .replace("{ops}", mnOperators[condition.rule])
+               .replace("{value}", condition.value);
 
          condition.value =
             condition.rule == "contains" || condition.rule == "not_contains"

@@ -193,7 +193,7 @@ class ABFactory extends ABFactoryCore {
           * @return {string}
           */
          nameFilter: function (name) {
-            return String(name).replace(/[^a-z0-9]/gi, "");
+            return String(name).replace(/[^a-z0-9_]/gi, "");
          },
 
          /**

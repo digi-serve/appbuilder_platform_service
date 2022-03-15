@@ -11,6 +11,22 @@ function quoteMe(text) {
 }
 
 module.exports = class ABClassQuery extends ABObjectQueryCore {
+   fromValues(attributes) {
+      super.fromValues(attributes);
+
+      // Make sure we have a .viewName defined.
+      if (this.viewName == "") {
+         var app = this.AB.applicationByID(this.createdInAppID);
+         var appName = app?.name || "GEN";
+         this.viewName = this.AB.rules.toObjectNameFormat(
+            `${appName}_View_${this.name}`
+         );
+         // knex does not like .(dot) in table and column names
+         // https://github.com/knex/knex/issues/2762
+         this.viewName = this.viewName.replace(/[^a-zA-Z0-9_ ]/gi, "");
+      }
+   }
+
    ///
    /// Migration Services
    ///
