@@ -1804,7 +1804,7 @@ module.exports = class ABModel extends ABModelCore {
    querySort(query, sort, userData) {
       if (!_.isEmpty(sort)) {
          sort.forEach((o) => {
-            var orderField = this.object.fields((f) => f.id == o.key)[0];
+            var orderField = this.object.fieldByID(o.key);
             if (!orderField) return;
 
             // if we are ordering by a multilingual field it is stored in translations so we need to search JSON but this is different from filters

@@ -31,7 +31,7 @@ module.exports = class ABModelQuery extends ABModel {
     *       we should reference on any user based condition
     * @return {Promise} resolved with the result of the find()
     */
-   findAll(options = {}, userData, req) {
+   async findAll(options = {}, userData, req) {
       let query = this.AB.Knex.connection().queryBuilder();
       query.from(this.object.dbViewName());
 
@@ -42,210 +42,185 @@ module.exports = class ABModelQuery extends ABModel {
          return this.AB.Knex.connection().raw(command);
       };
 
-      return (
-         Promise.resolve()
+      if (!options.ignoreIncludeId) {
+         // SELECT Running Number to be .id as a subquery
+         // SQL: select @rownum:=@rownum+1 as `id`, result.*
+         //    from (
+         //       select distinct ...
+         //       ) result , (SELECT @rownum:=0) r;
+         // NOTE: we are getting a general Query from the Knex
+         // connection.  Unlike in ABModel where we want queries
+         // associated with a Model Definition (this.modelKnex())
+         let queryRoot = this.AB.Knex.connection().queryBuilder(),
+            queryString = query.toString();
 
-            // Filter condition
-            .then(() => {
-               return new Promise((next, bad) => {
-                  if (!options.ignoreIncludeId) {
-                     // SELECT Running Number to be .id as a subquery
-                     // SQL: select @rownum:=@rownum+1 as `id`, result.*
-                     //    from (
-                     //       select distinct ...
-                     //       ) result , (SELECT @rownum:=0) r;
-                     // NOTE: we are getting a general Query from the Knex
-                     // connection.  Unlike in ABModel where we want queries
-                     // associated with a Model Definition (this.modelKnex())
-                     let queryRoot = this.AB.Knex.connection().queryBuilder(),
-                        queryString = query.toString();
+         query = queryRoot
+            .select(raw("@rownum := @rownum + 1 AS id, result.*"))
+            .from(function () {
+               let sqlCommand = raw(queryString.replace("select ", ""));
 
-                     query = queryRoot
-                        .select(raw("@rownum := @rownum + 1 AS id, result.*"))
-                        .from(function () {
-                           let sqlCommand = raw(
-                              queryString.replace("select ", "")
-                           );
+               // sub query: NOTE: "this" == query
+               this.select(sqlCommand).as("result");
+            })
+            .join(raw(`(SELECT @rownum := ${options.offset || 0}) rownum`))
+            .as("rId");
+      }
 
-                           // sub query: NOTE: "this" == query
-                           this.select(sqlCommand).as("result");
-                        })
-                        .join(
-                           raw(
-                              `(SELECT @rownum := ${
-                                 options.offset || 0
-                              }) rownum`
-                           )
-                        )
-                        .as("rId");
-                  }
+      //
+      // Where
+      // update our condition to include the one we are defined with:
+      //
+      let where = this.object.where;
+      if (where && where.glue && !options.skipExistingConditions) {
+         // we need to make sure our options.where properly contains our
+         // internal definitions as well.
 
-                  // update our condition to include the one we are defined with:
-                  //
-                  let where = this.object.where;
-                  if (where && where.glue && !options.skipExistingConditions) {
-                     // we need to make sure our options.where properly contains our
-                     // internal definitions as well.
+         // case: we have a valid passed in options.where
+         var haveOptions = options.where?.rules?.length > 0;
 
-                     // case: we have a valid passed in options.where
-                     var haveOptions =
-                        options.where &&
-                        options.where.rules &&
-                        options.where.rules.length > 0;
+         // case: we have a valid internal definition:
+         var haveInternal = where?.rules?.length > 0;
 
-                     // case: we have a valid internal definition:
-                     var haveInternal =
-                        where && where.rules && where.rules.length > 0;
+         // if BOTH cases are true, then we need to AND them together:
+         if (haveOptions && haveInternal) {
+            // if (options.where && options.where.glue && options.where.rules && options.where.rules.length > 0) {
 
-                     // if BOTH cases are true, then we need to AND them together:
-                     if (haveOptions && haveInternal) {
-                        // if (options.where && options.where.glue && options.where.rules && options.where.rules.length > 0) {
+            // in the case where we have a condition and a condition was passed in
+            // combine our conditions
+            // queryCondition AND givenConditions:
+            var oWhere = this.AB.cloneDeep(options.where);
+            var thisWhere = this.AB.cloneDeep(where);
 
-                        // in the case where we have a condition and a condition was passed in
-                        // combine our conditions
-                        // queryCondition AND givenConditions:
-                        var oWhere = this.AB.cloneDeep(options.where);
-                        var thisWhere = this.AB.cloneDeep(where);
+            var newWhere = {
+               glue: "and",
+               rules: [thisWhere, oWhere],
+            };
 
-                        var newWhere = {
-                           glue: "and",
-                           rules: [thisWhere, oWhere],
-                        };
+            options.where = newWhere;
+         } else {
+            if (haveInternal) {
+               // if we had a condition and no condition was passed in,
+               // just use ours:
+               options.where = this.AB.cloneDeep(where);
+            }
+         }
+      }
 
-                        options.where = newWhere;
-                     } else {
-                        if (haveInternal) {
-                           // if we had a condition and no condition was passed in,
-                           // just use ours:
-                           options.where = this.AB.cloneDeep(where);
+      if (options?.where?.rules?.length) {
+         try {
+            await this.object.reduceConditions(options.where, userData, req);
+
+            // when finished populate our Find Conditions
+            this.queryConditions(query, options.where, userData, req);
+         } catch (e) {
+            this.AB.notify.developer(e, {
+               context: "ABModelQuery.findAll(): Error reducing Conditions",
+               where: options.where,
+               userData,
+            });
+            throw e;
+         }
+      }
+
+      //
+      // Select columns
+      //
+      if (options.ignoreIncludeColumns) {
+         // get count of rows does not need to include columns
+         query.clearSelect();
+      }
+
+      if (options.columnNames && options.columnNames.length) {
+         // MySQL view: remove ` in column name
+         options.columnNames = options.columnNames.map((colName) => {
+            if (typeof colName == "string") {
+               colName = "`" + (colName || "").replace(/`/g, "") + "`";
+               colName = this.AB.Knex.connection().raw(colName);
+            }
+
+            return colName;
+         });
+
+         query.clearSelect().select(options.columnNames);
+      }
+
+      // edit property names of .translation
+      // {objectName}.{columnName}
+      if (!options.ignoreEditTranslations) {
+         query.on("query-response", function (rows /* , obj, builder */) {
+            (rows || []).forEach((r) => {
+               // each rows
+               Object.keys(r).forEach((rKey) => {
+                  // objectName.translations
+                  if (rKey.endsWith(".translations")) {
+                     r.translations = r.translations || [];
+
+                     let objectName = rKey.replace(".translations", "");
+
+                     let translations = [];
+                     if (typeof r[rKey] == "string")
+                        translations = JSON.parse(r[rKey]);
+
+                     // each elements of trans
+                     (translations || []).forEach((tran) => {
+                        let addNew = false;
+
+                        let newTran = r.translations.filter(
+                           (t) => t.language_code == tran.language_code
+                        )[0];
+                        if (!newTran) {
+                           newTran = {
+                              language_code: tran.language_code,
+                           };
+                           addNew = true;
                         }
-                     }
-                  }
 
-                  if (
-                     options &&
-                     options.where &&
-                     options.where.rules &&
-                     options.where.rules.length
-                  ) {
-                     this.object
-                        .reduceConditions(options.where, userData, req)
-                        .then(() => {
-                           // when finished populate our Find Conditions
-                           this.queryConditions(
-                              query,
-                              options.where,
-                              userData,
-                              req
-                           );
-                           next();
-                        })
-                        .catch(bad);
-                  } else {
-                     next();
-                  }
-               });
-            })
+                        // include objectName into property - objectName.propertyName
+                        Object.keys(tran).forEach((tranKey) => {
+                           if (tranKey == "language_code") return;
 
-            // Select columns
-            .then(() => {
-               if (options.ignoreIncludeColumns) {
-                  // get count of rows does not need to include columns
-                  query.clearSelect();
-               }
+                           var newTranKey = `${objectName}.${tranKey}`;
 
-               if (options.columnNames && options.columnNames.length) {
-                  // MySQL view: remove ` in column name
-                  options.columnNames = options.columnNames.map((colName) => {
-                     if (typeof colName == "string") {
-                        colName = "`" + (colName || "").replace(/`/g, "") + "`";
-                        colName = this.AB.Knex.connection().raw(colName);
-                     }
-
-                     return colName;
-                  });
-
-                  query.clearSelect().select(options.columnNames);
-               }
-
-               // edit property names of .translation
-               // {objectName}.{columnName}
-               if (!options.ignoreEditTranslations) {
-                  query.on("query-response", function (
-                     rows /* , obj, builder */
-                  ) {
-                     (rows || []).forEach((r) => {
-                        // each rows
-                        Object.keys(r).forEach((rKey) => {
-                           // objectName.translations
-                           if (rKey.endsWith(".translations")) {
-                              r.translations = r.translations || [];
-
-                              let objectName = rKey.replace(
-                                 ".translations",
-                                 ""
-                              );
-
-                              let translations = [];
-                              if (typeof r[rKey] == "string")
-                                 translations = JSON.parse(r[rKey]);
-
-                              // each elements of trans
-                              (translations || []).forEach((tran) => {
-                                 let addNew = false;
-
-                                 let newTran = r.translations.filter(
-                                    (t) => t.language_code == tran.language_code
-                                 )[0];
-                                 if (!newTran) {
-                                    newTran = {
-                                       language_code: tran.language_code,
-                                    };
-                                    addNew = true;
-                                 }
-
-                                 // include objectName into property - objectName.propertyName
-                                 Object.keys(tran).forEach((tranKey) => {
-                                    if (tranKey == "language_code") return;
-
-                                    var newTranKey = `${objectName}.${tranKey}`;
-
-                                    // add new property name
-                                    newTran[newTranKey] = tran[tranKey];
-                                 });
-
-                                 if (addNew) r.translations.push(newTran);
-                              });
-
-                              // remove old translations
-                              delete rows[rKey];
-                           }
+                           // add new property name
+                           newTran[newTranKey] = tran[tranKey];
                         });
+
+                        if (addNew) r.translations.push(newTran);
                      });
-                  });
-               } // if ignoreEditTranslations
 
-               // return Promise.resolve();
-            })
-
-            // Final
-            .then(() => {
-               // when query is from a queryBuilder() we can do .toString()
-               // to get the sql.
-               let _sql = query.toString();
-               if (req) {
-                  req.log("ABModelQuery.findAll():", _sql);
-               }
-               // return Promise.resolve(query);
-               return new Promise((resolve, reject) => {
-                  // add a catch handler that will include ._sql as part of the error
-                  query.then(resolve).catch((error) => {
-                     error._sql = _sql;
-                     reject(error);
-                  });
+                     // remove old translations
+                     delete rows[rKey];
+                  }
                });
-            })
-      );
+            });
+         });
+      } // if ignoreEditTranslations
+
+      //
+      // Sort
+      //
+      if (options.sort) {
+         this.querySort(query, options.sort, userData);
+      }
+
+      //
+      // Final
+      //
+
+      // when query is from a queryBuilder() we can do .toString()
+      // to get the sql.
+      let _sql = query.toString();
+      if (req) {
+         req.log("ABModelQuery.findAll():", _sql);
+      }
+
+      try {
+         return query;
+      } catch (error) {
+         // add a catch handler that will include ._sql as part of the error
+         error._sql = _sql;
+         throw error;
+      }
    }
 
    /**
