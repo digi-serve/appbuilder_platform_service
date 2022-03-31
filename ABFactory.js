@@ -493,6 +493,17 @@ class ABFactory extends ABFactoryCore {
    }
 
    /**
+    * @method cacheClear()
+    * provide an interface for a service to clear cached data.
+    * @param {string} key
+    *        The unique key to retrieve the cached data.
+    * @return {undefined}
+    */
+   cacheClear(key) {
+      delete this.__Cache[key];
+   }
+
+   /**
     * @method modelPool()
     * return the cached Model connection for the given modelName.
     * @param {string} modelName

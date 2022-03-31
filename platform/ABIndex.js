@@ -125,7 +125,9 @@ module.exports = class ABIndex extends ABIndexCore {
       knex = knex || this.AB.Knex.connection(this.object.connName);
       if (this.fields == null || !this.fields.length) {
          req.notify.builder(
-            new Error("ABIndex defined with no fields referenced"),
+            new Error(
+               `ABIndex[${this.name}][${this.id}] defined with no fields referenced`
+            ),
             {
                context: "ABIndex.migrateCreate()",
                field: this,
