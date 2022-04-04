@@ -116,9 +116,14 @@ module.exports = class ABFieldNumber extends ABFieldNumberCore {
                      resolve();
                   })
                   .catch((err) => {
+                     // Skip duplicate column attempt ...
+                     if (err.code == "ER_DUP_FIELDNAME") return resolve();
+
                      // Skip duplicate unique key
-                     if (err.code == "ER_DUP_KEYNAME") resolve();
-                     else reject(err);
+                     if (err.code == "ER_DUP_KEYNAME") return resolve();
+
+                     // if we get here, pass on the error
+                     reject(err);
                   });
             })
             .catch(reject);

@@ -105,6 +105,48 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
    }
 
    /**
+    * @method exportData()
+    * export the relevant data from this object necessary for the operation of
+    * it's associated application.
+    * @param {hash} data
+    *        The incoming data structure to add the relevant export data.
+    *        .ids {array} the ABDefinition.id of the definitions to export.
+    *        .siteObjectConnections {hash} { Obj.id : [ ABField.id] }
+    *                A hash of Field.ids for each System Object that need to
+    *                reference these importedFields
+    *        .roles {hash}  {Role.id: RoleDef }
+    *                A Definition of a role related to this Application
+    *        .scope {hash} {Scope.id: ScopeDef }
+    *               A Definition of a scope related to this Application.
+    *               (usually from one of the Roles being included)
+    */
+   exportData(data) {
+      super.exportData(data);
+
+      // include the connected object with this.
+      var connObj = this.datasourceLink;
+      if (
+         connObj &&
+         (!connObj.isSystemObject || data.settings.includeSystemObjects)
+      ) {
+         connObj.exportData(data);
+      } else {
+         // we have a field connected to a System Object:
+         // gather that field data and include it.
+         var linkField = this.fieldLink;
+         if (linkField) {
+            // Make sure fieldLink's definition is added:
+            linkField.exportData(data);
+
+            // and register it under the siteObjectConnections
+            let soc = data.siteObjectConnections;
+            soc[connObj.id] = soc[connObj.id] || [];
+            soc[connObj.id].push(linkField.id);
+         }
+      }
+   }
+
+   /**
     * @method exportIDs()
     * export any relevant .ids for the necessary operation of this application.
     * @param {array} ids

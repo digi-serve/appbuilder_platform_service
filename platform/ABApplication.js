@@ -53,6 +53,114 @@ module.exports = class ABClassApplication extends ABApplicationCore {
    ///
 
    /**
+    * @method exportData()
+    * export the relevant data from this object necessary for the operation of
+    * it's associated application.
+    * @param {hash} data
+    *        The incoming data structure to add the relevant export data.
+    *        .ids {array} the ABDefinition.id of the definitions to export.
+    *        .siteObjectConnections {hash} { Obj.id : [ ABField.id] }
+    *                A hash of Field.ids for each System Object that need to
+    *                reference these importedFields
+    *        .roles {hash}  {Role.id: RoleDef }
+    *                A Definition of a role related to this Application
+    *        .scope {hash} {Scope.id: ScopeDef }
+    *               A Definition of a scope related to this Application.
+    *               (usually from one of the Roles being included)
+    */
+   exportData(data) {
+      // make sure we don't get into an infinite loop:
+      if (data.ids.indexOf(this.id) > -1) return;
+
+      data.ids.push(this.id);
+
+      // start with Objects:
+      this.objectsIncluded().forEach((o) => {
+         o.exportData(data);
+      });
+
+      // Queries
+      this.queriesIncluded().forEach((q) => {
+         q.exportData(data);
+      });
+
+      // Datacollections
+      // NOTE: currently the server doesn't make instances of DataCollections
+      // so we manually parse the related info here:
+      this.datacollectionIDs.forEach((dID) => {
+         if (data.ids.indexOf(dID) > -1) return;
+
+         var def = this.AB.definitionByID(dID);
+         if (def) {
+            data.ids.push(dID);
+            if (def.settings.datasourceID) {
+               var object = this.AB.objectByID(def.settings.datasourceID);
+               if (object) {
+                  object.exportData(data);
+               }
+            }
+         }
+      });
+
+      // Processes
+      this.processes().forEach((p) => {
+         p.exportData(data);
+      });
+
+      // Pages
+      // NOTE: currently the server doesn't make instances of ABViews
+      // so we manually parse the object data here:
+      var parseView = (view) => {
+         if (data.ids.indexOf(view.id) > -1) return;
+         data.ids.push(view.id);
+         (view.pageIDs || []).forEach((pid) => {
+            var pdef = this.AB.definitionByID(pid);
+            if (pdef) {
+               parseView(pdef);
+            }
+         });
+
+         (view.viewIDs || []).forEach((vid) => {
+            var vdef = this.AB.definitionByID(vid);
+            if (vdef) {
+               parseView(vdef);
+            }
+         });
+      };
+
+      var pageIDs = this._pages.map((p) => p.id);
+      (pageIDs || []).forEach((pid) => {
+         var pdef = this.AB.definitionByID(pid);
+         if (pdef) {
+            parseView(pdef);
+         }
+      });
+
+      //
+      // Add Roles:
+      //
+      if (!this.isAccessManaged) {
+         (this.roleAccess || []).forEach((rid) => {
+            data.roles[rid] = rid;
+         });
+      } else {
+         if (this.accessManagers.useRole) {
+            (this.accessManagers.role || []).forEach((rid) => {
+               data.roles[rid] = rid;
+            });
+         }
+      }
+      if (this.isTranslationManaged && this.translationManagers.useRole) {
+         (this.translationManagers.role || []).forEach((rid) => {
+            data.roles[rid] = rid;
+         });
+      }
+
+      // return only unique entries:
+      data.ids = _.uniq(data.ids);
+   }
+
+   /**
     * @method exportIDs()
     * export any relevant .ids for the necessary operation of this application.
     * @param {array} ids

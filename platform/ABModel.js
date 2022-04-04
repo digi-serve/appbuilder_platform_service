@@ -749,9 +749,7 @@ module.exports = class ABModel extends ABModelCore {
          // delete knex.$$objection.boundModels[tableName];
 
          // FIX : Knex Objection v.1.1.8
-         knex.$$objection.boundModels.delete(
-            tableName + "_" + this.object.modelName()
-         );
+         knex.$$objection.boundModels.delete(tableName + "_" + modelName);
       }
    }
 

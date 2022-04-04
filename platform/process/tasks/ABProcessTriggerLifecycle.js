@@ -2,7 +2,9 @@ const path = require("path");
 // prettier-ignore
 const ABProcessTriggerLifecycleCore = require(path.join(__dirname, "..", "..", "..", "core", "process", "tasks", "ABProcessTriggerLifecycleCore.js"));
 
-module.exports = class ABProcessTaskTriggerLifecycle extends ABProcessTriggerLifecycleCore {
+module.exports = class ABProcessTaskTriggerLifecycle extends (
+   ABProcessTriggerLifecycleCore
+) {
    // trigger(data) {
    //     // call my process.newInstance with
    //     if (!this.process) {
@@ -16,6 +18,33 @@ module.exports = class ABProcessTaskTriggerLifecycle extends ABProcessTriggerLif
    // }
 
    /**
+    * @method exportData()
+    * export the relevant data from this object necessary for the operation of
+    * it's associated application.
+    * @param {hash} data
+    *        The incoming data structure to add the relevant export data.
+    *        .ids {array} the ABDefinition.id of the definitions to export.
+    *        .siteObjectConnections {hash} { Obj.id : [ ABField.id] }
+    *                A hash of Field.ids for each System Object that need to
+    *                reference these importedFields
+    *        .roles {hash}  {Role.id: RoleDef }
+    *                A Definition of a role related to this Application
+    *        .scope {hash} {Scope.id: ScopeDef }
+    *               A Definition of a scope related to this Application.
+    *               (usually from one of the Roles being included)
+    */
+   exportData(data) {
+      super.exportData(data);
+
+      if (this.objectID && this.objectID != "objID.??") {
+         var object = this.AB.objectByID(this.objectID);
+         if (object) {
+            object.exportData(data);
+         }
+      }
+   }
+
+   /**
     * @method exportIDs()
     * export any relevant .ids for the necessary operation of this application.
     * @param {array} ids
@@ -25,7 +54,7 @@ module.exports = class ABProcessTaskTriggerLifecycle extends ABProcessTriggerLif
       super.exportIDs(ids);
 
       if (this.objectID && this.objectID != "objID.??") {
-         var object = this.AB.objects((o) => o.id == this.objectID)[0];
+         var object = this.AB.objectByID(this.objectID);
          if (object) {
             object.exportIDs(ids);
          }
