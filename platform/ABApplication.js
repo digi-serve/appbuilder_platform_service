@@ -113,6 +113,13 @@ module.exports = class ABClassApplication extends ABApplicationCore {
       var parseView = (view) => {
          if (data.ids.indexOf(view.id) > -1) return;
          data.ids.push(view.id);
+
+         // store any Roles from our View AccessLevel
+         Object.keys(view.accessLevels || {}).forEach((rid) => {
+            data.roles[rid] = rid;
+         });
+
+         // now process our pages.
          (view.pageIDs || []).forEach((pid) => {
             var pdef = this.AB.definitionByID(pid);
             if (pdef) {
@@ -120,6 +127,7 @@ module.exports = class ABClassApplication extends ABApplicationCore {
             }
          });
 
+         // and sub views
          (view.viewIDs || []).forEach((vid) => {
             var vdef = this.AB.definitionByID(vid);
             if (vdef) {
