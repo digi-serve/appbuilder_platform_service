@@ -107,6 +107,16 @@ module.exports = class ABClassObject extends ABObjectCore {
    ///
 
    /**
+    * @method applyAllFields()
+    * reapply the all fields we "stashed" earlier.
+    */
+   applyAllFields() {
+      (this._allFields || []).forEach((f) => {
+         this._fields.push(f);
+      });
+   }
+
+   /**
     * @method applyConnectFields()
     * reapply the connectFields we "stashed" earlier.
     */
@@ -134,6 +144,16 @@ module.exports = class ABClassObject extends ABObjectCore {
     */
    applyIndexNormal() {
       this._indexes = this._stashIndexNormal || [];
+   }
+
+   /**
+    * @method getStashedCombineFields()
+    * return the array of stashed combine fields.
+    * @return {array} [...{ABFieldCombine}] or {null}
+    */
+   getStashedCombineFields() {
+      if (!this._stashCombineFields) return null;
+      return this._stashCombineFields;
    }
 
    /**
@@ -332,6 +352,20 @@ module.exports = class ABClassObject extends ABObjectCore {
    }
 
    /**
+    * @method stashCombineFields()
+    * internally "stash" the combineFields away so we don't reference them.
+    * We do this during an import, so we can create the base Object Tables
+    * before we create combine fields.
+    */
+   stashCombineFields() {
+      this._allFields = this.fields();
+      this._stashCombineFields = [];
+      (this.fields((f) => f?.key == "combined") || []).forEach((f) => {
+         this._stashCombineFields.push(f);
+      });
+   }
+
+   /**
     * @method stashConnectFields()
     * internally "stash" the connectFields away so we don't reference them.
     * We do this during an import, so we can create the base Object Tables
@@ -511,7 +545,8 @@ module.exports = class ABClassObject extends ABObjectCore {
          })
          .catch((err) => {
             this.AB.notify.developer(err, {
-               context: `ABObject[${this.label}]:migrateCreateFields(): Error migrating fields`,
+               context:
+                  "ABObject:migrateCreateFields(): Error migrating fields",
             });
             throw err;
          });
