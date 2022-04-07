@@ -545,8 +545,7 @@ module.exports = class ABClassObject extends ABObjectCore {
          })
          .catch((err) => {
             this.AB.notify.developer(err, {
-               context:
-                  "ABObject:migrateCreateFields(): Error migrating fields",
+               context: `ABObject[${this.label}]:migrateCreateFields(): Error migrating fields`,
             });
             throw err;
          });
