@@ -875,7 +875,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
             // let PK;
 
             // if value is array, then get id of array
-            if (myParameter[this.columnName].forEach) {
+            if (Array.isArray(myParameter[this.columnName])) {
                let result = [];
 
                myParameter[this.columnName].forEach((d) => {
