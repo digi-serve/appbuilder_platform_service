@@ -193,19 +193,46 @@ module.exports = class ABClassObject extends ABObjectCore {
     *               (usually from one of the Roles being included)
     */
    exportData(data) {
-      if (!this.isSystemObject || data.settings.includeSystemObjects) {
-         // make sure we don't get into an infinite loop:
-         if (data.ids.indexOf(this.id) > -1) return;
+      // make sure we don't get into an infinite loop:
+      if (data.ids.indexOf(this.id) > -1) return;
+
+      let exportObject = (fieldFilter = () => true) => {
          data.ids.push(this.id);
 
          // include my fields:
-         this.fields().forEach((f) => {
-            f.exportData(data);
-         });
+         (this.fields(fieldFilter) || [])
+            // but don't export the fields I have listed in .importedFieldIDs
+            .filter((f) => this.importedFieldIDs.indexOf(f.id) == -1)
+            .forEach((f) => {
+               f.exportData(data);
+            });
 
          this.indexes().forEach((i) => {
             i.exportData(data);
          });
+      };
+
+      // if this is a SystemObject Export
+      if (data.settings.includeSystemObjects) {
+         // if this is a System Object
+         if (this.isSystemObject) {
+            // export object
+            // export fields that don't connect to other NonSystemObjects
+            exportObject(
+               (f) => !f.isConnection || f.datasourceLink.isSystemObject
+            );
+         }
+
+         //
+      } else {
+         // else this is not SystemObject Export
+         // if this is !System Object
+         if (!this.isSystemObject) {
+            // export object
+            // export fields
+            // note: FieldConnect handles connections to System Objects
+            exportObject();
+         }
       }
    }
 
@@ -521,7 +548,6 @@ module.exports = class ABClassObject extends ABObjectCore {
          .then(() => {
             //// NOTE: NOW the table is created
             //// let's go add our normal fields to it:
-            let fieldUpdates = [];
 
             let normalFields = this.fields(
                (f) => f && !nonNormalFields.find((c) => c.id == f.id)
