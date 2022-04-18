@@ -331,15 +331,23 @@ module.exports = class ABClassObject extends ABObjectCore {
             var Scopes = this.AB.objectScope().model();
             req.retry(() => Scopes.find({ roles: allRoles })).then((list) => {
                // pluck the filter that refer to a field in this object
-               var myFieldIDs = this.fields().map((f) => f.id);
-               var relatedRules = [];
-               var isAllowAll = false;
+               const myFieldIDs = this.fields().map((f) => f.id);
+               const relatedRules = [];
+               let hasAccess = false;
                // {bool}
-               // if the user has a role that allows all access, then skip any
-               // filters.
+               // Whether the user has access to this object
+               let applyFilters = true;
+               // {bool}
+               // Whether to apply scope filters
+
                (list || []).forEach((scope) => {
-                  if (scope.allowAll) {
-                     isAllowAll = true;
+                  // has access if the scope is allowAll or includes this object
+                  if (scope.allowAll || scope.objectIds.indexOf(this.id) > -1) {
+                     hasAccess = true;
+                     // If any scope has unfiltered access ignore filters in other scopes
+                     if (scope.Filters === null) {
+                        applyFilters = false;
+                     }
                   }
                   if (scope.Filters && scope.Filters.rules) {
                      (scope.Filters.rules || []).forEach((r) => {
@@ -350,8 +358,19 @@ module.exports = class ABClassObject extends ABObjectCore {
                   }
                });
 
+               // None of the scopes give acess to this
+               if (!hasAccess) {
+                  cond.where = {
+                     glue: "and",
+                     rules: [
+                        cond.where,
+                        { key: "1", rule: "equals", value: "0" },
+                     ],
+                  };
+               }
+
                // if there are Rules that relate to this object
-               if (!isAllowAll && relatedRules.length > 0) {
+               if (hasAccess && applyFilters && relatedRules.length > 0) {
                   // we now have to apply our ScopeRules
                   var ScopeRules = {
                      glue: "or",
@@ -2492,13 +2511,12 @@ module.exports = class ABClassObject extends ABObjectCore {
          };
 
          // create sub-query to get values from MN table
-         condition.value =
-            "(SELECT `{sourceFkName}` FROM `{joinTable}` WHERE `{targetFkName}` {ops} '{percent}{value}{percent}')"
-               .replace("{sourceFkName}", sourceFkName)
-               .replace("{joinTable}", joinTable)
-               .replace("{targetFkName}", targetFkName)
-               .replace("{ops}", mnOperators[condition.rule])
-               .replace("{value}", condition.value);
+         condition.value = "(SELECT `{sourceFkName}` FROM `{joinTable}` WHERE `{targetFkName}` {ops} '{percent}{value}{percent}')"
+            .replace("{sourceFkName}", sourceFkName)
+            .replace("{joinTable}", joinTable)
+            .replace("{targetFkName}", targetFkName)
+            .replace("{ops}", mnOperators[condition.rule])
+            .replace("{value}", condition.value);
 
          condition.value =
             condition.rule == "contains" || condition.rule == "not_contains"
