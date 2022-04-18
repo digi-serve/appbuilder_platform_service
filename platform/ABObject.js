@@ -333,10 +333,12 @@ module.exports = class ABClassObject extends ABObjectCore {
                // pluck the filter that refer to a field in this object
                const myFieldIDs = this.fields().map((f) => f.id);
                const relatedRules = [];
-               // Whether the user has access to this object
                let hasAccess = false;
-               // Whether to apply scope filters
+               // {bool}
+               // Whether the user has access to this object
                let applyFilters = true;
+               // {bool}
+               // Whether to apply scope filters
 
                (list || []).forEach((scope) => {
                   // has access if the scope is allowAll or includes this object
@@ -2509,13 +2511,12 @@ module.exports = class ABClassObject extends ABObjectCore {
          };
 
          // create sub-query to get values from MN table
-         condition.value =
-            "(SELECT `{sourceFkName}` FROM `{joinTable}` WHERE `{targetFkName}` {ops} '{percent}{value}{percent}')"
-               .replace("{sourceFkName}", sourceFkName)
-               .replace("{joinTable}", joinTable)
-               .replace("{targetFkName}", targetFkName)
-               .replace("{ops}", mnOperators[condition.rule])
-               .replace("{value}", condition.value);
+         condition.value = "(SELECT `{sourceFkName}` FROM `{joinTable}` WHERE `{targetFkName}` {ops} '{percent}{value}{percent}')"
+            .replace("{sourceFkName}", sourceFkName)
+            .replace("{joinTable}", joinTable)
+            .replace("{targetFkName}", targetFkName)
+            .replace("{ops}", mnOperators[condition.rule])
+            .replace("{value}", condition.value);
 
          condition.value =
             condition.rule == "contains" || condition.rule == "not_contains"
