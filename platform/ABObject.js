@@ -2375,7 +2375,7 @@ module.exports = class ABClassObject extends ABObjectCore {
 
       let settings = formulaField.settings || {};
 
-      let connectedField = this.fields((f) => f.id == settings.field)[0];
+      let connectedField = this.fieldByID(settings.field);
       if (!connectedField) return;
 
       let linkField = connectedField.fieldLink;
@@ -2384,9 +2384,7 @@ module.exports = class ABClassObject extends ABObjectCore {
       let connectedObj = this.AB.objectByID(settings.object);
       if (!connectedObj) return;
 
-      let numberField = connectedObj.fields(
-         (f) => f.id == settings.fieldLink
-      )[0];
+      let numberField = connectedObj.fieldByID(settings.fieldLink);
       if (!numberField) return;
 
       let selectSQL = "";
