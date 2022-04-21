@@ -342,7 +342,7 @@ module.exports = class ABClassObject extends ABObjectCore {
 
                (list || []).forEach((scope) => {
                   // has access if the scope is allowAll or includes this object
-                  if (scope.allowAll || scope.objectIds.indexOf(this.id) > -1) {
+                  if (scope.allowAll || (scope.objectIds || []).indexOf(this.id) > -1) {
                      hasAccess = true;
                      // If any scope has unfiltered access ignore filters in other scopes
                      if (scope.Filters === null) {
