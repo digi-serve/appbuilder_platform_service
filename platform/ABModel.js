@@ -1097,10 +1097,9 @@ module.exports = class ABModel extends ABModelCore {
                         .replace("{columnName}", field.columnName);
 
                      // eslint-disable-next-line no-unused-vars  -- Phasing this section out
-                     let languageWhere =
-                        '`{prefix}`.`language_code` = "{languageCode}"'
-                           .replace("{prefix}", prefix)
-                           .replace("{languageCode}", userData.languageCode);
+                     let languageWhere = '`{prefix}`.`language_code` = "{languageCode}"'
+                        .replace("{prefix}", prefix)
+                        .replace("{languageCode}", userData.languageCode);
 
                      // if (glue == "or") Query.orWhereRaw(languageWhere);
                      // else Query.whereRaw(languageWhere);
@@ -1129,13 +1128,12 @@ module.exports = class ABModel extends ABModelCore {
                      transCol = "`" + transCol.split(".").join("`.`") + "`"; // "{prefix}.translations";
                   }
 
-                  condition.key =
-                     this.AB.Knex.connection(/* connectionName */).raw(
-                        'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({transCol}, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({transCol}, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
-                           .replace(/{transCol}/g, transCol)
-                           .replace(/{languageCode}/g, userData.languageCode)
-                           .replace(/{columnName}/g, field.columnName)
-                     );
+                  condition.key = this.AB.Knex.connection(/* connectionName */).raw(
+                     'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({transCol}, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({transCol}, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
+                        .replace(/{transCol}/g, transCol)
+                        .replace(/{languageCode}/g, userData.languageCode)
+                        .replace(/{columnName}/g, field.columnName)
+                  );
                }
             }
 
@@ -1526,11 +1524,17 @@ module.exports = class ABModel extends ABModelCore {
          return `( ${cond.key} ${cond.rule} ${cond.value} )`;
       }
 
+      // maybe it is an empty condition {}
+      if (_.isEmpty(cond)) {
+         return null; // <-- this gets cleared out later
+      }
+
       var error = new Error(
          "unknown cond type in .queryConditionsJoinCondition"
       );
       req.notify.developer(error, {
-         context: "",
+         context:
+            "ABModel.queryConditionsJoinConditions: Error resolving condition",
          cond,
       });
 
@@ -1835,11 +1839,10 @@ module.exports = class ABModel extends ABModelCore {
                      prefix
                   );
                } else {
-                  sortClause =
-                     'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({prefix}.`translations`, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({prefix}.`translations`, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
-                        .replace(/{prefix}/g, orderField.dbPrefix())
-                        .replace("{languageCode}", userData.languageCode)
-                        .replace("{columnName}", orderField.columnName);
+                  sortClause = 'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({prefix}.`translations`, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({prefix}.`translations`, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
+                     .replace(/{prefix}/g, orderField.dbPrefix())
+                     .replace("{languageCode}", userData.languageCode)
+                     .replace("{columnName}", orderField.columnName);
                }
             }
             // If we are just sorting a field it is much simpler
