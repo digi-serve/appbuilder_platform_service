@@ -27,7 +27,6 @@ module.exports = class ABProcessTaskServiceGetResetPasswordUrl extends (
             "user_manager.user-password-reset-url",
             {
                email: this.email,
-               url: this.url,
             },
             (err, results) => {
                if (err) {
