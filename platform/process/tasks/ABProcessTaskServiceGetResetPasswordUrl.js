@@ -23,30 +23,24 @@ module.exports = class ABProcessTaskServiceGetResetPasswordUrl extends (
       this.stateCompleted(instance);
 
       return new Promise((resolve, reject) => {
-         try {
-            this.AB.req.serviceRequest(
-               "user_manager.user-password-reset-url",
-               {
-                  email: this.email,
-                  url: this.url,
-               },
-               (err, results) => {
-                  if (err) {
-                     console.error(err);
+         this.AB.req.serviceRequest(
+            "user_manager.user-password-reset-url",
+            {
+               email: this.email,
+               url: this.url,
+            },
+            (err, results) => {
+               if (err) {
+                  console.error(err);
 
-                     reject(err);
-                  }
-
-                  this.stateUpdate(instance, { url: results.data });
-
-                  resolve(true);
+                  reject(err);
                }
-            );
-         } catch (err) {
-            console.error(err);
 
-            reject(false);
-         }
+               this.stateUpdate(instance, { url: results.data });
+
+               resolve(true);
+            }
+         );
       });
    }
 
