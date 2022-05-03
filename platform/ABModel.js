@@ -2031,6 +2031,17 @@ module.exports = class ABModel extends ABModelCore {
                whereString.length
             ); // It should be (`DB_NAME`.`AB_TABLE_NAME`.`COLUMN` LIKE '%VALUE%')
 
+            // Replace definition id with col name
+            const uuid = new RegExp(
+               /[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}/g
+            );
+            // {Regex} should match uuids (from https://ihateregex.io/expr/uuid/)
+
+            whereString = whereString.replace(uuid, (match) => {
+               const { columnName } = this.AB.definitionByID(match);
+               return columnName;
+            });
+
             if (whereString) whereClause = ` AND ${whereString}`;
          } catch (e) {
             req.notify.developer(e, { field: formulaField });
