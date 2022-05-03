@@ -124,8 +124,14 @@ module.exports = class ABProcessTask extends ABProcessElementCore {
     */
    onError(instance, error) {
       super.onError(instance, error);
-
+      const trimedInstance = {
+         uuid: instance.uuid,
+         processID: instance.processID,
+         status: instance.status,
+         statriggeredBy: instance.triggeredBy,
+         log: instance.log,
+      };
       var text = `ProcessTask Error: ${this.key} : ${error.toString()}`;
-      console.error(text, { instance: instance, error: error });
+      console.error(text, { instance: trimedInstance, error: error });
    }
 };
