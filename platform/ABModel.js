@@ -2020,10 +2020,12 @@ module.exports = class ABModel extends ABModelCore {
 
          let whereString = "";
          try {
-            whereString = formulaFieldQuery.toString(); // select `DB_NAME`.`AB_TABLE_NAME`.* from `DB_NAME`.`AB_TABLE_NAME` where (`DB_NAME`.`AB_TABLE_NAME`.`COLUMN` LIKE '%VALUE%')
-
+            whereString = formulaFieldQuery.toKnexQuery().toString(); // select `DB_NAME`.`AB_TABLE_NAME`.* from `DB_NAME`.`AB_TABLE_NAME` where (`DB_NAME`.`AB_TABLE_NAME`.`COLUMN` LIKE '%VALUE%')
             // get only where clause
-            let wherePosition = whereString.indexOf("where");
+            const wherePosition = whereString.indexOf("where");
+            if (wherePosition == -1) {
+               throw new Error("No 'where' found in query");
+            }
             whereString = whereString.substring(
                wherePosition + 5,
                whereString.length
