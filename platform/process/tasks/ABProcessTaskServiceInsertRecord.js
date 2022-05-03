@@ -175,10 +175,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
 
       let result = null;
 
-      if (
-         prevElem instanceof InsertRecord ||
-         prevElem instanceof ABProcessTaskServiceQuery
-      ) {
+      if (prevElem instanceof InsertRecord) {
          result = prevElem.processData(instance);
       }
 
