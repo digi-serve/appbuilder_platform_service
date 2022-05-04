@@ -44,8 +44,10 @@ module.exports = class CalculateTask extends CalculateTaskCore {
             item.key,
          ]);
 
+         // Escape brackets (,) in label so that the regex works
+         const label = item.label.replace(/\(/, "\\(").replace(/\)/, "\\)");
          formula = formula.replace(
-            new RegExp(`{${item.label}}`, "g"),
+            new RegExp(`{${label}}`, "g"),
             processedData == null ? 0 : processedData
          );
       });
