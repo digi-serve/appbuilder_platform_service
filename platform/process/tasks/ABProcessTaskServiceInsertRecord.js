@@ -1,5 +1,4 @@
 const InsertRecordTaskCore = require("../../../core/process/tasks/ABProcessTaskServiceInsertRecordCore.js");
-const ABProcessTaskServiceQuery = require("./ABProcessTaskServiceQuery.js");
 
 module.exports = class InsertRecord extends InsertRecordTaskCore {
    ////
