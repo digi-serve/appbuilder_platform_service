@@ -19,77 +19,41 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
     *      resolve(true/false) : true if the task is completed.
     *                            false if task is still waiting
     */
-   do(instance, trx, req) {
+   async do(instance, trx, req) {
       this._dbTransaction = trx;
       this._req = req;
+      this._instance = instance;
 
+      // Objects
       this.batchObject = this.AB.objectByID(this.objectBatch);
+      this.jeObject = this.AB.objectByID(this.objectJE);
+      this.jeArchiveObject = this.AB.objectByID(this.objectJEArchive);
+
       if (!this.batchObject) {
          return this.errorConfig(
             instance,
-            "Could not find Batch object",
+            `Could not find Batch object [${this.objectBatch}]`,
             "objectBatch"
          );
       }
 
-      this.batchFiscalMonthField = this.batchObject.fieldByID(
-         this.fieldBatchFiscalMonth
-      );
-      if (!this.batchFiscalMonthField) {
-         return this.errorConfig(
-            instance,
-            "Could not find Batch->Fiscal Month field",
-            "fieldBatchFiscalMonth"
-         );
-      }
-
-      this.balanceObject = this.AB.objectByID(this.objectBalance);
-      if (!this.balanceObject) {
-         return this.errorConfig(
-            instance,
-            "Could not found Balance object",
-            "objectBalance"
-         );
-      }
-
-      this.balanceAccountField = this.balanceObject.fieldByID(
-         this.fieldBrAccount
-      );
-      if (!this.balanceAccountField) {
-         return this.errorConfig(
-            instance,
-            "Could not found Batch->Account field",
-            "fieldBrAccount"
-         );
-      }
-
-      this.balanceRcField = this.balanceObject.fieldByID(this.fieldBrRC);
-      if (!this.balanceRcField) {
-         return this.errorConfig(
-            instance,
-            "Could not found Batch->RC field",
-            "fieldBrRC"
-         );
-      }
-
-      this.jeObject = this.AB.objectByID(this.objectJE);
       if (!this.jeObject) {
          return this.errorConfig(
             instance,
-            "Could not found JE object",
+            `Could not found JE object [${this.objectJE}]`,
             "objectJE"
          );
       }
 
-      this.jeArchiveObject = this.AB.objectByID(this.objectJEArchive);
       if (!this.jeArchiveObject) {
          return this.errorConfig(
             instance,
-            "Could not found JE Archive object",
+            `Could not found JE Archive object [${this.objectJEArchive}]`,
             "objectJEArchive"
          );
       }
 
+      // Fields
       this.jeBatchField = this.jeObject.fields(
          (f) =>
             f &&
@@ -104,437 +68,114 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
          );
       }
 
-      this.jeAccountField = this.jeObject.fieldByID(this.fieldJeAccount);
-      if (!this.jeAccountField) {
-         return this.errorConfig(
-            instance,
-            "Could not found the connect JE to Account field",
-            "fieldJeAccount"
-         );
-      }
-
-      this.jeRcField = this.jeObject.fieldByID(this.fieldJeRC);
-      if (!this.jeRcField) {
-         return this.errorConfig(
-            instance,
-            "Could not found the connect JE to RC field",
-            "fieldJeRC"
-         );
-      }
-
-      this.jeArchiveBalanceField = this.jeArchiveObject.fieldByID(
-         this.fieldJeArchiveBalance
-      );
-      if (!this.jeArchiveBalanceField) {
-         return this.errorConfig(
-            instance,
-            "Could not found the connect JE Archive to BR field",
-            "fieldJeArchiveBalance"
-         );
-      }
-
-      var currentProcessValues = this.hashProcessDataValues(instance);
-      var currentBatchID = currentProcessValues[this.processBatchValue];
+      let currentProcessValues = this.hashProcessDataValues(instance);
+      let currentBatchID = currentProcessValues[this.processBatchValue];
       if (!currentBatchID) {
          return this.errorConfig(
             instance,
-            "AccountingJEArchive.do(): unable to find relevant Batch ID",
+            `AccountingJEArchive.do(): unable to find relevant Batch ID [${this.processBatchValue}]`,
             "processBatchValue"
          );
       }
 
-      return (
-         Promise.resolve()
-            // Pull Batch
-            .then(
-               () =>
-                  new Promise((next, bad) => {
-                     this._req
-                        .retry(() =>
-                           this.batchObject.model().findAll(
-                              {
-                                 where: {
-                                    glue: "and",
-                                    rules: [
-                                       {
-                                          key: this.batchObject.PK(),
-                                          rule: "equals",
-                                          value: currentBatchID,
-                                       },
-                                    ],
-                                 },
-                                 populate: false,
-                              },
-                              null,
-                              req
-                           )
-                        )
-                        .then((batch) => {
-                           this.batch = batch[0];
-
-                           if (!this.batch) {
-                              this.log(instance, "Could not find Batch");
-                              var error = new Error("Could not find Batch");
-                              return bad(error);
-                           }
-                           next();
-                        })
-                        .catch((err) => {
-                           this.log(
-                              instance,
-                              `Error looking up Batch [${currentBatchID}]`
-                           );
-                           this.onError(this._instance, err);
-                           bad(err);
-                        });
-                  })
-            )
-            // Pull JE data
-            .then(
-               () =>
-                  new Promise((next, bad) => {
-                     // get custom index value to search
-                     let batchIndexVal = currentBatchID;
-                     if (this.jeBatchField.indexField) {
-                        batchIndexVal =
-                           this.batch[this.jeBatchField.indexField.columnName];
-                     }
-
-                     let cond = {
-                        where: {
-                           glue: "and",
-                           rules: [
-                              {
-                                 key: this.jeBatchField.id,
-                                 rule: "equals",
-                                 value: batchIndexVal,
-                              },
-                           ],
-                        },
-                        populate: true,
-                     };
-
-                     this._req
-                        .retry(() =>
-                           this.jeObject.model().findAll(cond, null, req)
-                        )
-                        .then((journals) => {
-                           this.journals = journals || [];
-                           next();
-                        })
-                        .catch((err) => {
-                           this.onError(this._instance, err);
-                           bad(err);
-                        });
-                  })
-            )
-            // Pull Balances
-            .then(
-               () =>
-                  new Promise((next, bad) => {
-                     this.balances = [];
-
-                     if (!this.journals || !this.journals.length) return next();
-
-                     let fiscalMonthId =
-                        this.batch[this.batchFiscalMonthField.columnName];
-
-                     let tasks = [];
-
-                     (this.journals || []).forEach((je) => {
-                        if (
-                           !je ||
-                           !je[this.jeAccountField.columnName] ||
-                           !je[this.jeRcField.columnName]
-                        )
-                           return;
-
-                        let cond = {
-                           where: {
-                              glue: "and",
-                              rules: [
-                                 {
-                                    key: this.fieldBrFiscalMonth,
-                                    rule: "equals",
-                                    value: fiscalMonthId,
-                                 },
-                                 {
-                                    key: this.fieldBrAccount,
-                                    rule: "equals",
-                                    value: je[this.jeAccountField.columnName],
-                                 },
-                                 {
-                                    key: this.fieldBrRC,
-                                    rule: "equals",
-                                    value: je[this.jeRcField.columnName],
-                                 },
-                              ],
-                           },
-                           populate: false,
-                        };
-
-                        tasks.push(
-                           new Promise((ok, no) => {
-                              this._req
-                                 .retry(() =>
-                                    this.balanceObject
-                                       .model()
-                                       .findAll(cond, null, req)
-                                 )
-                                 .then((balances) => {
-                                    this.balances = this.balances.concat(
-                                       balances || []
-                                    );
-                                    ok();
-                                 })
-                                 .catch((err) => {
-                                    ok();
-                                 });
-                           })
-                        );
-                     });
-
-                     Promise.all(tasks)
-                        .then(() => next())
-                        .catch(bad);
-                  })
-            )
-            // Copy JE to JE Archive
-            .then(
-               () =>
-                  new Promise((next, bad) => {
-                     let tasks = [];
-
-                     (this.journals || []).forEach((je) => {
-                        let jeArchiveValues = {};
-
-                        // link to Balance
-                        let balance = (this.balances || []).filter(
-                           (b) =>
-                              b[this.balanceAccountField.columnName] ==
-                                 je[this.jeAccountField.columnName] &&
-                              b[this.balanceRcField.columnName] ==
-                                 je[this.jeRcField.columnName]
-                        )[0];
-                        if (balance) {
-                           let customBrIndex = "uuid";
-
-                           if (this.jeArchiveBalanceField.indexField) {
-                              customBrIndex =
-                                 this.jeArchiveBalanceField.indexField
-                                    .columnName;
-                           }
-
-                           jeArchiveValues[
-                              this.jeArchiveBalanceField.columnName
-                           ] = balance[customBrIndex];
-                        }
-
-                        let findArcRules = [];
-                        Object.keys(this.fieldsMatch).forEach((fId) => {
-                           let fJe = this.jeObject.fields(
-                              (f) => f.id == this.fieldsMatch[fId]
-                           )[0];
-                           if (fJe == null) return;
-
-                           let fArc = this.jeArchiveObject.fields(
-                              (f) => f.id == fId
-                           )[0];
-                           if (fArc == null) return;
-
-                           // Connect field
-                           if (fJe.key == "connectObject") {
-                              jeArchiveValues[fArc.columnName] =
-                                 je[fJe.columnName];
-
-                              jeArchiveValues[fArc.relationName()] =
-                                 je[fJe.relationName()];
-                           }
-                           // Other field
-                           else if (je[fJe.columnName] != null) {
-                              jeArchiveValues[fArc.columnName] =
-                                 je[fJe.columnName];
-                           }
-
-                           // Add filter rule
-                           findArcRules.push({
-                              key: fArc.id,
-                              rule: "equals",
-                              value: je[fJe.columnName],
-                           });
-                        });
-
-                        if (Object.keys(jeArchiveValues).length > 1) {
-                           // call .requestParams to set default values and reformat value properly
-                           jeArchiveValues =
-                              this.jeArchiveObject.requestParams(
-                                 jeArchiveValues
-                              );
-
-                           // check exists JE Archive
-                           tasks.push(
-                              () =>
-                                 new Promise((ok, no) => {
-                                    this._req
-                                       .retry(() =>
-                                          this.jeArchiveObject.model().findAll(
-                                             {
-                                                where: {
-                                                   glue: "and",
-                                                   rules: findArcRules,
-                                                },
-                                                populate: false,
-                                             },
-                                             null,
-                                             this._req
-                                          )
-                                       )
-                                       .then((jeArchives) => {
-                                          let exists =
-                                             jeArchives &&
-                                             jeArchives.length > 0;
-                                          ok(exists);
-                                       })
-                                       .catch((err) => {
-                                          this.log(
-                                             this._instance,
-                                             "Error checking for existing JE Archive"
-                                          );
-                                          this.onError(this._instance, err);
-                                          no(err);
-                                       });
-                                 })
-                           );
-
-                           tasks.push(
-                              (isExists) =>
-                                 new Promise((ok, no) => {
-                                    if (isExists) {
-                                       ok();
-                                       return;
-                                    }
-
-                                    this.log(
-                                       instance,
-                                       "Creating JE Archive ..."
-                                    );
-                                    this.log(
-                                       instance,
-                                       JSON.stringify(jeArchiveValues)
-                                    );
-
-                                    var isError = false;
-                                    this._req
-                                       .retry(
-                                          () =>
-                                             this.jeArchiveObject
-                                                .model()
-                                                // .create(jeArchiveValues, trx)
-                                                .create(jeArchiveValues) // NOTE: Ignore MySQL transaction because client needs id of entry.
-                                       )
-                                       .catch((err) => {
-                                          if (
-                                             err
-                                                .toString()
-                                                .indexOf(
-                                                   "ER_SIGNAL_EXCEPTION"
-                                                ) > -1
-                                          ) {
-                                             return;
-                                          }
-                                          isError = true;
-                                          this.onError(this._instance, err);
-                                          no(err);
-                                       })
-                                       .then((newJeArchive) => {
-                                          if (isError) return;
-
-                                          // Broadcast
-                                          this._req.broadcast.dcCreate(
-                                             this.jeArchiveObject.id,
-                                             newJeArchive
-                                          );
-
-                                          ok();
-                                       });
-                                 })
-                           );
-                        }
-                     });
-
-                     // Promise.all(tasks)
-                     //    .catch(bad)
-                     //    .then(() => next());
-
-                     tasks.push(() => next());
-
-                     // create JE archive sequentially
-                     tasks
-                        .reduce((promiseChain, currTask) => {
-                           return promiseChain.then(currTask);
-                        }, Promise.resolve([]))
-                        .catch((err) => {
-                           this.onError(this._instance, err);
-                           bad(err);
-                        });
-                  })
-            )
-            // Remove JEs
-            .then(
-               () =>
-                  new Promise((next, bad) => {
-                     if (!this.balances || !this.balances.length) return next();
-
-                     let jeIds = (this.journals || []).map((je) => je.uuid);
-                     if (!jeIds || !jeIds.length) return next();
-
-                     this.log(instance, "Deleting JE ...");
-                     this.log(instance, JSON.stringify(jeIds));
-
-                     this._req
-                        .retry(() =>
-                           this.jeObject
-                              .model()
-                              .modelKnex()
-                              .query(trx)
-                              .delete()
-                              .where("uuid", "IN", jeIds)
-                        )
-                        .then(() => {
-                           // Broadcast
-                           (jeIds || []).forEach((jeId) => {
-                              this._req.broadcast.dcDelete(
-                                 this.jeObject.id,
-                                 jeId
-                              );
-                           });
-
-                           next();
-                        })
-                        .catch((err) => {
-                           this.log(
-                              this._instance,
-                              "Error deleting JE Objects"
-                           );
-                           this.onError(this._instance, err);
-                           bad(err);
-                        });
-                  })
-            )
-            // finish out the Process Task
-            .then(() => {
-               this.stateCompleted(instance);
-               this.log(instance, "JE Archive process successfully");
-               return true;
-            })
-            .catch((err) => {
-               this.log(
-                  this._instance,
-                  "JE Archive process exiting due to error:"
-               );
-               this.onError(this._instance, err);
-               throw err;
-            })
+      // Pull Batch
+      const batchEntries = await this.batchObject.model().findAll(
+         {
+            where: {
+               glue: "and",
+               rules: [
+                  {
+                     key: this.batchObject.PK(),
+                     rule: "equals",
+                     value: currentBatchID,
+                  },
+               ],
+            },
+            populate: false,
+         },
+         null,
+         req
       );
+
+      if (!batchEntries || batchEntries.length < 1) {
+         return this.errorConfig(
+            instance,
+            `AccountingJEArchive.do(): unable to find Batch data for batchID[${currentBatchID}]`,
+            "currentBatchID"
+         );
+      }
+
+      this.batchEntry = batchEntries[0];
+
+      // get custom index value to search
+      let batchIndexVal = currentBatchID;
+      if (this.jeBatchField.indexField) {
+         batchIndexVal =
+            this.batchEntry[this.jeBatchField.indexField.columnName];
+      }
+
+      // Pull JE data
+      this.journals = await this.jeObject.model().findAll(
+         {
+            where: {
+               glue: "and",
+               rules: [
+                  {
+                     key: this.jeBatchField.id,
+                     rule: "equals",
+                     value: batchIndexVal,
+                  },
+               ],
+            },
+            populate: true,
+         },
+         null,
+         req
+      );
+
+      // Run Process
+      const knex = this.AB.Knex.connection();
+      const result = await this._req.retry(() =>
+         knex.raw(`CALL \`JEARCHIVE_PROCESS\`("${currentBatchID}");`)
+      );
+      const responseVals = result[0];
+      const resultVals = responseVals[0];
+
+      this.newJEArchIds = resultVals.map(
+         (item) => item[this.jeArchiveObject.PK()]
+      );
+
+      // Pull JE Archives
+      this.jeArchives = await this.jeArchiveObject.model().findAll(
+         {
+            where: {
+               glue: "and",
+               rules: [
+                  {
+                     key: this.jeArchiveObject.PK(),
+                     rule: "in",
+                     value: this.newJEArchIds,
+                  },
+               ],
+            },
+            populate: true,
+         },
+         null,
+         req
+      );
+
+      // Broadcast
+      (this.journals || []).forEach((je) => {
+         this._req.broadcast.dcDelete(this.jeObject.id, je.uuid || je.id);
+      });
+
+      (this.jeArchives || []).forEach((jeArch) => {
+         this._req.broadcast.dcCreate(this.jeArchiveObject.id, jeArch);
+      });
+
+      // Final
+      this.stateCompleted(instance);
+      this.log(instance, "JE Archive process successfully");
+      return true;
    }
 };
