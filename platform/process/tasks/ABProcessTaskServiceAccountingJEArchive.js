@@ -141,8 +141,10 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
       const responseVals = result[0];
       const resultVals = responseVals[0];
 
-      this.newJEArchIds = resultVals.map(
-         (item) => item[this.jeArchiveObject.PK()]
+      this.newJEArchIds = this.AB.uniq(
+         resultVals
+            .map((item) => item[this.jeArchiveObject.PK()])
+            .filter((id)=> id)
       );
 
       // Pull JE Archives
