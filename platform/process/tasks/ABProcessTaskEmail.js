@@ -1,10 +1,15 @@
 const async = require("async");
 const _ = require("lodash");
 const path = require("path");
+const ejs = require("ejs");
 // prettier-ignore
 const ABProcessTaskEmailCore = require(path.join(__dirname, "..", "..", "..", "core", "process", "tasks", "ABProcessTaskEmailCore.js"));
 // prettier-ignore
 const ABProcessParticipant = require(path.join(__dirname, "..", "ABProcessParticipant"));
+// prettier-ignore
+const ABProcessTaskServiceGetResetPasswordUrl = require(path.join(__dirname, "ABProcessTaskServiceGetResetPasswordUrl"));
+// prettier-ignore
+const ABProcessTaskServiceQuery = require(path.join(__dirname, "ABProcessTaskServiceQuery"));
 
 // const AB = require("ab-utils");
 // const reqAB = AB.reqApi({}, {});
@@ -24,8 +29,9 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
       }
 
       return new Promise((resolve, reject) => {
-         var emails = [];
-         var missingEmails = [];
+         const emails = [];
+         const missingEmails = [];
+
          async.each(
             allLanes,
             (myLane, cb) => {
@@ -49,11 +55,14 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
                   return;
                }
                if (missingEmails.length > 0) {
-                  var text = "These Accounts have missing emails: ";
-                  text += missingEmails.join(", ");
-                  var error = new Error(text);
+                  const text = `These Accounts have missing emails: ${missingEmails.join(
+                     ", "
+                  )}`;
+                  const error = new Error(text);
+
                   error.accounts = missingEmails;
                   this.AB.notify.builder(error, { task: this });
+
                   reject(error);
                } else {
                   resolve(_.uniq(emails));
@@ -67,16 +76,27 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
       return new Promise((resolve, reject) => {
          method = parseInt(method);
 
+         const myLanes = [];
+
+         // the logic for the users is handled in the
+         // ABProcessParticipant object.  So let's create a new
+         // object with our config values, and ask it for it's user
+         const tempLane = new ABProcessParticipant(
+            select,
+            this.process,
+            this.AB
+         );
+
+         const data = {};
+
          switch (method) {
             case 0:
                // select by current/next lane
 
-               var myLanes = [];
-
                // if "to" field, we look for Next Lane
                if (field == "to") {
                   // get next tasks.
-                  var tasks = this.nextTasks(instance);
+                  let tasks = this.nextTasks(instance);
 
                   // find any tasks that are NOT in my current Lane
                   tasks = tasks.filter((t) => {
@@ -102,10 +122,10 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
                }
 
                if (myLanes.length == 0) {
-                  var msg = `[${this.diagramID}].${field} == "${
+                  const msg = `[${this.diagramID}].${field} == "${
                      field == "to" ? "Next" : "Current"
                   } Participant", but no lanes found.`;
-                  var error = new Error(msg);
+                  const error = new Error(msg);
                   this.AB.notify.builder(error, { task: this });
                   reject(error);
                   return;
@@ -113,7 +133,7 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
 
                this.laneUserEmails(myLanes, req)
                   .then((emails) => {
-                     var data = {};
+                     const data = {};
                      data[field] = emails;
                      this.stateUpdate(instance, data);
                      resolve();
@@ -125,17 +145,9 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
             case 1:
                // specify a role/user account
 
-               // the logic for the users is handled in the
-               // ABProcessParticipant object.  So let's create a new
-               // object with our config values, and ask it for it's user
-               var tempLane = new ABProcessParticipant(
-                  select,
-                  this.process,
-                  this.AB
-               );
                this.laneUserEmails(tempLane, req)
                   .then((emails) => {
-                     var data = {};
+                     const data = {};
                      data[field] = emails;
                      this.stateUpdate(instance, data);
                      resolve();
@@ -145,7 +157,7 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
 
             case 2:
                // manually enter email(s)
-               var data = {};
+
                data[field] = custom.split(",");
                this.stateUpdate(instance, data);
                resolve();
@@ -190,20 +202,21 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
     */
    do(instance, dbTransaction, req) {
       return new Promise((resolve, reject) => {
-         var tasks = [];
+         const tasks = [];
+
          tasks.push(this.resolveToAddresses(instance, req));
          tasks.push(this.resolveFromAddresses(instance, req));
 
          Promise.all(tasks)
             .then(() => {
-               var myState = this.myState(instance);
+               const myState = this.myState(instance);
                if (!Array.isArray(myState.to)) {
                   myState.to = [myState.to];
                }
                if (Array.isArray(myState.from)) {
                   myState.from = myState.from.shift();
                }
-               var jobData = {
+               const jobData = {
                   email: {
                      to: myState.to,
                      //    .to  {array}|{CSV list} of email addresses
@@ -214,7 +227,7 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
                      subject: myState.subject,
                      //    .subject {string} The subject text of the email
 
-                     html: myState.message,
+                     html: this.processMessageText(instance, myState.message),
                      //    .text {string|Buffer|Stream|attachment-like obj} plaintext version of the message
                      //    .html {string|Buffer|Stream|attachment-like obj} HTML version of the email.
                   },
@@ -225,10 +238,10 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
                   jobData,
                   (err /*, results */) => {
                      if (err) {
-                        var error = null;
+                        let error = null;
 
                         // if ECONNREFUSED
-                        var eStr = err.toString();
+                        const eStr = err.toString();
                         if (eStr.indexOf("ECONNREFUSED")) {
                            error = this.AB.toError(
                               "NotificationEmail: The server specified in config.local is refusing to connect.",
@@ -263,6 +276,29 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
                this.onError(instance, error);
                reject(error);
             });
+      });
+   }
+
+   processMessageText(instance, message) {
+      const previousElement = this.process
+         .elements()
+         .filter(
+            (e) =>
+               e instanceof ABProcessTaskServiceGetResetPasswordUrl ||
+               e instanceof ABProcessTaskServiceQuery
+         );
+      const previousProcessData = {};
+
+      for (let i = 0; i < previousElement.length; i++) {
+         const key = previousElement[i].name.replaceAll(" ", "_");
+         const state = previousElement[i].myState(instance);
+
+         if (state.status === "completed") previousProcessData[key] = state;
+      }
+
+      return ejs.render(message, previousProcessData, {
+         openDelimiter: "{",
+         closeDelimiter: "}",
       });
    }
 };
