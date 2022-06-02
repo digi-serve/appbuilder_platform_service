@@ -117,8 +117,9 @@ module.exports = class AccountingBatchProcessing extends (
       );
 
       // Broadcast
-      let financialPeriod =
-         this.batchEntry[this.batchFinancialPeriodField.columnName];
+      let financialPeriod = this.batchEntry[
+         this.batchFinancialPeriodField.columnName
+      ];
       let journalEntries =
          this.batchEntry[this.batchEntriesField.relationName()] || [];
       let accountIDs = this.AB.uniq(
