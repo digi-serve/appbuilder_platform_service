@@ -1,6 +1,4 @@
-// import ABApplication from "./ABApplication"
-// const ABApplication = require("./ABApplication"); // NOTE: change to require()
-
+const ejs = require("ejs");
 const path = require("path");
 // prettier-ignore
 const ABProcessTaskUserExternalCore = require(path.join(__dirname, "..", "..", "..", "core", "process", "tasks", "ABProcessTaskUserExternalCore.js"));
@@ -53,9 +51,9 @@ module.exports = class ABProcessTaskUserExternal extends (
             definition: this.process.id,
             ui: {},
          };
-
+         const url = this.addProcessValueToUrl(instance, this.url);
          jobData.data = {
-            url: this.url,
+            url,
          };
 
          if (parseInt(this.who) === 1) {
@@ -164,6 +162,22 @@ module.exports = class ABProcessTaskUserExternal extends (
                }
             }
          );
+      });
+   }
+
+   addProcessValueToUrl(instance, url) {
+      const previousElements = this.process.elements();
+      const processValues = {};
+
+      previousElements.forEach((element) => {
+         const key = element.name.replaceAll(" ", "_");
+         const state = element.myState(instance);
+         if (state.status === "completed") processValues[key] = state;
+      });
+
+      return ejs.render(url, processValues, {
+         openDelimiter: "{",
+         closeDelimiter: "}",
       });
    }
 
