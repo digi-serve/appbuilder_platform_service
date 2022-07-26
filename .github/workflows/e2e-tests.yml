@@ -7,97 +7,98 @@ on:
   pull_request:
     branches: [master, develop]
 jobs:
-  name: E2E Tests
-  runs-on: ubuntu-latest
-  steps:
-    # Checkout each service that uses appbuilder_platform_service then appbuilder inside it
-    # ab_service_custom_reports,
-    - name: Checkout ab_service_custom_reports
-      uses: actions/checkout@v3
-      with:
-        path: ab_service_appbuilder
-        repository: digi-serve/ab_service_appbuilder
-    - name: Checkout ab_service_custom_reports > AppBuilder
-      uses: actions/checkout@v3
-      with:
-        path: ab_service_appbuilder/AppBuilder
-        submodules: true
-    # ab_service_custom_reports
-    - name: Checkout ab_service_custom_reportss
-      uses: actions/checkout@v3
-      with:
-        path: ab_service_custom_reports
-        repository: digi-serve/ab_service_custom_reports
-    - name: Checkout ab_service_custom_reports > AppBuilder
-      uses: actions/checkout@v3
-      with:
-        path: ab_service_custom_reports/AppBuilder
-        submodules: true
-    # ab_service_definition_manager
-    - name: Checkout ab_service_definition_manager
-      uses: actions/checkout@v3
-      with:
-        path: ab_service_definition_manager
-        repository: digi-serve/ab_service_definition_manager
-    - name: Checkout ab_service_definition_manager > AppBuilder
-      uses: actions/checkout@v3
-      with:
-        path: ab_service_definition_manager/AppBuilder
-        submodules: true
-    # ab_service_file_processor
-    - name: Checkout ab_service_file_processor
-      uses: actions/checkout@v3
-      with:
-        path: ab_service_file_processor
-        repository: digi-serve/ab_service_file_processor
-    - name: Checkout ab_service_file_processor > AppBuilder
-      uses: actions/checkout@v3
-      with:
-        path: ab_service_file_processor/AppBuilder
-        submodules: true
-    # ab_service_process_manager
-    - name: Checkout ab_service_process_manager
-      uses: actions/checkout@v3
-      with:
-        path: ab_service_process_manager
-        repository: digi-serve/ab_service_process_manager
-    - name: Checkout ab_service_process_manager > AppBuilder
-      uses: actions/checkout@v3
-      with:
-        path: ab_service_process_manager/AppBuilder
-        submodules: true
-    # ab_service_user_manager
-    - name: Checkout ab_service_user_manager
-      uses: actions/checkout@v3
-      with:
-        path: ab_service_user_manager
-        repository: digi-serve/ab_service_user_manager
-    - name: Checkout ab_service_user_manager > AppBuilder
-      uses: actions/checkout@v3
-      with:
-        path: ab_service_user_manager/AppBuilder
-        submodules: true
-    # install and test   
-    - name: Install AppBuilder
-      uses: digi-serve/ab-install-action@v1
-    - name: Check out kitchen-sink tests
-      uses: actions/checkout@v2
-      with:
-        repository: digi-serve/kitchensink_app
-        path: AppBuilder/test/e2e/cypress/integration/kitchensink_app
-    - name: Run Cypress Tests
-      uses: cypress-io/github-action@v2
-      with:
-        working-directory: ./AppBuilder
-        project: ./test/e2e
-        config: baseUrl=http://localhost:80,responseTimeout=100000,defaultCommandTimeout=24000,retries=2
-        wait-on: "http://localhost:80"
-        wait-on-timeout: 300
-        env: stack=ab
-        install: false
-    - name: Save Screenshots 
-      uses: actions/upload-artifact@v2
-      if: failure()
-      with:
-        name: cypress-screenshots
+  test:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout each service that uses appbuilder_platform_service then appbuilder inside it
+      # ab_service_custom_reports,
+      - name: Checkout ab_service_custom_reports
+        uses: actions/checkout@v3
+        with:
+          path: ab_service_appbuilder
+          repository: digi-serve/ab_service_appbuilder
+      - name: Checkout ab_service_custom_reports > AppBuilder
+        uses: actions/checkout@v3
+        with:
+          path: ab_service_appbuilder/AppBuilder
+          submodules: true
+      # ab_service_custom_reports
+      - name: Checkout ab_service_custom_reportss
+        uses: actions/checkout@v3
+        with:
+          path: ab_service_custom_reports
+          repository: digi-serve/ab_service_custom_reports
+      - name: Checkout ab_service_custom_reports > AppBuilder
+        uses: actions/checkout@v3
+        with:
+          path: ab_service_custom_reports/AppBuilder
+          submodules: true
+      # ab_service_definition_manager
+      - name: Checkout ab_service_definition_manager
+        uses: actions/checkout@v3
+        with:
+          path: ab_service_definition_manager
+          repository: digi-serve/ab_service_definition_manager
+      - name: Checkout ab_service_definition_manager > AppBuilder
+        uses: actions/checkout@v3
+        with:
+          path: ab_service_definition_manager/AppBuilder
+          submodules: true
+      # ab_service_file_processor
+      - name: Checkout ab_service_file_processor
+        uses: actions/checkout@v3
+        with:
+          path: ab_service_file_processor
+          repository: digi-serve/ab_service_file_processor
+      - name: Checkout ab_service_file_processor > AppBuilder
+        uses: actions/checkout@v3
+        with:
+          path: ab_service_file_processor/AppBuilder
+          submodules: true
+      # ab_service_process_manager
+      - name: Checkout ab_service_process_manager
+        uses: actions/checkout@v3
+        with:
+          path: ab_service_process_manager
+          repository: digi-serve/ab_service_process_manager
+      - name: Checkout ab_service_process_manager > AppBuilder
+        uses: actions/checkout@v3
+        with:
+          path: ab_service_process_manager/AppBuilder
+          submodules: true
+      # ab_service_user_manager
+      - name: Checkout ab_service_user_manager
+        uses: actions/checkout@v3
+        with:
+          path: ab_service_user_manager
+          repository: digi-serve/ab_service_user_manager
+      - name: Checkout ab_service_user_manager > AppBuilder
+        uses: actions/checkout@v3
+        with:
+          path: ab_service_user_manager/AppBuilder
+          submodules: true
+      # install and test   
+      - name: Install AppBuilder
+        uses: digi-serve/ab-install-action@sub-repo-build
+      - name: Check out kitchen-sink tests
+        uses: actions/checkout@v2
+        with:
+          repository: digi-serve/kitchensink_app
+          path: AppBuilder/test/e2e/cypress/integration/kitchensink_app
+      - name: Run Cypress Tests
+        uses: cypress-io/github-action@v2
+        with:
+          working-directory: ./AppBuilder
+          project: ./test/e2e
+          config: baseUrl=http://localhost:80,responseTimeout=100000,defaultCommandTimeout=24000,retries=2
+          wait-on: "http://localhost:80"
+          wait-on-timeout: 300
+          env: stack=ab
+          install: false
+      - name: Save Screenshots 
+        uses: actions/upload-artifact@v2
+        if: failure()
+        with:
+          name: cypress-screenshots
           path: ./AppBuilder/test/e2e/cypress/screenshots
