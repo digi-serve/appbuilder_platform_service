@@ -125,6 +125,7 @@ jobs:
           path: ${{ matrix.service }}
           repository: digi-serve/ab_service_${{ matrix.service }}
           ref: ${{ matrix.branch }}
+          fetch-depth: 0 
           token: ${{ secrets.DS_REPO_PAT }}
           submodules: recursive
       - name: Checkout ${{ matrix.service }} > AppBuilder
