@@ -126,10 +126,10 @@ jobs:
           repository: digi-serve/ab_service_${{ matrix.service }}
           ref: ${{ matrix.branch }}
           token: ${{ secrets.DS_REPO_PAT }}
+          submodules: recursive
       - name: Checkout ${{ matrix.service }} > AppBuilder
-        uses: actions/checkout@v3
-        with:
-          path: ${{ matrix.service }}/AppBuilder
+        run: git checkout master
+        working-directory:  ${{ matrix.service }}/AppBuilder
       - uses: EndBug/add-and-commit@v9
         with:
           message: 'Update AppBuilder sub-repo (from GitHub Actions)'
