@@ -143,8 +143,38 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
                break;
 
             case 1:
-               // specify a role/user account
+               // specify a role/user account OR user-field
 
+               // if we use fields, load the data from previous tasks
+               let usedFields =
+                  field == "to" ? this.toUsers?.fields : this.fromUsers?.fields;
+               if (Array.isArray(usedFields) && usedFields?.length) {
+                  // only get the fields we need for the email lookup
+                  // get the values for the field
+                  usedFields.forEach((f) => {
+                     let foundValue = this.process.processData(this, [
+                        instance,
+                        f
+                     ]);
+                     if (foundValue) {
+                        // We don't have a specific field lookup:
+                        // Therefore I am setting the account equal to the
+                        // value we just found
+
+                        if (!Array.isArray(tempLane.account)) {
+                           // make sure account is an array with viable data in it
+                           tempLane.account = tempLane.account
+                              ? [tempLane.account]
+                              : [];
+                        }
+
+                        tempLane.account.push(foundValue);
+                        tempLane.useAccount = 1;
+                     }
+                  });
+               }
+
+               // look them up
                this.laneUserEmails(tempLane, req)
                   .then((emails) => {
                      const data = {};
@@ -227,18 +257,17 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
                      subject: myState.subject,
                      //    .subject {string} The subject text of the email
 
-                     html: this.processMessageText(instance, myState.message),
+                     html: this.processMessageText(instance, myState.message)
                      //    .text {string|Buffer|Stream|attachment-like obj} plaintext version of the message
                      //    .html {string|Buffer|Stream|attachment-like obj} HTML version of the email.
-                  },
+                  }
                };
 
-               req.serviceRequest(
-                  "notification_email.email",
-                  jobData,
-                  (err /*, results */) => {
-                     if (err) {
-                        let error = null;
+               req.serviceRequest("notification_email.email", jobData, (
+                  err /*, results */
+               ) => {
+                  if (err) {
+                     let error = null;
 
                         // if ECONNREFUSED
                         const eStr = err.toString();
