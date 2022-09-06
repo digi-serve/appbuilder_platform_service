@@ -136,8 +136,7 @@ class ABFactory extends ABFactoryCore {
                      max: 20,
                      // this should reduce Knex Timeout Errors
                      // (https://github.com/knex/knex/issues/2820)
-                     acquireTimeoutMillis:
-                        config.connections.appbuilder.acquireTimeout || 90000,
+                     acquireTimeoutMillis: config.acquireTimeout || 90000,
                   },
                });
             }
