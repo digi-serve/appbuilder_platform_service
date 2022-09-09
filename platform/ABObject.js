@@ -284,7 +284,10 @@ module.exports = class ABClassObject extends ABObjectCore {
          req.retry(() =>
             SiteUser.find({
                where: { username: condDefaults.username, isActive: 1 },
-               populate: true,
+               populate: [
+                  "SITE_ROLE",
+                  "SITE_SCOPE"
+               ],
             })
          ).then((list) => {
             var user = list[0];
