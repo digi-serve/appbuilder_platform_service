@@ -239,9 +239,11 @@ module.exports = class ABProcess extends ABProcessCore {
                                  // ready to run (again if necessary)
                                  var nextTasks = task.nextTasks(instance);
                                  if (nextTasks) {
-                                    nextTasks.forEach((t) => {
-                                       t.reset(instance);
-                                    });
+                                    nextTasks
+                                       .filter((t) => t)
+                                       .forEach((t) => {
+                                          t.reset(instance);
+                                       });
                                     cb(null, isDone);
                                  } else {
                                     // if null was returned then an error
@@ -337,3 +339,4 @@ module.exports = class ABProcess extends ABProcessCore {
       return isValid;
    }
 };
+
