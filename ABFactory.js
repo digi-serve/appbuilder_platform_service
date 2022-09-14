@@ -133,7 +133,7 @@ class ABFactory extends ABFactoryCore {
                   // https://github.com/tgriesser/knex/issues/1027
                   pool: {
                      min: 2,
-                     max: 20,
+                     max: config.poolMax || 30,
                      // this should reduce Knex Timeout Errors
                      // (https://github.com/knex/knex/issues/2820)
                      acquireTimeoutMillis: config.acquireTimeout || 90000,
@@ -508,3 +508,4 @@ class ABFactory extends ABFactoryCore {
 }
 
 module.exports = ABFactory;
+
