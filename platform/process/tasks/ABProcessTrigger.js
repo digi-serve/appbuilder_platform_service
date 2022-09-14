@@ -14,36 +14,17 @@ module.exports = class ABProcessTaskTrigger extends ABProcessTriggerCore {
       this.initState(context, { triggered: true, status: "completed", data });
       context.startTaskID = this.diagramID;
 
-      let dbTransaction;
+      return Promise.resolve()
+         .then(() => this.process.instanceNew(context, null, req))
+         .catch((error) => {
+            this.AB.notify.developer(error, {
+               context: `ABProcessTrigger.trigger()`,
+               task: this,
+            });
 
-      return (
-         Promise.resolve()
-            .then(
-               () =>
-                  new Promise((next, bad) => {
-                     this.AB.Knex.createTransaction((trx) => {
-                        dbTransaction = trx;
-                        next();
-                     }).catch(bad);
-                  })
-            )
-            // modify data in any appropriate way then:
-            .then(() => this.process.instanceNew(context, dbTransaction, req))
-            // save changes to DB
-            .then(() => {
-               dbTransaction.commit();
-            })
-            // cancel changes
-            .catch((error) => {
-               this.AB.notify.developer(error, {
-                  context: `ABProcessTrigger.trigger()`,
-                  task: this,
-               });
-               if (dbTransaction) dbTransaction.rollback();
-               this.AB.error(error);
-               // propogate the error
-               throw error;
-            })
-      );
+            this.AB.error(error);
+            // propogate the error
+            throw error;
+         });
    }
 };
