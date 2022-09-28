@@ -115,4 +115,35 @@ module.exports = class ABFieldCalculate extends ABFieldCalculateCore {
          obj[this.columnName] = { type: "null" };
       }
    }
+
+   /**
+    * Generate the SQL for the key portion of our filter condition. We need run
+    * the calculate formula from SQL.
+    * @method conditionKey
+    */
+   conditionKey(userData, req) {
+      let formula = this.settings.formula.replace(
+         /{([^}]+)}/g,
+         (match, column) => {
+            const formulaField =
+               this.object.fields((f) => f.columnName == column)[0] ?? {};
+
+            switch (formulaField.key) {
+               case "number":
+                  return `COALESCE(${formulaField.conditionKey()}, 0)`;
+               // We use COALESCE so that null will be interpreted as 0
+               case "calculate":
+               case "formula":
+                  return formulaField.conditionKey(userData, req);
+               default:
+                  req.notifyBuilder(
+                     `ABFieldCalculate.conditionKey(): Unexpected field "${formulaField.name}" in calucate field ${this.name} formula`,
+                     { calculateField: this, formulaField }
+                  );
+                  return 0;
+            }
+         }
+      );
+      return formula;
+   }
 };

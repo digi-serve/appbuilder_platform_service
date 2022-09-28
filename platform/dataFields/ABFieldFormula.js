@@ -113,4 +113,38 @@ module.exports = class ABFieldFormula extends ABFieldFormulaCore {
          obj[this.columnName] = { type: "null" };
       }
    }
+
+   /**
+    * Generate the SQL for the key portion of our filter condition. We need to
+    * preform the formula using SQL.
+    * @method conditionKey
+    */
+   conditionKey(userData, req) {
+      let operation = this.settings.type.toUpperCase();
+      if (operation == "AVERAGE") operation = "AVG";
+      // In all other cases the SQL syntax for the operat matches our type
+
+      const connectObject = this.AB.objectByID(this.settings.object);
+      const linkColumnId = this.object.fields(
+         (f) => f.id == this.settings.field
+      )[0].settings.linkColumn;
+      const linkColumn = connectObject.fields((f) => f.id == linkColumnId)[0];
+      const operationCol = connectObject.fields(
+         (f) => f.id == this.settings.fieldLink
+      )[0].columnName;
+      const connectedWhere = `${linkColumn.conditionKey()} = ${this.dbPrefix()}.uuid`;
+      // Filter by connection to this object
+      const formulaWhere = this.settings.where;
+      let extraWhere = "";
+      if (formulaWhere.rules?.length > 0) {
+         const connectModel = connectObject.model();
+         const parsedRules = [];
+         formulaWhere.rules.forEach((rule) => {
+            parsedRules.push(connectModel.parseCondition(rule, userData, req));
+         });
+         extraWhere = ` AND (${parsedRules.join(` ${formulaWhere.glue} `)})`;
+      }
+      // COALESE here replaces null with 0 (when no connected records found)
+      return `COALESCE((SELECT ${operation}(\`${operationCol}\`) FROM ${linkColumn.dbPrefix()} WHERE ${connectedWhere}${extraWhere}), 0)`;
+   }
 };
