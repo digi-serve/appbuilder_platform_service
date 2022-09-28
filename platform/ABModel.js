@@ -1059,9 +1059,7 @@ module.exports = class ABModel extends ABModelCore {
          })[0];
          if (field) {
             // convert field's id to column name
-            condition.key = "{prefix}.`{columnName}`"
-               .replace("{prefix}", field.dbPrefix())
-               .replace("{columnName}", field.columnName);
+            condition.key = field.conditionKey();
 
             // if we are searching a multilingual field it is stored in translations so we need to search JSON
             if (field.isMultilingual) {

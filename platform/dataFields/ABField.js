@@ -25,11 +25,11 @@ module.exports = class ABField extends ABFieldCore {
   			icon:'font',				// fa-[icon] reference for an icon for this Field Type
   			label:'',					// pulled from translation
 			columnName:'column_name',	// a valid mysql table.column name
-			isImported: 1/0,			// flag to mark is import from other object			
+			isImported: 1/0,			// flag to mark is import from other object
 			settings: {					// unique settings for the type of field
 				showIcon:true/false,	// only useful in Object Workspace DataTable
 				isImported: 1/0,		// flag to mark is import from other object
-				required: 1/0,			// field allows does not allow NULL or it does allow NULL 
+				required: 1/0,			// field allows does not allow NULL or it does allow NULL
 				width: {int}			// width of display column
 
 				// specific for dataField
@@ -328,5 +328,14 @@ module.exports = class ABField extends ABFieldCore {
       return new Promise((resolve, reject) => {
          resolve();
       });
+   }
+
+   /**
+    * Generate the SQL for the key portion of our filter condition. Can be
+    * overwritten for non standard field types (Calculate, Formula, etc)
+    * @method conditionKey
+    */
+   conditionKey() {
+      return `${this.dbPrefix()}.\`${this.columnName}\``;
    }
 };
