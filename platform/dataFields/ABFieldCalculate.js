@@ -122,61 +122,125 @@ module.exports = class ABFieldCalculate extends ABFieldCalculateCore {
     * @method conditionKey
     */
    conditionKey(userData, req) {
-      // replace `{columnName}` in formula
-      let formula = this.settings.formula.replace(
-         /{([^}]+)}/g,
-         (match, column) => {
-            const formulaField =
-               this.object.fields((f) => f.columnName == column)[0] ?? {};
+      let formula = this.settings.formula.replace(/{[^}]+}/g, (match) => {
+         // replace spaces within column names to make parseing the formula easier
+         return match.replaceAll(" ", "__");
+      });
+      const { result: formulaParts } = this.parseFormula(formula);
+      const invalidParts = [];
 
-            switch (formulaField.key) {
-               case "number":
-                  return `COALESCE(${formulaField.conditionKey()}, 0)`;
-               // We use COALESCE so that null will be interpreted as 0
-               case "calculate":
-               case "formula":
-                  return formulaField.conditionKey(userData, req);
-               case "date":
-               case "datetime":
-                  return formulaField.conditionKey();
-               default:
-                  req.notifyBuilder(
-                     `ABFieldCalculate.conditionKey(): Unexpected field "${formulaField.name}" in calucate field ${this.name} formula`,
-                     { calculateField: this, formulaField }
-                  );
-                  return 0;
+      const convertSQL = (parts) => {
+         let sqlFormula = "";
+         for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
+            if (part instanceof Array) {
+               sqlFormula += `(${convertSQL(part)})`;
+            } else {
+               switch (part) {
+                  // I don't think these are worth implementing in SQL. We
+                  // can add if there is a real usecase.
+                  case "DATE":
+                  case "HOUR":
+                  case "MINUTE":
+                  case "MINUTE_TO_HOUR":
+                     invalidParts.push(`${part}(${parts[i + 1].join("")})`);
+                     sqlFormula += "0";
+                     i++; // skip the next part
+                     break;
+                  case "AGE":
+                     sqlFormula = "YEAR(NOW()) - YEAR";
+                     break;
+                  case "CURRENT":
+                     sqlFormula = "NOW()";
+                     break;
+                  // DAY() and YEAR() should work by default in SQL, MONTH() will start from
+                  // 1 so we need to subtract 1 to match our js implementation
+                  case "MONTH":
+                     sqlFormula = `(MONTH(${convertSQL(parts[i + 1])}) - 1)`;
+                     i++; //Next part already handled
+                     break;
+                  default:
+                     sqlFormula += part;
+               }
             }
          }
-      );
-      // Replace date relted functions
-      formula = formula.replace(/CURRENT/g, "NOW()");
-      // DAY() and YEAR() should work by default in SQL, MONTH() will start from
-      // 1 so we need to subtract 1 to match our js implementation
-      formula = formula.replace(/MONTH\([^)]+\)/g, (match) => `${match} - 1`);
-
-      formula = formula.replace(
-         /AGE\(([^)]+)\)/g,
-         (match, date) => `YEAR(NOW()) - YEAR(${date})`
-      );
-      // I don't think the rest are worth implementing in SQL. We can add if
-      // there is a real usecase.
-      const invalid = [];
-      const remove = (match) => {
-         invalid.push(match);
-         return 0;
+         return sqlFormula;
       };
-      formula = formula
-         .replace(/DATE\([^)]+\)/g, remove)
-         .replace(/HOUR\([^)]+\)/g, remove)
-         .replace(/MINUTE\([^)]+\)/g, remove)
-         .replace(/MINUTE_TO_HOUR\([^)]+\)/g, remove);
-      if (invalid.length > 0) {
-         req.notifyBuilder(
+
+      formula = convertSQL(formulaParts);
+      if (invalidParts.length > 0) {
+         req.notify.builder(
             `ABFieldCalculate.conditionKey(): Unsupported methods in calucate field ${this.name}. Filter will not work correctly.`,
-            { calculateField: this, invalid }
+            { calculateField: this, invalidParts }
          );
       }
+      // replace `{columnName}` with the field.conditionKey()
+      formula = formula.replace(/{([^}]+)}/g, (match, column) => {
+         column = column.replaceAll("__", " ");
+         const formulaField =
+            this.object.fields((f) => f.columnName == column)[0] ?? {};
+
+         switch (formulaField.key) {
+            case "number":
+               return `COALESCE(${formulaField.conditionKey()}, 0)`;
+            // We use COALESCE so that null will be interpreted as 0
+            case "calculate":
+            case "date":
+            case "datetime":
+            case "formula":
+               return formulaField.conditionKey(userData, req);
+            default:
+               req.notify.builder(
+                  `ABFieldCalculate.conditionKey(): Unexpected field "${formulaField.name}" in calucate field ${this.name} formula`,
+                  { calculateField: this, formulaField }
+               );
+               return 0;
+         }
+      });
 
       return formula;
+   }
+
+   /**
+    * Recursively parse the formula into it's part, preserving nested brackets
+    * @function parseFormula
+    * @param {string|string[]} input a formula string or array of characters in the formula
+    * @param {int=0} i index for recursion
+    * @return {array} format A + B(C+D) => ['A','+', 'B', ['C', '+', 'D' ]]
+    */
+   parseFormula(input, i = 0) {
+      const characters = typeof input == "string" ? input.split("") : input;
+      const result = [];
+      let resultIndex = 0;
+      for (i; i < characters.length; i++) {
+         const character = characters[i];
+         let response;
+         switch (character) {
+            case "(":
+               response = this.parseFormula(characters, i + 1);
+               if (result[resultIndex]) resultIndex++;
+               result[resultIndex] = response.result;
+               resultIndex++;
+               i = response.i;
+               break;
+            case ")":
+               return { result, i: i };
+            case "-":
+            case "+":
+            case "*":
+            case "/":
+               if (result[resultIndex]) resultIndex++;
+               result[resultIndex] = character;
+               resultIndex++;
+               break;
+            case " ":
+               if (result[resultIndex]) resultIndex++;
+               break;
+            default:
+               result[resultIndex] = result[resultIndex] ?? "";
+               result[resultIndex] += character;
+         }
+      }
+      return { result, i };
    }
 };
