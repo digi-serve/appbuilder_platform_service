@@ -122,6 +122,7 @@ module.exports = class ABFieldCalculate extends ABFieldCalculateCore {
     * @method conditionKey
     */
    conditionKey(userData, req) {
+      // replace `{columnName}` in formula
       let formula = this.settings.formula.replace(
          /{([^}]+)}/g,
          (match, column) => {
@@ -135,6 +136,9 @@ module.exports = class ABFieldCalculate extends ABFieldCalculateCore {
                case "calculate":
                case "formula":
                   return formulaField.conditionKey(userData, req);
+               case "date":
+               case "datetime":
+                  return formulaField.conditionKey();
                default:
                   req.notifyBuilder(
                      `ABFieldCalculate.conditionKey(): Unexpected field "${formulaField.name}" in calucate field ${this.name} formula`,
@@ -144,6 +148,35 @@ module.exports = class ABFieldCalculate extends ABFieldCalculateCore {
             }
          }
       );
+      // Replace date relted functions
+      formula = formula.replace(/CURRENT/g, "NOW()");
+      // DAY() and YEAR() should work by default in SQL, MONTH() will start from
+      // 1 so we need to subtract 1 to match our js implementation
+      formula = formula.replace(/MONTH\([^)]+\)/g, (match) => `${match} - 1`);
+
+      formula = formula.replace(
+         /AGE\(([^)]+)\)/g,
+         (match, date) => `YEAR(NOW()) - YEAR(${date})`
+      );
+      // I don't think the rest are worth implementing in SQL. We can add if
+      // there is a real usecase.
+      const invalid = [];
+      const remove = (match) => {
+         invalid.push(match);
+         return 0;
+      };
+      formula = formula
+         .replace(/DATE\([^)]+\)/g, remove)
+         .replace(/HOUR\([^)]+\)/g, remove)
+         .replace(/MINUTE\([^)]+\)/g, remove)
+         .replace(/MINUTE_TO_HOUR\([^)]+\)/g, remove);
+      if (invalid.length > 0) {
+         req.notifyBuilder(
+            `ABFieldCalculate.conditionKey(): Unsupported methods in calucate field ${this.name}. Filter will not work correctly.`,
+            { calculateField: this, invalid }
+         );
+      }
+
       return formula;
    }
 };
