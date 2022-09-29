@@ -1049,6 +1049,9 @@ module.exports = class ABModel extends ABModelCore {
       if (condition == null || condition.rule == "have_no_relation")
          return condition;
 
+      let skipQuotes = false;
+      // @const {boolean} skip adding `` around the key
+
       // Convert field id to column name
       if (this.AB.rules.isUUID(condition.key)) {
          var field = this.object.fields((f) => {
@@ -1059,7 +1062,7 @@ module.exports = class ABModel extends ABModelCore {
          })[0];
          if (field) {
             // convert field's id to column name
-            condition.key = field.conditionKey();
+            condition.key = field.conditionKey(userData, req);
 
             // if we are searching a multilingual field it is stored in translations so we need to search JSON
             if (field.isMultilingual) {
@@ -1174,6 +1177,8 @@ module.exports = class ABModel extends ABModelCore {
                ].indexOf(condition.rule) != -1
             ) {
                this.convertConnectFieldCondition(field, condition);
+            } else if (field.key == "formula" || field.key == "calculate") {
+               skipQuotes = true;
             }
          }
       }
@@ -1223,7 +1228,7 @@ module.exports = class ABModel extends ABModelCore {
 
       // normal field name:
       var columnName = condition.key;
-      if (typeof columnName == "string") {
+      if (typeof columnName == "string" && !skipQuotes) {
          // make sure to ` ` columnName (if it isn't our special '1' condition )
          // see Policy:ABModelConvertSameAsUserConditions  for when that is applied
          if (columnName != "1") {
