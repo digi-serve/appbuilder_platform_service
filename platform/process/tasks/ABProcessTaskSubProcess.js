@@ -26,7 +26,7 @@ module.exports = class SubProcess extends SubProcessCore {
       // Pull the entry data to sub process
       let processData = this.process.processData(this, [
          instance,
-         this.parameterId
+         this.parameterId,
       ]);
 
       if (processData == null) {
@@ -54,13 +54,9 @@ module.exports = class SubProcess extends SubProcessCore {
          let firstConnection = this.connections()[0];
          if (firstConnection == null) return;
 
-         let startElement = this.elementForDiagramID(
-            firstConnection.from
-         );
+         let startElement = this.elementForDiagramID(firstConnection.from);
          if (startElement == null) {
-            startElement = this.elementForDiagramID(
-               firstConnection.to
-            );
+            startElement = this.elementForDiagramID(firstConnection.to);
          }
 
          if (startElement instanceof ABProcessTriggerCore) {
@@ -109,24 +105,28 @@ module.exports = class SubProcess extends SubProcessCore {
          // Do tasks
          while (subTasks && subTasks.length > 0) {
             for (let t of subTasks) {
+               let isDone = false;
+               taskElements.push(t);
+
                try {
-                  taskElements.push(t);
-                  let isDone = await t.do(instance, dbTransaction);
-                  if (isDone) {
-                     let nextTasks = t.nextTasks(
-                        instance
-                     );
-                     if (nextTasks) {
-                        // make sure the next tasks know they are
-                        // ready to run (again if necessary)
-                        nextTasks.forEach((nextT) => {
-                           nextT.reset(instance);
-                        });
-                     }
-                  }
-               }
-               catch(error) {
+                  isDone = await t.do(instance, dbTransaction);
+               } catch (error) {
                   t.onError(instance, error);
+               }
+
+               // NOTE: Prevent infinite looping when there is "Did not find my definition" error.
+               // The reset code should be outside .catch statement
+               // https://github.com/appdevdesigns/app_builder/blob/master/api/classes/platform/process/tasks/ABProcessTaskSubProcess.js#L152
+               // (ProcessTask Error: SubProcess : Error: Configuration Error: Did not find my definition for dID[...])
+               if (isDone) {
+                  let nextTasks = t.nextTasks(instance);
+                  if (nextTasks) {
+                     // make sure the next tasks know they are
+                     // ready to run (again if necessary)
+                     nextTasks.forEach((nextT) => {
+                        nextT.reset(instance);
+                     });
+                  }
                }
             }
 
@@ -148,3 +148,4 @@ module.exports = class SubProcess extends SubProcessCore {
       return true;
    }
 };
+
