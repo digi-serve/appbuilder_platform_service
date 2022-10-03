@@ -118,7 +118,7 @@ class ABQLRowUpdate extends ABQLRowUpdateCore {
                }
                // Set custom value
                else {
-                  updateParams[field.columnName] = value.value;
+                  updateParams[field.columnName] = value.value ?? null;
                }
             }
 
@@ -153,6 +153,7 @@ class ABQLRowUpdate extends ABQLRowUpdateCore {
                objectID: context.object.id,
                ID: id,
                values: updateParams,
+               fromProcessManager: true,
             };
             req.serviceRequest(
                "appbuilder.model-update",
