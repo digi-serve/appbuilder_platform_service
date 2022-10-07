@@ -246,6 +246,9 @@ module.exports = class ABProcess extends ABProcessCore {
                                        });
                                     cb(null, isDone);
                                  } else {
+                                    // display error message
+                                    task.onError(instance, new Error("error parsing next task"));
+
                                     // WORKAROUND: `SITE_PROCESS_INSTANCE` table has a lot of "Did not find any outgoing flows for dID" error row data in production site.
                                     cb();
                                  }
