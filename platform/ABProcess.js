@@ -246,30 +246,46 @@ module.exports = class ABProcess extends ABProcessCore {
                                        });
                                     cb(null, isDone);
                                  } else {
-                                    // if null was returned then an error
-                                    // happened during the .nextTask() fn
-                                    var error = new Error(
-                                       "error parsing next task"
-                                    );
-                                    this.instanceError(
-                                       instance,
-                                       task,
-                                       error
-                                    ).then(() => {
-                                       cb();
-                                    });
+                                    // display error message
+                                    task.onError(instance, new Error("error parsing next task"));
+
+                                    // WORKAROUND: `SITE_PROCESS_INSTANCE` table has a lot of "Did not find any outgoing flows for dID" error row data in production site.
+                                    cb();
                                  }
+
+                                 // else {
+                                 //    // if null was returned then an error
+                                 //    // happened during the .nextTask() fn
+                                 //    var error = new Error(
+                                 //       "error parsing next task"
+                                 //    );
+                                 //    this.instanceError(
+                                 //       instance,
+                                 //       task,
+                                 //       error
+                                 //    ).then(() => {
+                                 //       cb();
+                                 //    });
+                                 // }
                               } else {
                                  cb(null, false);
                               }
                            })
                            .catch((err) => {
                               task.onError(instance, err);
-                              this.instanceError(instance, task, err).then(
-                                 () => {
-                                    cb();
-                                 }
-                              );
+
+                              // WORKAROUND: `SITE_PROCESS_INSTANCE` table has a lot of "Error: no valid path found" error row data in production site. (MILLION rows !!)
+                              // skip ABProcessGatewayExclusive [no valid path found] to insert to DB
+                              if (err?.message == "no valid path found") {
+                                 cb();
+                              }
+                              else {
+                                 this.instanceError(instance, task, err).then(
+                                    () => {
+                                       cb();
+                                    }
+                                 );
+                              }
                            });
                      },
                      (err, results) => {
@@ -339,4 +355,3 @@ module.exports = class ABProcess extends ABProcessCore {
       return isValid;
    }
 };
-
