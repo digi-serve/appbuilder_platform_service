@@ -60,11 +60,12 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
       ids.push(this.id);
    }
 
-   users(req) {
+   users(req, object, data) {
       return new Promise((resolve, reject) => {
          var allLookups = [];
          allLookups.push(this.usersForRoles(req));
          allLookups.push(this.usersForAccounts(req));
+         allLookups.push(this.usersForFields(req, object, data));
 
          Promise.all(allLookups)
             .then((results) => {
@@ -150,4 +151,61 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
             });
       });
    }
+
+   /**
+    * @function usersForFields
+    * Get the user id list from the field options
+    *
+    * @param {ABObject} object
+    * @param {Object} data - the process data
+    * @returns {Promise} - the user list
+    */
+   usersForFields(req, object, data) {
+      if (
+         !this.useField ||
+         !this.fields?.length ||
+         !object ||
+         data == null
+      )
+         return Promise.resolve([]);
+
+      // pull ABFieldUser list
+      const userFields = object.fields(
+         (f) => (this.fields ?? []).indexOf(f.id) > -1
+      );
+
+      // Collect all usernames
+      let userLookups = [];
+      (userFields ?? []).forEach((f) => {
+         let userData = data[f.columnName];
+         if (!userData) return;
+
+         if (!Array.isArray(userData)) userData = [userData];
+
+         // Add an user info to the list
+         userLookups = userLookups.concat(
+            userData.map((uData) => uData.uuid ?? uData.id ?? uData.username ?? uData)
+         );
+      });
+
+      // Remove empty items
+      userLookups = userLookups.filter((uName) => uName);
+
+      return new Promise((resolve, reject) => {
+
+         req.retry(() =>
+            this.AB.objectUser()
+               .model()
+               .find({
+                  or: [{ uuid: userLookups }, { username: userLookups }],
+               })
+         )
+         .then((listUsers) => {
+            // return user list
+            resolve(listUsers);
+         })
+         .catch(reject);
+      });
+   }
 };
+

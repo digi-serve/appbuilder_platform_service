@@ -45,59 +45,104 @@ module.exports = class ABProcessTaskUserApproval extends (
       });
    }
 
-   _requestNewForm(instance) {
-      return new Promise((resolve, reject) => {
-         var jobData = {
-            name: this.name,
-            process: instance.id,
-            definition: this.process.id,
-            ui: this.formBuilder,
-         };
+   async _requestNewForm(instance) {
+      var jobData = {
+         name: this.name,
+         process: instance.id,
+         definition: this.process.id,
+         ui: this.formBuilder,
+      };
 
-         var processData = {};
-         var listDataFields = this.process.processDataFields(this);
-         listDataFields.forEach((entry) => {
-            processData[entry.key] = this.process.processData(this, [
-               instance,
-               entry.key,
-            ]);
-         });
-         jobData.data = processData;
+      var processData = {};
+      var listDataFields = this.process.processDataFields(this);
+      listDataFields.forEach((entry) => {
+         processData[entry.key] = this.process.processData(this, [
+            instance,
+            entry.key,
+         ]);
 
-         if (parseInt(this.who) == 1) {
-            if (parseInt(this.toUsers.useRole) == 1) {
-               jobData.roles = this.toUsers.role;
-            }
+         if (entry.field.key == "connectObject") {
+            processData[`${entry.key}.format`] = this.process.processData(
+               this,
+               [instance, `${entry.key}.format`]
+            );
+         }
+      });
+      jobData.data = processData;
 
-            if (parseInt(this.toUsers.useAccount) == 1) {
-               jobData.users = this.toUsers.account;
-            }
-         } else {
-            // get roles & users from Lane
-
-            var myLane = this.myLane();
-            if (!myLane) {
-               return this.errorConfig(
-                  instance,
-                  `no lane found for id:[${this.laneDiagramID}]`,
-                  "laneDiagramID"
-               );
-            }
-            if (myLane.useRole) {
-               jobData.roles = myLane.role;
-            }
-            if (myLane.useAccount) {
-               jobData.users = myLane.account;
-            }
+      if (parseInt(this.who) == 1) {
+         if (parseInt(this.toUsers.useRole) == 1) {
+            jobData.roles = this.toUsers.role;
          }
 
-         // Validate Roles & Users parameters:
-         if (jobData.roles && !Array.isArray(jobData.roles))
-            jobData.roles = [jobData.roles];
+         if (parseInt(this.toUsers.useAccount) == 1) {
+            jobData.users = this.toUsers.account;
+         }
 
-         if (jobData.users && !Array.isArray(jobData.users))
-            jobData.users = [jobData.users];
+         // pull user data from the user fields
+         if (parseInt(this.toUsers.useField) == 1) {
+            jobData.users = jobData.users || [];
 
+            // Copy the array because I don't want to mess up this.toUsers.account
+            jobData.users = jobData.users.slice(0, jobData.users.length);
+
+            // Combine user list
+            let allUserFields = [];
+            (this.toUsers.fields || []).forEach((pKey) => {
+               let userData = jobData.data[pKey] || [];
+               if (userData && !Array.isArray(userData)) userData = [userData];
+
+               allUserFields = allUserFields.concat(
+                  userData
+                     .filter((u) => u)
+                     .map((u) => u.uuid || u.id || u.username || u)
+               );
+            });
+            allUserFields = allUserFields.filter((uId) => uId);
+
+            const listUsers = await this.AB.objectUser()
+               .model()
+               .find({
+                  or: [{ uuid: allUserFields }, { username: allUserFields }],
+               });
+
+            // Remove empty items
+            jobData.users = jobData.users.concat(listUsers.map((u) => u.uuid));
+
+            // Remove duplicate items
+            jobData.users = this.AB.uniq(
+               jobData.users,
+               false,
+               (u) => u.toString() // support compare with different types
+            );
+         }
+      } else {
+         // get roles & users from Lane
+
+         var myLane = this.myLane();
+         if (!myLane) {
+            return this.errorConfig(
+               instance,
+               `no lane found for id:[${this.laneDiagramID}]`,
+               "laneDiagramID"
+            );
+         }
+         if (myLane.useRole) {
+            jobData.roles = myLane.role;
+         }
+         if (myLane.useAccount) {
+            jobData.users = myLane.account;
+         }
+      }
+
+      // Validate Roles & Users parameters:
+      if (jobData.roles && !Array.isArray(jobData.roles))
+         jobData.roles = [jobData.roles];
+
+      if (jobData.users && !Array.isArray(jobData.users))
+         jobData.users = [jobData.users];
+
+      return new Promise((resolve, reject) => {
          this._req.serviceRequest(
             "process_manager.userform.create",
             jobData,
@@ -164,3 +209,4 @@ module.exports = class ABProcessTaskUserApproval extends (
       });
    }
 };
+
