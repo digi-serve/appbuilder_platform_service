@@ -61,7 +61,7 @@ module.exports = class ABProcessTaskUserApproval extends (
             entry.key,
          ]);
 
-         if (entry.field.key == "connectObject") {
+         if (entry.field?.key == "connectObject") {
             processData[`${entry.key}.format`] = this.process.processData(
                this,
                [instance, `${entry.key}.format`]
