@@ -1365,14 +1365,25 @@ module.exports = class ABModel extends ABModelCore {
             if (field) {
                // Query
                if (this.object.isQuery) {
-                  columnName = `JSON_SEARCH(JSON_EXTRACT(\`${
-                     field.alias
-                  }.${field.relationName()}\`, '$[*].id'), 'one', '${
-                     userData.username
-                  }')`;
+                  // columnName = `JSON_SEARCH(JSON_EXTRACT(\`${
+                  //    field.alias
+                  // }.${field.relationName()}\`, '$[*].id'), 'one', '${
+                  //    userData.username
+                  // }')`;
+                  // operator =
+                  //    condition.rule != "contain_current_user" ? "IS" : "IS NOT";
+                  // value = "NULL";
+
+                  // WORKAROUND: 10.9.3-MariaDB-1:10.9.3+maria~ubu2204 has a JSON_EXTRACT bug.
+                  // Believe it or not
+                  //   SELECT `BASE_OBJECT.QX Code`, `BASE_OBJECT.Users__relation`, JSON_EXTRACT(`BASE_OBJECT.Users__relation`, '$[*].id')
+                  //   FROM `AB_AccountingApp_ViewscopeFilterQXCenter`;
+                  columnName = `${field.alias}.${field.relationName()}`;
                   operator =
-                     condition.rule != "contain_current_user" ? "IS" : "IS NOT";
-                  value = "NULL";
+                     condition.rule == "contain_current_user"
+                        ? "LIKE"
+                        : "NOT LIKE";
+                  value = `%${userData.username}%`;
                }
                // Object
                else {
@@ -2631,3 +2642,4 @@ function updateTranslationsValues(AB, object, id, translations, isInsert) {
 
    return Promise.all(tasks);
 }
+
