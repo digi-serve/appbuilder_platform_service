@@ -1378,7 +1378,7 @@ module.exports = class ABModel extends ABModelCore {
                   // Believe it or not
                   //   SELECT `BASE_OBJECT.QX Code`, `BASE_OBJECT.Users__relation`, JSON_EXTRACT(`BASE_OBJECT.Users__relation`, '$[*].id')
                   //   FROM `AB_AccountingApp_ViewscopeFilterQXCenter`;
-                  columnName = `${field.alias}.${field.relationName()}`;
+                  columnName = `\`${field.alias}.${field.relationName()}\``;
                   operator =
                      condition.rule == "contain_current_user"
                         ? "LIKE"
