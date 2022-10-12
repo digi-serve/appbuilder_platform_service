@@ -1383,7 +1383,7 @@ module.exports = class ABModel extends ABModelCore {
                      condition.rule == "contain_current_user"
                         ? "LIKE"
                         : "NOT LIKE";
-                  value = `%${userData.username}%`;
+                  value = `'%${userData.username}%'`;
                }
                // Object
                else {
