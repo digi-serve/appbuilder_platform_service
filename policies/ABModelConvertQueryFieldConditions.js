@@ -363,10 +363,11 @@ function parseQueryCondition(AB, where, object, userData, cb, req) {
             }
 
             // get the query field's object and column name
-            let columnName =
-               queryField.dbPrefix().replace(/`/g, "") +
-               "." +
-               queryField.columnName;
+            let columnName = `${queryField.dbPrefix().replace(/`/g, "")}.${
+               queryField instanceof ABFieldUser
+                  ? queryField.relationName()
+                  : queryField.columnName
+            }`;
 
             processQuery(
                AB,
