@@ -60,6 +60,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                                           },
                                        ],
                                     },
+                                    populate: true,
                                  },
                                  null,
                                  req
