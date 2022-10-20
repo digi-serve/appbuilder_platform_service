@@ -1212,8 +1212,8 @@ module.exports = class ABModel extends ABModelCore {
       var conversionHash = {
          equals: "=",
          not_equal: "<>",
-         is_empty: "=",
-         is_not_empty: "<>",
+         is_empty: "IS NULL",
+         is_not_empty: "IS NOT NULL",
          greater: ">",
          greater_or_equal: ">=",
          less: "<",
@@ -1480,6 +1480,13 @@ module.exports = class ABModel extends ABModelCore {
             break;
          case "next_days":
             value = `NOW() AND DATE_ADD(NOW(), INTERVAL ${condition.value} DAY)`;
+            break;
+
+         case "is_empty":
+         case "is_not_empty":
+            // returns NULL if they are equal. Otherwise, the first expression is returned.
+            columnName = `NULLIF(${columnName}, '')`;
+            value = "";
             break;
       }
 
@@ -2642,4 +2649,3 @@ function updateTranslationsValues(AB, object, id, translations, isInsert) {
 
    return Promise.all(tasks);
 }
-
