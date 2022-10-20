@@ -39,10 +39,8 @@ module.exports = class CalculateTask extends CalculateTaskCore {
       (this.process.processDataFields(this) || []).forEach((item) => {
          if (formula.indexOf(item.label) < 0) return;
 
-         let processedData = this.process.processData(this, [
-            instance,
-            item.key,
-         ]);
+         let processedData =
+            this.process.processData(this, [instance, item.key]) || 0;
 
          // Escape brackets (,) in label so that the regex works
          const label = item.label.replace(/\(/, "\\(").replace(/\)/, "\\)");
