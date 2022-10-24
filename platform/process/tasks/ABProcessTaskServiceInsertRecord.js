@@ -199,6 +199,8 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
       let getFieldValue = (object, fieldId, sourceData) => {
          if (!object || !sourceData) return null;
 
+         if (Array.isArray(sourceData)) sourceData = sourceData[0];
+
          let columnName;
 
          // Pull value of link object relation
