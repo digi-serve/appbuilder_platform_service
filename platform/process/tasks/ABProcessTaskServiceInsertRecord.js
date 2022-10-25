@@ -196,10 +196,11 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
       let startData = this.processDataStart(instance);
       let previousData = this.processDataPrevious(instance);
 
+      if (Array.isArray(startData)) startData = startData[0];
+      if (Array.isArray(previousData)) previousData = previousData[0];
+
       let getFieldValue = (object, fieldId, sourceData) => {
          if (!object || !sourceData) return null;
-
-         if (Array.isArray(sourceData)) sourceData = sourceData[0];
 
          let columnName;
 
