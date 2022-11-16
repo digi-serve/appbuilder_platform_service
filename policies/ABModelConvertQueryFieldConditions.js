@@ -218,6 +218,8 @@ function processQuery(
  * @return {obj|NULL}
  */
 function findQueryEntry(where) {
+   if (!where) return null;
+
    if (where.rules) {
       var entry = null;
       for (var i = 0; i < where.rules.length; i++) {

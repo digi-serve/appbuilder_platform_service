@@ -211,6 +211,8 @@ function continueSingle(
  * @return {obj|NULL}
  */
 function findQueryEntry(_where) {
+   if (!_where) return null;
+
    if (_where.rules) {
       var entry = null;
       for (var i = 0; i < _where.rules.length; i++) {

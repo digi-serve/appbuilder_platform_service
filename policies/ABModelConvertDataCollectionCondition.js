@@ -72,6 +72,8 @@ module.exports = function (AB, where, object, userData, next, req) {
 };
 
 function findDcEntry(_where) {
+   if (!_where) return null;
+
    if (_where.rules) {
       var entry = null;
       for (var i = 0; i < _where.rules.length; i++) {
@@ -258,7 +260,8 @@ function parseQueryCondition(AB, _where, object, userData, cb, req) {
                            }
 
                            // then we need to get which of our PK is stored in the linkTable for those linked entries
-                           var linkTableQuery = AB.Knex.connection().queryBuilder();
+                           var linkTableQuery =
+                              AB.Knex.connection().queryBuilder();
                            var joinTableName = field.joinTableName(true);
 
                            var parseName = object.name;

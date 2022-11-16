@@ -1098,9 +1098,10 @@ module.exports = class ABModel extends ABModelCore {
                         .replace("{columnName}", field.columnName);
 
                      // eslint-disable-next-line no-unused-vars  -- Phasing this section out
-                     let languageWhere = '`{prefix}`.`language_code` = "{languageCode}"'
-                        .replace("{prefix}", prefix)
-                        .replace("{languageCode}", userData.languageCode);
+                     let languageWhere =
+                        '`{prefix}`.`language_code` = "{languageCode}"'
+                           .replace("{prefix}", prefix)
+                           .replace("{languageCode}", userData.languageCode);
 
                      // if (glue == "or") Query.orWhereRaw(languageWhere);
                      // else Query.whereRaw(languageWhere);
@@ -1129,12 +1130,13 @@ module.exports = class ABModel extends ABModelCore {
                      transCol = "`" + transCol.split(".").join("`.`") + "`"; // "{prefix}.translations";
                   }
 
-                  condition.key = this.AB.Knex.connection(/* connectionName */).raw(
-                     'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({transCol}, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({transCol}, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
-                        .replace(/{transCol}/g, transCol)
-                        .replace(/{languageCode}/g, userData.languageCode)
-                        .replace(/{columnName}/g, field.columnName)
-                  );
+                  condition.key =
+                     this.AB.Knex.connection(/* connectionName */).raw(
+                        'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({transCol}, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({transCol}, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
+                           .replace(/{transCol}/g, transCol)
+                           .replace(/{languageCode}/g, userData.languageCode)
+                           .replace(/{columnName}/g, field.columnName)
+                     );
                }
             }
 
@@ -1610,6 +1612,8 @@ module.exports = class ABModel extends ABModelCore {
     *        conditions in them.
     */
    queryConditionsPluckNoRelations(cond, noRelationRules = []) {
+      if (!cond) return null;
+
       // if this is a "glue" condition, then process each of it's rules:
       if (cond.glue) {
          var newRules = [];
@@ -1860,10 +1864,11 @@ module.exports = class ABModel extends ABModelCore {
                      prefix
                   );
                } else {
-                  sortClause = 'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({prefix}.`translations`, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({prefix}.`translations`, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
-                     .replace(/{prefix}/g, orderField.dbPrefix())
-                     .replace("{languageCode}", userData.languageCode)
-                     .replace("{columnName}", orderField.columnName);
+                  sortClause =
+                     'JSON_UNQUOTE(JSON_EXTRACT(JSON_EXTRACT({prefix}.`translations`, SUBSTRING(JSON_UNQUOTE(JSON_SEARCH({prefix}.`translations`, "one", "{languageCode}")), 1, 4)), \'$."{columnName}"\'))'
+                        .replace(/{prefix}/g, orderField.dbPrefix())
+                        .replace("{languageCode}", userData.languageCode)
+                        .replace("{columnName}", orderField.columnName);
                }
             }
             // If we are just sorting a field it is much simpler

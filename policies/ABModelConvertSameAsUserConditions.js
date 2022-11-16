@@ -79,6 +79,8 @@ module.exports = function (AB, where, object, userData, next, req) {
  * @return {obj} a condition entry that matches our type we are looking for:
  */
 function findEntry(_where) {
+   if (!_where) return null;
+
    if (_where.rules) {
       var entry = null;
       for (var i = 0; i < _where.rules.length; i++) {
