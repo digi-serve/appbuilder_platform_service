@@ -128,7 +128,8 @@ module.exports = class ABModel extends ABModelCore {
                         },
                         offset: 0,
                         limit: 1,
-                        populate: true,
+                        //populate: true,
+                        populate: false,
                      },
                      condDefaults,
                      req
@@ -585,7 +586,8 @@ module.exports = class ABModel extends ABModelCore {
                            },
                            offset: 0,
                            limit: 1,
-                           populate: true,
+                           //populate: true,
+                           populate: false,
                         },
                         userData
                      ).then((newItem) => {
