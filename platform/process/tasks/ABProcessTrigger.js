@@ -20,8 +20,8 @@ module.exports = class ABProcessTaskTrigger extends ABProcessTriggerCore {
             if (error.nativeError.code == "ER_DUP_ENTRY") {
                // This means the instanceKey already exisits in the database,
                // which can happen if the first request times out. We want
-               // to report this as a sucess, so the retries stop.
-               req.log(`Process already trigger for ${instanceKey}`);
+               // to report this as a success, so the retries stop.
+               req.log(`Process already triggered for ${instanceKey}`);
                return;
             }
             this.AB.notify.developer(error, {
