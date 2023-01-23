@@ -300,13 +300,13 @@ module.exports = class ABProcess extends ABProcessCore {
                         if (hasProgress) {
                            // repeat this process allowing new tasks to .do()
                            this.run(instance, dbTransaction, req)
-                              .catch(bad)
-                              .then(() => next());
+                              .then(() => next())
+                              .catch(bad);
                         } else {
                            // update instance (and end .run())
                            this.instanceUpdate(instance)
-                              .catch(bad)
-                              .then(() => next());
+                              .then(() => next())
+                              .catch(bad);
                         }
                      }
                   );
