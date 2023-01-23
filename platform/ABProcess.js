@@ -118,9 +118,11 @@ module.exports = class ABProcess extends ABProcessCore {
     * @param {Knex.Transaction} dbTransaction
     * @param {abutil.reqService} req
     *        the current request object for the api call.
+    * @param {string} instanceKey? unique key that can be provided to prevent
+    * duplicate processes from being added.
     * @return {Promise}
     */
-   instanceNew(data, dbTransaction, req) {
+   instanceNew(data, dbTransaction, req, instanceKey) {
       var context = data;
 
       this.elements().forEach((t) => {
@@ -129,7 +131,7 @@ module.exports = class ABProcess extends ABProcessCore {
          }
       });
 
-      var newValues = {
+      const newValues = {
          processID: this.id,
          xmlDefinition: this.xmlDefinition,
          context: context,
@@ -137,6 +139,8 @@ module.exports = class ABProcess extends ABProcessCore {
          log: ["created"],
          jobID: req ? req.jobID : "??",
          triggeredBy: req ? req.username() : "??",
+         instanceKey: instanceKey ?? "UUID()",
+         // if no instance key provided generate a UUID with SQL so we have a unique string
       };
 
       return Promise.resolve()
@@ -149,6 +153,9 @@ module.exports = class ABProcess extends ABProcessCore {
                      .create(newValues, null, req.userDefaults(), req)
                      .then(next)
                      .catch((error) => {
+                        // This case is handled in ABProcessTrigger
+                        if (error.nativeError.code == "ER_DUP_ENTRY")
+                           return bad(error);
                         this.AB.notify.developer(error, {
                            process: this,
                            newValues,
@@ -247,7 +254,10 @@ module.exports = class ABProcess extends ABProcessCore {
                                     cb(null, isDone);
                                  } else {
                                     // display error message
-                                    task.onError(instance, new Error("error parsing next task"));
+                                    task.onError(
+                                       instance,
+                                       new Error("error parsing next task")
+                                    );
 
                                     // WORKAROUND: `SITE_PROCESS_INSTANCE` table has a lot of "Did not find any outgoing flows for dID" error row data in production site.
                                     cb();
@@ -278,8 +288,7 @@ module.exports = class ABProcess extends ABProcessCore {
                               // skip ABProcessGatewayExclusive [no valid path found] to insert to DB
                               if (err?.message == "no valid path found") {
                                  cb();
-                              }
-                              else {
+                              } else {
                                  this.instanceError(instance, task, err).then(
                                     () => {
                                        cb();
