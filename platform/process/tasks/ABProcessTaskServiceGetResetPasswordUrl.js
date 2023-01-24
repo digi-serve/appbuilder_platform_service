@@ -20,39 +20,27 @@ module.exports = class ABProcessTaskServiceGetResetPasswordUrl extends (
     *                            false if task is still waiting
     */
    do(instance /*, trx, req */) {
-      this.stateCompleted(instance);
-      const email = this.getProcessValue(instance.context, this.email) ?? null;
+      const email =
+         this.process.processData(this, [instance, this.email]) ?? null;
       return new Promise((resolve, reject) => {
          this.AB.req.serviceRequest(
             "user_manager.user-password-reset-url",
             {
-               email
+               email,
             },
             (err, results) => {
                if (err) {
-                  console.error(err);
-
+                  this.onError(instance, err);
                   reject(err);
+                  return;
                }
 
                this.stateUpdate(instance, { url: results.data });
-
+               this.stateCompleted(instance);
                resolve(true);
             }
          );
       });
-   }
-
-   /**
-    * Get data from a previous process task
-    * @function getProcessValue
-    * @param {object} context the current isntance's context
-    * @param {string} key the key for the process datafield (expected format taskId.fieldDefinitionId)
-    */
-   getProcessValue(context, key) {
-      const [taskId, fieldId] = key.split(".");
-      const { columnName } = this.AB.definitionByID(fieldId);
-      return context.taskState[taskId]?.data[columnName];
    }
 
    /**
