@@ -394,7 +394,6 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                         context:
                            "ABProcessTaskServiceInsertRecord:getDataValue():Case 4:  Invalid formula",
                         formula,
-                        match,
                      });
                      evalValue = `!!Error [${formula}] !!`;
                   }
