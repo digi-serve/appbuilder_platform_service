@@ -17,7 +17,7 @@ module.exports = class SubProcess extends SubProcessCore {
     *      resolve(true/false) : true if the task is completed.
     *                            false if task is still waiting
     */
-   async do(instance, trx) {
+   async do(instance, trx, req) {
       if (!this.isEnable || !this.parameterId) {
          this.stateCompleted(instance);
          return true;
@@ -109,7 +109,7 @@ module.exports = class SubProcess extends SubProcessCore {
                taskElements.push(t);
 
                try {
-                  isDone = await t.do(instance, dbTransaction);
+                  isDone = await t.do(instance, dbTransaction, req);
                } catch (error) {
                   t.onError(instance, error);
                }
