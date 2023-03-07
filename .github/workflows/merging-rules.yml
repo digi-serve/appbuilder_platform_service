@@ -1,0 +1,12 @@
+name: Merging Rules
+on:
+   # Run on pull requests into the #master branch
+   pull_request:
+      branches: [master]
+permissions:
+   contents: write
+   pull-requests: write
+jobs:
+   e2e-tests:
+      name: E2E Tests
+      uses: ./.github/workflows/e2e-tests.yml
