@@ -99,3 +99,9 @@ jobs:
            with:
               name: cypress-screenshots
               path: ./AppBuilder/test/e2e/cypress/screenshots
+         - name: Save Service Logs
+           uses: actions/upload-artifact@v2
+           if: failure()
+           with:
+              name: ABServices.log
+              path: ./ab/logs/ABServices.log
