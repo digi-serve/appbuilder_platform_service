@@ -21,8 +21,6 @@ module.exports = class ABProcessGatewayExclusive extends (
     */
    do(instance /* , dbTransaction, req */) {
       return new Promise((resolve, reject) => {
-         var myState = this.myState(instance);
-
          // get all the ABFields available from the previous process tasks:
          var listDataFields = this.process.processDataFields(this);
          var abFields = listDataFields.map((f) => {
