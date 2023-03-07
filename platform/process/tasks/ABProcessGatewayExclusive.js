@@ -4,13 +4,9 @@ const ABProcessGatewayExclusiveCore = require(path.join(__dirname, "..", "..", "
 
 const RowFilter = require(path.join(__dirname, "..", "..", "RowFilter.js"));
 
-/* Do we need this?
-const AB = require("ab-utils");
-const reqAB = AB.reqApi({}, {});
-reqAB.jobID = "ABProcessGatewayExclusive";
-*/
-
-module.exports = class ABProcessGatewayExclusive extends ABProcessGatewayExclusiveCore {
+module.exports = class ABProcessGatewayExclusive extends (
+   ABProcessGatewayExclusiveCore
+) {
    ////
    //// Process Instance Methods
    ////
@@ -25,8 +21,6 @@ module.exports = class ABProcessGatewayExclusive extends ABProcessGatewayExclusi
     */
    do(instance /* , dbTransaction, req */) {
       return new Promise((resolve, reject) => {
-         var myState = this.myState(instance);
-
          // get all the ABFields available from the previous process tasks:
          var listDataFields = this.process.processDataFields(this);
          var abFields = listDataFields.map((f) => {

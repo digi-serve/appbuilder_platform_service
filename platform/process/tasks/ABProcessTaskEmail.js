@@ -11,13 +11,6 @@ const ABProcessTaskServiceGetResetPasswordUrl = require(path.join(__dirname, "AB
 // prettier-ignore
 const ABProcessTaskServiceQuery = require(path.join(__dirname, "ABProcessTaskServiceQuery"));
 
-// const AB = require("ab-utils");
-// const reqAB = AB.reqApi({}, {});
-// reqAB.jobID = "ABProcessTaskEmail";
-// // reqAB {ABUtils.request}
-// // a micro service request object used to send requests to other services.
-// // This one is used to initiate emails to our notification_email service.
-
 module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
    ////
    //// Process Instance Methods
@@ -36,9 +29,11 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
             allLanes,
             (myLane, cb) => {
                myLane
-                  .users(req,
-                        this.objectOfStartElement,
-                        this.startElements[0]?.myState(instance)?.data)
+                  .users(
+                     req,
+                     this.objectOfStartElement,
+                     this.startElements[0]?.myState(instance)?.data
+                  )
                   .then((list) => {
                      list.forEach((l) => {
                         if (l.email) {
@@ -144,7 +139,7 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
 
                break;
 
-            case 1:
+            case 1: {
                // specify a role/user account OR user-field
 
                // if we use fields, load the data from previous tasks
@@ -156,7 +151,7 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
                   usedFields.forEach((f) => {
                      let foundValue = this.process.processData(this, [
                         instance,
-                        f
+                        f,
                      ]);
                      if (foundValue) {
                         // We don't have a specific field lookup:
@@ -186,6 +181,7 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
                   })
                   .catch(reject);
                break;
+            }
 
             case 2:
                // manually enter email(s)
@@ -259,17 +255,18 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
                      subject: myState.subject,
                      //    .subject {string} The subject text of the email
 
-                     html: this.processMessageText(instance, myState.message)
+                     html: this.processMessageText(instance, myState.message),
                      //    .text {string|Buffer|Stream|attachment-like obj} plaintext version of the message
                      //    .html {string|Buffer|Stream|attachment-like obj} HTML version of the email.
-                  }
+                  },
                };
 
-               req.serviceRequest("notification_email.email", jobData, (
-                  err /*, results */
-               ) => {
-                  if (err) {
-                     let error = null;
+               req.serviceRequest(
+                  "notification_email.email",
+                  jobData,
+                  (err /*, results */) => {
+                     if (err) {
+                        let error = null;
 
                         // if ECONNREFUSED
                         const eStr = err.toString();
@@ -333,4 +330,3 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
       });
    }
 };
-
