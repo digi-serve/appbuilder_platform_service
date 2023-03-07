@@ -3,13 +3,6 @@ const path = require("path");
 // prettier-ignore
 const ABProcessTaskUserExternalCore = require(path.join(__dirname, "..", "..", "..", "core", "process", "tasks", "ABProcessTaskUserExternalCore.js"));
 
-// const AB = require("ab-utils");
-// const reqAB = AB.reqApi({}, {});
-// reqAB.jobID = "ABProcessTaskUserApproval";
-// // reqAB {ABUtils.request}
-// // a micro service request object used to send requests to other services.
-// // This one is used to initiate emails to our process_manager service.
-
 module.exports = class ABProcessTaskUserExternal extends (
    ABProcessTaskUserExternalCore
 ) {

@@ -11,13 +11,6 @@ const ABProcessTaskServiceGetResetPasswordUrl = require(path.join(__dirname, "AB
 // prettier-ignore
 const ABProcessTaskServiceQuery = require(path.join(__dirname, "ABProcessTaskServiceQuery"));
 
-// const AB = require("ab-utils");
-// const reqAB = AB.reqApi({}, {});
-// reqAB.jobID = "ABProcessTaskEmail";
-// // reqAB {ABUtils.request}
-// // a micro service request object used to send requests to other services.
-// // This one is used to initiate emails to our notification_email service.
-
 module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
    ////
    //// Process Instance Methods
