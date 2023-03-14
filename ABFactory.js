@@ -458,6 +458,14 @@ class ABFactory extends ABFactoryCore {
       return _.cloneDeep(value);
    }
 
+   defaultSystemRoles() {
+      return [
+         "dd6c2d34-0982-48b7-bc44-2456474edbea", // System Admin
+         "6cc04894-a61b-4fb5-b3e5-b8c3f78bd331", // Sytem Builder
+         "e1be4d22-1d00-4c34-b205-ef84b8334b19", // Builder
+      ];
+   }
+
    error(message) {
       message = deserializeError(message);
       console.error(`ABFactory[${this.req.tenantID()}]:${message.toString()}`);
