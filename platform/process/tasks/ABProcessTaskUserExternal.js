@@ -48,15 +48,21 @@ module.exports = class ABProcessTaskUserExternal extends (
          jobData.data = {
             url,
          };
+         const toUsers = this.toUsers;
 
          if (parseInt(this.who) === 1) {
-            if (parseInt(this.toUsers.useRole) === 1) {
-               jobData.roles = this.toUsers.role;
+            if (parseInt(toUsers.useRole) === 1) {
+               jobData.roles = toUsers.role;
             }
 
-            if (parseInt(this.toUsers.useAccount) === 1) {
-               jobData.users = this.toUsers.account;
+            if (parseInt(toUsers.useAccount) === 1) {
+               jobData.users = toUsers.account;
             }
+
+            const filterConditions = toUsers.filterConditions;
+
+            if (filterConditions?.glue && filterConditions?.rules?.length)
+               jobData.scopeQuery = filterConditions;
          } else {
             // get roles & users from Lane
             const myLane = this.myLane();
