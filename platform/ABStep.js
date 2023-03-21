@@ -1,10 +1,10 @@
 // import ABApplication from "./ABApplication"
 // const ABApplication = require("./ABApplication"); // NOTE: change to require()
-const ABHintCore = require("../core/ABHintCore.js");
+const ABStepCore = require("../core/ABStepCore.js");
 
 const async = require("async");
 
-module.exports = class ABHint extends ABHintCore {
+module.exports = class ABStep extends ABStepCore {
    constructor(attributes, AB) {
       super(attributes, AB);
 
