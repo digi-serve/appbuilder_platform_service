@@ -26,7 +26,6 @@ module.exports = class ABHint extends ABHintCore {
     * @return {Promise}
     */
    context(data) {
-      debugger;
       return {
          input: data,
          taskState: {},
@@ -55,11 +54,6 @@ module.exports = class ABHint extends ABHintCore {
          if (data.ids.indexOf(this.id) > -1) return;
 
          data.ids.push(this.id);
-
-         // store our steps:
-         this.steps().forEach((e) => {
-            e.exportData(data);
-         });
       }
    }
 
@@ -74,11 +68,6 @@ module.exports = class ABHint extends ABHintCore {
       if (ids.indexOf(this.id) > -1) return;
 
       ids.push(this.id);
-
-      // store our steps:
-      this.steps().forEach((e) => {
-         e.exportIDs(ids);
-      });
    }
 
    /**
