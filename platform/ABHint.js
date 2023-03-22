@@ -54,6 +54,11 @@ module.exports = class ABHint extends ABHintCore {
          if (data.ids.indexOf(this.id) > -1) return;
 
          data.ids.push(this.id);
+
+         // store our elements:
+         this.steps().forEach((s) => {
+            s.exportData(data);
+         });
       }
    }
 
@@ -68,6 +73,11 @@ module.exports = class ABHint extends ABHintCore {
       if (ids.indexOf(this.id) > -1) return;
 
       ids.push(this.id);
+
+      // store our steps:
+      this.steps().forEach((s) => {
+         s.exportIDs(ids);
+      });
    }
 
    /**
