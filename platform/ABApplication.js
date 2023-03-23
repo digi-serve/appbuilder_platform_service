@@ -163,6 +163,11 @@ module.exports = class ABClassApplication extends ABApplicationCore {
             data.roles[rid] = rid;
          });
       }
+      if (this.isTutorialManaged && this.tutorialManagers.useRole) {
+         (this.tutorialManagers.role || []).forEach((rid) => {
+            data.roles[rid] = rid;
+         });
+      }
 
       // return only unique entries:
       data.ids = _.uniq(data.ids);
