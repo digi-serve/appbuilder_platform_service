@@ -55,11 +55,6 @@ module.exports = class ABStep extends ABStepCore {
          if (data.ids.indexOf(this.id) > -1) return;
 
          data.ids.push(this.id);
-
-         // store our steps:
-         this.steps().forEach((e) => {
-            e.exportData(data);
-         });
       }
    }
 
@@ -74,11 +69,6 @@ module.exports = class ABStep extends ABStepCore {
       if (ids.indexOf(this.id) > -1) return;
 
       ids.push(this.id);
-
-      // store our steps:
-      this.steps().forEach((e) => {
-         e.exportIDs(ids);
-      });
    }
 
    /**
