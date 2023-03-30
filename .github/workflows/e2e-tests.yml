@@ -85,6 +85,10 @@ jobs:
            with:
               repository: digi-serve/kitchensink_app
               path: AppBuilder/test/e2e/cypress/e2e/kitchensink_app
+         - run: npm install pm2@latest -g
+         - name: Save Logs
+           run: pm2 start ./logs.js -- --toFile logs/ABServices.log
+           working-directory: ./AppBuilder
          - name: Wait for AB
            uses: ifaxity/wait-on-action@v1
            with:
