@@ -105,6 +105,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                // )
                .then((result) => {
                   results.push(result);
+                  this.results.push(result);
                   return Promise.resolve();
                })
          );
@@ -148,6 +149,32 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
       if (data == null) return null;
 
       return key ? data[key] : data;
+   }
+
+   /**
+    * processDataFields()
+    * return an array of available data fields that this element
+    * can provide to other ProcessElements.
+    * Different Process Elements can make data available to other
+    * process Elements.
+    * @return {array} | null
+    */
+   processDataFields() {
+      // in this Task, we can return the Response to the UserForm
+      let fields = null;
+
+      if (this.results.length > 0) {
+         fields = [];
+
+         this.results.forEach((s) => {
+            // const param = s.processDataField(this.id, this.label);
+
+            if (s) {
+               fields.push(s);
+            }
+         });
+      }
+      return fields;
    }
 
    /**
