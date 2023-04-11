@@ -134,47 +134,35 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
     *        A reference for which data field we are wanting to return.
     *        The format is `{task.id}.{key}`  where data[key] will result
     *        in a stored value by this task.
-    *        If key is not provided, then we return our whole data value.
+    *        If key is provided, we will default to returning the UUID
+    *        If NO key is provided, then we return our whole data value.
     *        (see processDataPrevious() )
     * @return {mixed} | null
     */
    processData(instance, key) {
+      var searchId = "";
       if (key) {
          const parts = key.split(".");
          if (parts[0] != this.id) return null;
+         searchId = parts.pop() || searchId;
       }
 
       let myState = this.myState(instance) || {};
       let data = myState.data;
       if (data == null) return null;
 
-      return key ? data[key] : data;
-   }
-
-   /**
-    * processDataFields()
-    * return an array of available data fields that this element
-    * can provide to other ProcessElements.
-    * Different Process Elements can make data available to other
-    * process Elements.
-    * @return {array} | null
-    */
-   processDataFields() {
-      // in this Task, we can return the Response to the UserForm
-      let fields = null;
-
-      if (this.results.length > 0) {
-         fields = [];
-
-         this.results.forEach((s) => {
-            // const param = s.processDataField(this.id, this.label);
-
-            if (s) {
-               fields.push(s);
-            }
-         });
+      if (
+         !searchId.length ||
+         searchId.includes("[PK]") ||
+         searchId.includes("uuid") ||
+         searchId.includes("[id]")
+      ) {
+         // return the UUID of the recently created record
+         return data.uuid || data[0].uuid;
       }
-      return fields;
+      // TODO clean up this data request
+      // ! note that the data stored here is different than that in the query object
+      return data[searchId] || data[key] || data;
    }
 
    /**
@@ -504,7 +492,6 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                break;
          }
       });
-
       return result;
    }
 };
