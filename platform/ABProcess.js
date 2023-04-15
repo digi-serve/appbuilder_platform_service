@@ -154,7 +154,7 @@ module.exports = class ABProcess extends ABProcessCore {
                      .then(next)
                      .catch((error) => {
                         // This case is handled in ABProcessTrigger
-                        if (error.nativeError.code == "ER_DUP_ENTRY")
+                        if (error.nativeError?.code == "ER_DUP_ENTRY")
                            return bad(error);
                         this.AB.notify.developer(error, {
                            process: this,
