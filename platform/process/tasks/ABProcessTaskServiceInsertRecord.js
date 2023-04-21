@@ -452,9 +452,8 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
 
                   // If .field is a connect field who has M:1 or M:N relations, then it will set value with an array
                   let isMultipleValue =
-                     field.key == "connectObject" &&
-                     field.settings &&
-                     field.settings.linkType == "many";
+                     (field.key == "connectObject" || field.key == "user") &&
+                     field.settings?.linkType == "many";
                   if (isMultipleValue) {
                      result[field.columnName] = result[field.columnName] || [];
 
