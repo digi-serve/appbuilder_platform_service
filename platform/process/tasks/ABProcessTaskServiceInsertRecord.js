@@ -255,6 +255,21 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
             let data = sourceData[field.relationName()];
             if (!data) return null;
 
+            if (
+               data.length &&
+               field.settings.linkType == "many" &&
+               data[0][columnName] // make sure this is the data we want
+            ) {
+               // if many-many, need full array
+               return data;
+            } else {
+               this.AB.notify.builder({
+                  context:
+                     "ABProcessTaskServiceInsertRecord:getFieldValue():linkType Many:  Invalid data, not returned",
+                  field,
+               });
+            }
+
             return data[columnName];
          }
          // Pull value of the object
@@ -452,9 +467,8 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
 
                   // If .field is a connect field who has M:1 or M:N relations, then it will set value with an array
                   let isMultipleValue =
-                     field.key == "connectObject" &&
-                     field.settings &&
-                     field.settings.linkType == "many";
+                     (field.key == "connectObject" || field.key == "user") &&
+                     field.settings?.linkType == "many";
                   if (isMultipleValue) {
                      result[field.columnName] = result[field.columnName] || [];
 
