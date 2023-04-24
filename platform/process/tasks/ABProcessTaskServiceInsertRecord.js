@@ -255,6 +255,15 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
             let data = sourceData[field.relationName()];
             if (!data) return null;
 
+            if (
+               data.length &&
+               field.settings.linkType == "many" &&
+               data[0][columnName] // make sure this is the data we want
+            ) {
+               // if many-many, need full array
+               return data;
+            }
+
             return data[columnName];
          }
          // Pull value of the object
