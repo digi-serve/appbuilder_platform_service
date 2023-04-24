@@ -262,6 +262,12 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
             ) {
                // if many-many, need full array
                return data;
+            } else {
+               this.AB.notify.builder({
+                  context:
+                     "ABProcessTaskServiceInsertRecord:getFieldValue():linkType Many:  Invalid data, not returned",
+                  field,
+               });
             }
 
             return data[columnName];
