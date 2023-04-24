@@ -255,19 +255,18 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
             let data = sourceData[field.relationName()];
             if (!data) return null;
 
-            if (
-               data.length &&
-               field.settings.linkType == "many" &&
-               data[0][columnName] // make sure this is the data we want
-            ) {
-               // if many-many, need full array
-               return data;
-            } else {
-               this.AB.notify.builder({
-                  context:
-                     "ABProcessTaskServiceInsertRecord:getFieldValue():linkType Many:  Invalid data, not returned",
-                  field,
-               });
+            if (data.length && field.settings.linkType == "many") {
+               // make sure this is the data we want
+               if (data[0][columnName]) {
+                  // if many-many, need full array
+                  return data;
+               } else {
+                  this.AB.notify.builder({
+                     context:
+                        "ABProcessTaskServiceInsertRecord:getFieldValue():linkType Many:  Invalid data, not returned",
+                     field,
+                  });
+               }
             }
 
             return data[columnName];
