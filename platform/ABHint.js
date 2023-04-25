@@ -75,8 +75,9 @@ module.exports = class ABHint extends ABHintCore {
       ids.push(this.id);
 
       // store our steps:
-      this.steps().forEach((s) => {
-         s.exportIDs(ids);
+      this?.stepIDs.forEach((s) => {
+         if (ids.indexOf(s) > -1) return;
+         ids.push(s);
       });
    }
 
