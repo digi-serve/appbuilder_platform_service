@@ -105,6 +105,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                // )
                .then((result) => {
                   results.push(result);
+                  this.results.push(result);
                   return Promise.resolve();
                })
          );
@@ -133,21 +134,35 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
     *        A reference for which data field we are wanting to return.
     *        The format is `{task.id}.{key}`  where data[key] will result
     *        in a stored value by this task.
-    *        If key is not provided, then we return our whole data value.
+    *        If key is provided, we will default to returning the UUID
+    *        If NO key is provided, then we return our whole data value.
     *        (see processDataPrevious() )
     * @return {mixed} | null
     */
    processData(instance, key) {
+      var searchId = "";
       if (key) {
          const parts = key.split(".");
          if (parts[0] != this.id) return null;
+         searchId = parts.pop() || searchId;
       }
 
       let myState = this.myState(instance) || {};
       let data = myState.data;
       if (data == null) return null;
 
-      return key ? data[key] : data;
+      if (
+         !searchId.length ||
+         searchId.includes("[PK]") ||
+         searchId.includes("uuid") ||
+         searchId.includes("[id]")
+      ) {
+         // return the UUID of the recently created record
+         return data.uuid || data[0].uuid;
+      }
+      // TODO clean up this data request
+      // ! note that the data stored here is different than that in the query object
+      return data[searchId] || data[key] || data;
    }
 
    /**
@@ -239,6 +254,20 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
 
             let data = sourceData[field.relationName()];
             if (!data) return null;
+
+            if (data.length && field.settings.linkType == "many") {
+               // make sure this is the data we want
+               if (data[0][columnName]) {
+                  // if many-many, need full array
+                  return data;
+               } else {
+                  this.AB.notify.builder({
+                     context:
+                        "ABProcessTaskServiceInsertRecord:getFieldValue():linkType Many:  Invalid data, not returned",
+                     field,
+                  });
+               }
+            }
 
             return data[columnName];
          }
@@ -437,9 +466,8 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
 
                   // If .field is a connect field who has M:1 or M:N relations, then it will set value with an array
                   let isMultipleValue =
-                     field.key == "connectObject" &&
-                     field.settings &&
-                     field.settings.linkType == "many";
+                     (field.key == "connectObject" || field.key == "user") &&
+                     field.settings?.linkType == "many";
                   if (isMultipleValue) {
                      result[field.columnName] = result[field.columnName] || [];
 
@@ -477,7 +505,6 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                break;
          }
       });
-
       return result;
    }
 };
