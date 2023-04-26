@@ -107,6 +107,11 @@ module.exports = class ABClassApplication extends ABApplicationCore {
          p.exportData(data);
       });
 
+      // Hints
+      this.hintsIncluded().forEach((p) => {
+         p.exportData(data);
+      });
+
       // Pages
       // NOTE: currently the server doesn't make instances of ABViews
       // so we manually parse the object data here:
