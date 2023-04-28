@@ -2,8 +2,6 @@
 // const ABApplication = require("./ABApplication"); // NOTE: change to require()
 const ABHintCore = require("../core/ABHintCore.js");
 
-const async = require("async");
-
 module.exports = class ABHint extends ABHintCore {
    constructor(attributes, AB) {
       super(attributes, AB);
@@ -112,7 +110,6 @@ module.exports = class ABHint extends ABHintCore {
    }
 
    isValid() {
-      debugger;
       return true;
       // var isValid =
       //    this.AB.processes((o) => {

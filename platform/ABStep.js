@@ -2,8 +2,6 @@
 // const ABApplication = require("./ABApplication"); // NOTE: change to require()
 const ABStepCore = require("../core/ABStepCore.js");
 
-const async = require("async");
-
 module.exports = class ABStep extends ABStepCore {
    constructor(attributes, AB) {
       super(attributes, AB);
@@ -26,7 +24,6 @@ module.exports = class ABStep extends ABStepCore {
     * @return {Promise}
     */
    context(data) {
-      debugger;
       return {
          input: data,
          taskState: {},
@@ -102,7 +99,6 @@ module.exports = class ABStep extends ABStepCore {
    }
 
    isValid() {
-      debugger;
       return true;
       // var isValid =
       //    this.AB.processes((o) => {
