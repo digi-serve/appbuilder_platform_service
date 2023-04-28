@@ -107,6 +107,11 @@ module.exports = class ABClassApplication extends ABApplicationCore {
          p.exportData(data);
       });
 
+      // Hints
+      this.hintsIncluded().forEach((p) => {
+         p.exportData(data);
+      });
+
       // Pages
       // NOTE: currently the server doesn't make instances of ABViews
       // so we manually parse the object data here:
@@ -163,6 +168,11 @@ module.exports = class ABClassApplication extends ABApplicationCore {
             data.roles[rid] = rid;
          });
       }
+      if (this.isTutorialManaged && this.tutorialManagers.useRole) {
+         (this.tutorialManagers.role || []).forEach((rid) => {
+            data.roles[rid] = rid;
+         });
+      }
 
       // return only unique entries:
       data.ids = _.uniq(data.ids);
@@ -183,6 +193,11 @@ module.exports = class ABClassApplication extends ABApplicationCore {
       // start with Objects:
       this.objectsIncluded().forEach((o) => {
          o.exportIDs(ids);
+      });
+
+      // get all Hints
+      this.hintsIncluded().forEach((h) => {
+         h.exportIDs(ids);
       });
 
       // Queries
