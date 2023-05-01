@@ -34,7 +34,7 @@ function stringifyErrors(param) {
 }
 
 class ABFactory extends ABFactoryCore {
-   constructor(definitions, DefinitionManager, req) {
+   constructor(definitions, DefinitionManager, req, knexConnection = null) {
       /**
        * @param {hash} definitions
        *        { ABDefinition.id : {ABDefinition} }
@@ -49,7 +49,11 @@ class ABFactory extends ABFactoryCore {
        *          DefinitionManager.Update(req, cond, values);
        * @param {ABUtil.request} req
        *        A req object tied to the proper tenant for this Factory.
-       *        Should be created by the
+       *        Should be created by the service (Bootstrap.js) when it
+       *        needs to communicate to a tenant.
+       * @param {ABFactory.Knex.connection()} knexConnection
+       *        An existing Knex Connection to reuse for this Factory.
+       *        (optional)
        */
 
       super(definitions);
@@ -61,7 +65,7 @@ class ABFactory extends ABFactoryCore {
       // {ABUtils.request} a tenant aware request object for interacting with
       // the data in our Tenant's db.
 
-      this._knexConn = null;
+      this._knexConn = knexConnection;
       // {Knex}
       // an instance of a {Knex} object that is tied to this Tenant's MySQL
       // connection settings. The base definition is found in config/local.js
@@ -516,4 +520,3 @@ class ABFactory extends ABFactoryCore {
 }
 
 module.exports = ABFactory;
-
