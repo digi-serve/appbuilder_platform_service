@@ -41,7 +41,7 @@ var Listener = null;
 function staleHandler(req) {
    var tenantID = req.tenantID();
    Factories[tenantID]?.emit("bootstrap.stale.reset");
-   KnexPool[tenantID]=Factories[tenantID].Knex.connection();
+   KnexPool[tenantID] = Factories[tenantID].Knex.connection();
    delete Factories[tenantID];
    req.log(`:: Definitions reset for tenant[${tenantID}]`);
 }
@@ -53,15 +53,14 @@ var PendingFactory = {
 // A lookup of Pending Factory builds.  This prevents the SAME factory from
 // being built at the same time.
 
-
 var KnexPool = {
    /* tenantID : AB.Knex.connection() */
-}
+};
 // {hash}
 // When definitions are updated, we destroy the existing ABFactory and create
 // a new one.  However each new ABFactory will create a NEW KNEX DB POOL and
 // eventually we use up all our DB Connections ( error: ER_CON_COUNT_ERROR).
-// The Knex connection won't change due to the Definition updates, so let's 
+// The Knex connection won't change due to the Definition updates, so let's
 // cache the KnexPools here and reuse them.
 
 module.exports = {
@@ -118,7 +117,8 @@ module.exports = {
                                  Factories[tenantID]?.emit(
                                     "bootstrap.stale.reset"
                                  );
-                                 KnexPool[tenantID]=Factories[tenantID].Knex.connection();
+                                 KnexPool[tenantID] =
+                                    Factories[tenantID].Knex.connection();
                                  delete Factories[tenantID];
                               });
                            });
