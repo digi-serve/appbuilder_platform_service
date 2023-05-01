@@ -94,9 +94,11 @@ jobs:
            with:
               resource: http://localhost:80
               timeout: 300000
-         - name: Run Cypress Tests
-           run: npm run test:e2e:app -- --browser chrome
-           working-directory: ./AppBuilder
+         - run: docker exec $(docker ps | grep "tenant_man" | awk '{print $1}') bash -c 'cd /app && git status && git branch'
+         - run: exit 1
+         # - name: Run Cypress Tests
+         #   run: npm run test:e2e:app -- --browser chrome
+         #   working-directory: ./AppBuilder
          - name: Save Screenshots
            uses: actions/upload-artifact@v2
            if: failure()
