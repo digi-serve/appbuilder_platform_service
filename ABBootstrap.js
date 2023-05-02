@@ -118,7 +118,7 @@ module.exports = {
                                     "bootstrap.stale.reset"
                                  );
                                  KnexPool[tenantID] =
-                                    Factories[tenantID].Knex.connection();
+                                    Factories[tenantID]?.Knex.connection();
                                  delete Factories[tenantID];
                               });
                            });
