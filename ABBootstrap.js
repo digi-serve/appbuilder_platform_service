@@ -41,7 +41,7 @@ var Listener = null;
 function staleHandler(req) {
    var tenantID = req.tenantID();
    Factories[tenantID]?.emit("bootstrap.stale.reset");
-   KnexPool[tenantID] = Factories[tenantID].Knex.connection();
+   KnexPool[tenantID] = Factories[tenantID]?.Knex.connection();
    delete Factories[tenantID];
    req.log(`:: Definitions reset for tenant[${tenantID}]`);
 }
