@@ -150,15 +150,16 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
       let myState = this.myState(instance) || {};
       let data = myState.data;
       if (data == null) return null;
+      else if (Array.isArray(data)) data = data[0];
 
       if (
-         !searchId.length ||
+         // !searchId.length ||
          searchId.includes("[PK]") ||
          searchId.includes("uuid") ||
          searchId.includes("[id]")
       ) {
          // return the UUID of the recently created record
-         return data.uuid || data[0].uuid;
+         return data.uuid || data.id;
       }
       // TODO clean up this data request
       // ! note that the data stored here is different than that in the query object
