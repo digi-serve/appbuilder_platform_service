@@ -131,8 +131,29 @@ class ABQLSetPluck extends ABQLSetPluckCore {
                   });
                });
 
-               var cond = {};
-               cond[PK] = this.AB.uniq(ids);
+               const cond = {
+                  glue: "or",
+                  rules: [],
+               };
+               cond.rules.push({
+                  key: PK,
+                  rule: "contains",
+                  value: this.AB.uniq(ids),
+               });
+               if (this.field.indexField) {
+                  cond.rules.push({
+                     key: this.field.indexField.id,
+                     rule: "contains",
+                     value: this.AB.uniq(ids),
+                  });
+               }
+               if (this.field.indexField2) {
+                  cond.rules.push({
+                     key: this.field.indexField2.id,
+                     rule: "contains",
+                     value: this.AB.uniq(ids),
+                  });
+               }
 
                return new Promise((resolve, reject) => {
                   req.retry(() =>
