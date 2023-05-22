@@ -1389,7 +1389,7 @@ module.exports = class ABModel extends ABModelCore {
                }
                // Object
                else {
-                  columnName = this.object.PK();
+                  columnName = `${this.object.dbTableName()}.${this.object.PK()}`;
                   operator =
                      condition.rule == "contain_current_user" ? "IN" : "NOT IN";
                   value = `(SELECT \`${this.object.name}\`

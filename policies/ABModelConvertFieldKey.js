@@ -31,7 +31,7 @@ module.exports = function (req, res, next) {
                      var objectLink = field.datasourceLink;
                      if (!objectLink) return;
 
-                     r.key = field.columnName;
+                     // r.key = field.columnName;
                      r.value = objectLink.PK();
                   }
 
