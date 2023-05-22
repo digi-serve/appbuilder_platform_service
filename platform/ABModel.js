@@ -404,15 +404,18 @@ module.exports = class ABModel extends ABModelCore {
             query.limit(cond.limit);
          }
 
-         // populate the data?
+         // populate the data
          this.queryPopulate(query, cond.populate);
 
          // perform the operation
          query
             .then((data) => {
-               // normalize our Data before returning
-               this.normalizeData(data);
-               resolve(data);
+               // reduce the data in our populated columns
+               return this.populateMin(data, cond.populate).then((data) => {
+                  // normalize our Data before returning
+                  this.normalizeData(data);
+                  resolve(data);
+               });
             })
             .catch((error) => {
                // populate any error messages with the SQL of this
@@ -629,11 +632,11 @@ module.exports = class ABModel extends ABModelCore {
          var error = new Error(message);
          return Promise.reject(error);
       }
-      if (typeof id == undefined)
+      if (typeof id == "undefined")
          return errorReturn("ABModel.relate(): missing id");
-      if (typeof fieldRef == undefined)
+      if (typeof fieldRef == "undefined")
          return errorReturn("ABModel.relate(): missing fieldRef");
-      if (typeof value == undefined)
+      if (typeof value == "undefined")
          return errorReturn("ABModel.relate(): missing value");
 
       var abField = this.object.fields(
@@ -1743,36 +1746,26 @@ module.exports = class ABModel extends ABModelCore {
          var relationNames = [];
          var nameHash = {};
          if (populate) {
-            this.object
-               .connectFields()
-               .filter((f) => {
-                  return (
-                     (populate === true ||
-                        populate.indexOf(f.columnName) > -1) &&
-                     f.fieldLink != null
-                  );
-               })
-               .forEach((f) => {
-                  let relationName = f.relationName();
+            this.populateFields(populate).forEach((f) => {
+               let relationName = f.relationName();
 
-                  // Exclude .id column by adding (unselectId) function name to .withGraphFetched()
-                  if (f.datasourceLink && f.datasourceLink.PK() === "uuid") {
-                     relationName += "(unselectId)";
-                  }
+               // Exclude .id column by adding (unselectId) function name to .withGraphFetched()
+               if (f.datasourceLink && f.datasourceLink.PK() === "uuid") {
+                  relationName += "(unselectId)";
+               }
 
-                  relationNames.push(relationName);
-                  nameHash[relationName] = nameHash[relationName] || [];
-                  nameHash[relationName].push(f);
+               relationNames.push(relationName);
+               nameHash[relationName] = nameHash[relationName] || [];
+               nameHash[relationName].push(f);
 
-                  // Get translation data of External object
-                  if (
-                     f.datasourceLink &&
-                     f.datasourceLink.transColumnName &&
-                     (f.datasourceLink.isExternal ||
-                        f.datasourceLink.isImported)
-                  )
-                     relationNames.push(f.relationName() + ".[translations]");
-               });
+               // Get translation data of External object
+               if (
+                  f.datasourceLink &&
+                  f.datasourceLink.transColumnName &&
+                  (f.datasourceLink.isExternal || f.datasourceLink.isImported)
+               )
+                  relationNames.push(f.relationName() + ".[translations]");
+            });
          }
 
          // Include any translations connections from external/imported objects
@@ -1824,6 +1817,65 @@ module.exports = class ABModel extends ABModelCore {
          // Exclude .id column
          if (this.object.PK() === "uuid") query.omit(this.modelKnex(), ["id"]);
       }
+   }
+
+   /**
+    * @method populateFields()
+    * return the relevant fields that pass the given populate parameter.
+    * @param {mixed} populate
+    *        the given populate parameter that was passed in for this operation.
+    * @return {array} {ABFieldConnect}
+    */
+   populateFields(populate) {
+      if (populate) {
+         return this.object.connectFields().filter((f) => {
+            return (
+               (populate === true || populate.indexOf(f.columnName) > -1) &&
+               f.fieldLink != null
+            );
+         });
+      }
+      return [];
+   }
+
+   /**
+    * populateMin();
+    * reduce the populated data to a bare minimum for our UI
+    * @param {json} data
+    * @param {mixed} populate
+    *    Any included sort parameters that might include a multilingual field.
+    * @param {obj} userData
+    *    The included user data for this request.
+    */
+   populateMin(data, populate) {
+      if (populate) {
+         this.populateFields(populate).forEach((f) => {
+            // pull f => linkedObj
+            var linkObj = f.datasourceLink;
+            var minFields = linkObj.minRelationData();
+            var relationName = f.relationName();
+            var keysToRemove = Object.keys(
+               data[0]?.[relationName]?.[0] || []
+            ).filter((k) => minFields.indexOf(k) == -1);
+
+            // using for loop for performance here
+            for (var i = 0, data_length = data.length; i < data_length; ++i) {
+               let set = data[i][relationName] || [];
+               for (var s = 0, set_length = set.length; s < set_length; ++s) {
+                  let entry = set[s];
+                  for (
+                     var j = 0, key_length = keysToRemove.length;
+                     j < key_length;
+                     ++j
+                  ) {
+                     delete entry[keysToRemove[j]];
+                  }
+               }
+            }
+         });
+      }
+
+      return Promise.resolve(data);
    }
 
    /**
