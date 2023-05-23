@@ -284,10 +284,7 @@ module.exports = class ABClassObject extends ABObjectCore {
          req.retry(() =>
             SiteUser.find({
                where: { username: condDefaults.username, isActive: 1 },
-               populate: [
-                  "SITE_ROLE",
-                  "SITE_SCOPE"
-               ],
+               populate: ["SITE_ROLE", "SITE_SCOPE"],
             })
          ).then((list) => {
             var user = list[0];
@@ -309,7 +306,7 @@ module.exports = class ABClassObject extends ABObjectCore {
             // pull all the Scopes for
             // V1 : method of scope definitions.
             // V2 : TODO: consider simplifying the structure and filters
-            var allRoles = user.SITEROLE__relation || user.SITE_ROLE || [];
+            var allRoles = user.SITE_ROLE__relation || user.SITE_ROLE || [];
             if (allRoles.length == 0) {
                // Q: So no roles in the system means NO ACCESS. So let's not return any data:
                // add a 1=0 clause to prevent any results:
@@ -345,7 +342,10 @@ module.exports = class ABClassObject extends ABObjectCore {
 
                (list || []).forEach((scope) => {
                   // has access if the scope is allowAll or includes this object
-                  if (scope.allowAll || (scope.objectIds || []).indexOf(this.id) > -1) {
+                  if (
+                     scope.allowAll ||
+                     (scope.objectIds || []).indexOf(this.id) > -1
+                  ) {
                      hasAccess = true;
                      // If any scope has unfiltered access ignore filters in other scopes
                      if (scope.Filters === null) {
@@ -1613,12 +1613,13 @@ module.exports = class ABClassObject extends ABObjectCore {
          };
 
          // create sub-query to get values from MN table
-         condition.value = "(SELECT `{sourceFkName}` FROM `{joinTable}` WHERE `{targetFkName}` {ops} '{percent}{value}{percent}')"
-            .replace("{sourceFkName}", sourceFkName)
-            .replace("{joinTable}", joinTable)
-            .replace("{targetFkName}", targetFkName)
-            .replace("{ops}", mnOperators[condition.rule])
-            .replace("{value}", condition.value);
+         condition.value =
+            "(SELECT `{sourceFkName}` FROM `{joinTable}` WHERE `{targetFkName}` {ops} '{percent}{value}{percent}')"
+               .replace("{sourceFkName}", sourceFkName)
+               .replace("{joinTable}", joinTable)
+               .replace("{targetFkName}", targetFkName)
+               .replace("{ops}", mnOperators[condition.rule])
+               .replace("{value}", condition.value);
 
          condition.value =
             condition.rule == "contains" || condition.rule == "not_contains"
