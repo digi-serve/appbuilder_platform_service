@@ -157,7 +157,7 @@ function parseQueryCondition(AB, _where, object, userData, cb, req) {
                   (cond.alias ? cond.alias : object.dbTableName(true)) +
                   "." +
                   object.PK();
-               newKey = object.PK(); // 'id';  // the final filter needs to be 'id IN []', so 'id'
+               newKey = `\`${object.dbTableName()}\`.\`${object.PK()}\``; // 'id';  // the final filter needs to be 'id IN []', so 'id'
                parseColumn = object.PK(); // 'id';  // make sure we pull our 'id' values from the query
 
                continueSingle(newKey, parseColumn, objectColumn, req);
@@ -194,7 +194,9 @@ function parseQueryCondition(AB, _where, object, userData, cb, req) {
                   case "one:one":
                   case "one:many":
                      // this field is used in final filter condition
-                     newKey = field.columnName;
+                     newKey = `\`${field.object.dbTableName()}\`.\`${
+                        field.columnName
+                     }\``;
 
                      // I need to pull out the PK from the filter Query:
                      parseColumn = sourceObject.PK(); // 'id';
@@ -214,7 +216,7 @@ function parseQueryCondition(AB, _where, object, userData, cb, req) {
                      // they contain my .PK
 
                      // my .PK is what is used on our filter
-                     newKey = object.PK(); // 'id';
+                     newKey = `\`${object.dbTableName()}\`.\`${object.PK()}\``; // 'id';
 
                      // custom index
                      if (field.indexField) {
@@ -278,19 +280,23 @@ function parseQueryCondition(AB, _where, object, userData, cb, req) {
                                     .filter((d) => d != null);
                                  myIds = AB.uniq(myIds);
 
-                                 var myPK = object.PK(); // 'id';
+                                 var myPK = `${object.dbTableName()}.${object.PK()}`; // 'id';
 
                                  // custom index
                                  if (
                                     field.indexField &&
                                     field.indexField.object.id == object.id
                                  ) {
-                                    myPK = field.indexField.columnName;
+                                    myPK = `${object.dbTableName()}.${
+                                       field.indexField.columnName
+                                    }`;
                                  } else if (
                                     field.indexField2 &&
                                     field.indexField2.object.id == object.id
                                  ) {
-                                    myPK = field.indexField2.columnName;
+                                    myPK = `${object.dbTableName()}.${
+                                       field.indexField2.columnName
+                                    }`;
                                  }
 
                                  buildCondition(myPK, myIds, req);
