@@ -45,6 +45,8 @@ module.exports = function (AB, currentObject, data, populate = false) {
          });
       }
 
+      pruneRelations(currentObject, data);
+
       resolve(data);
    });
 };
@@ -76,4 +78,37 @@ function cleanEntry(r, p) {
          delete r[`${c}__relation`];
       }
    });
+}
+
+function pruneRelations(object, data) {
+   if (!Array.isArray(data)) data = [data];
+   if (data.length == 0) return;
+
+   let connectedFields = object
+      .connectFields()
+      .filter((f) => data[0]?.[f.relationName()]);
+   var mlFields = object.multilingualFields();
+
+   // using for loop for performance here
+   for (var i = 0, data_length = data.length; i < data_length; ++i) {
+      let row = data[i];
+      delete row.id;
+      mlFields.forEach((mf) => {
+         delete row[mf];
+      });
+
+      connectedFields.forEach((f) => {
+         // pull f => linkedObj
+
+         // var minFields = linkObj.minRelationData();
+         var relationName = f.relationName();
+         var colName = f.columnName;
+
+         delete row[colName];
+         if (row[relationName]) {
+            var linkObj = f.datasourceLink;
+            pruneRelations(linkObj, row[relationName]);
+         }
+      });
+   }
 }
