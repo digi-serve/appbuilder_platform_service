@@ -104,7 +104,9 @@ function pruneRelations(object, data) {
          var relationName = f.relationName();
          var colName = f.columnName;
 
-         delete row[colName];
+         // NOTE: If this connect field will use custom `indexField` or `indexField2`, then should not remove FK reference value
+         if (!f.indexField && !f.indexField2) delete row[colName];
+
          if (row[relationName]) {
             var linkObj = f.datasourceLink;
             pruneRelations(linkObj, row[relationName]);
