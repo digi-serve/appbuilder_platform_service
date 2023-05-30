@@ -410,12 +410,17 @@ module.exports = class ABModel extends ABModelCore {
          // perform the operation
          query
             .then((data) => {
-               // reduce the data in our populated columns
-               return this.populateMin(data, cond.populate).then((data) => {
-                  // normalize our Data before returning
+               if (cond?.disableMinifyRelation) {
                   this.normalizeData(data);
                   resolve(data);
-               });
+               } else {
+                  // reduce the data in our populated columns
+                  return this.populateMin(data, cond.populate).then((data) => {
+                     // normalize our Data before returning
+                     this.normalizeData(data);
+                     resolve(data);
+                  });
+               }
             })
             .catch((error) => {
                // populate any error messages with the SQL of this
@@ -2706,3 +2711,4 @@ function updateTranslationsValues(AB, object, id, translations, isInsert) {
 
    return Promise.all(tasks);
 }
+
