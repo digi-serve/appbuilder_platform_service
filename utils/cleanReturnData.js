@@ -82,7 +82,7 @@ function cleanEntry(r, p) {
 
 function pruneRelations(object, data) {
    if (!Array.isArray(data)) data = [data];
-   if (data.length == 0) return;
+   if (data.filter((row) => row != null).length == 0) return;
 
    let connectedFields = object
       .connectFields()
@@ -92,7 +92,10 @@ function pruneRelations(object, data) {
    // using for loop for performance here
    for (var i = 0, data_length = data.length; i < data_length; ++i) {
       let row = data[i];
-      delete row.id;
+      if (row == null) continue;
+
+      // Keep .id because it is custom index value to use reference to Connect field
+      // delete row.id;
       mlFields.forEach((mf) => {
          delete row[mf];
       });
