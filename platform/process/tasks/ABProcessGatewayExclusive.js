@@ -47,7 +47,9 @@ module.exports = class ABProcessGatewayExclusive extends (
             var condition = this.conditions[conn.id] || {};
 
             if (condition.filterValue) {
-               var DF = new RowFilter(null, `_filter`, this.AB);
+               const DF = this.AB.filterComplexNew(`${this.id}_filter`);
+               // var DF = new RowFilter(null, `_filter`, this.AB);
+               // DF.applicationLoad(this.application);
                // DF.applicationLoad(this.application);
                DF.fieldsLoad(abFields);
                DF.setValue(condition.filterValue);
