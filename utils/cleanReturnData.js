@@ -94,7 +94,8 @@ function pruneRelations(object, data) {
       let row = data[i];
       if (row == null) continue;
 
-      delete row.id;
+      // Keep .id because it is custom index value to use reference to Connect field
+      // delete row.id;
       mlFields.forEach((mf) => {
          delete row[mf];
       });
