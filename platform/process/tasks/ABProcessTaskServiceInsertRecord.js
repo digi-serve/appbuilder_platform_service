@@ -106,6 +106,11 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                .then((result) => {
                   results.push(result);
                   this.results.push(result);
+
+                  this.log(
+                     instance,
+                     `Insert a new row to Object: [${this.object.label}] - Row ID: [${result?.id}]`
+                  );
                   return Promise.resolve();
                })
          );
