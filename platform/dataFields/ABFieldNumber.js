@@ -229,6 +229,18 @@ module.exports = class ABFieldNumber extends ABFieldNumberCore {
 
       if (allParameters[this.columnName] != null) {
          var value = allParameters[this.columnName];
+
+         // check if the incoming data is in string format and convert if so
+         if ("string" === typeof value) {
+            try {
+               value = JSON.parse(value);
+               // if JSON.parse() was successful, then update allParameters
+               allParameters[this.columnName] = value;
+            } catch (e) {
+               // Just ignore
+            }
+         }
+
          if (
             (value || value == 0) && // not be null, undefined or empty string
             (_.isNaN(value) || !_.isNumber(value))
