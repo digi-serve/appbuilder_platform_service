@@ -144,7 +144,9 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
 
                // if we use fields, load the data from previous tasks
                let usedFields =
-                  field == "to" ? this.toUsers?.fields : this.fromUsers?.fields;
+                  field == "to"
+                     ? this.toUsers?.fields ?? this.toUsers?.userFields
+                     : this.fromUsers?.fields ?? this.fromUsers?.userFields;
                if (Array.isArray(usedFields) && usedFields?.length) {
                   // only get the fields we need for the email lookup
                   // get the values for the field
@@ -166,6 +168,9 @@ module.exports = class ABProcessTaskEmail extends ABProcessTaskEmailCore {
                         }
 
                         tempLane.account.push(foundValue);
+                        tempLane.account = tempLane.account.map(
+                           (a) => a["username"] || a["uuid"] || a
+                        );
                         tempLane.useAccount = 1;
                      }
                   });
