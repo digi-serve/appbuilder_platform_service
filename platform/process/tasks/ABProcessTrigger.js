@@ -17,7 +17,7 @@ module.exports = class ABProcessTaskTrigger extends ABProcessTriggerCore {
       return Promise.resolve()
          .then(() => this.process.instanceNew(context, null, req, instanceKey))
          .catch((error) => {
-            if (error.nativeError.code == "ER_DUP_ENTRY") {
+            if (error.nativeError?.code == "ER_DUP_ENTRY") {
                // This means the instanceKey already exisits in the database,
                // which can happen if the first request times out. We want
                // to report this as a success, so the retries stop.
