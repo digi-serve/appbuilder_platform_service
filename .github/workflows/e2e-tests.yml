@@ -17,19 +17,17 @@ jobs:
            with:
               path: ab_service_appbuilder
               repository: digi-serve/ab_service_appbuilder
-              ref: develop
          - name: Checkout ab_service_appbuilder > AppBuilder
            uses: actions/checkout@v3
            with:
               path: ab_service_appbuilder/AppBuilder
               submodules: true
          # ab_service_custom_reports
-         - name: Checkout ab_service_custom_reportss
+         - name: Checkout ab_service_custom_reports
            uses: actions/checkout@v3
            with:
               path: ab_service_custom_reports
               repository: digi-serve/ab_service_custom_reports
-              ref: develop
          - name: Checkout ab_service_custom_reports > AppBuilder
            uses: actions/checkout@v3
            with:
@@ -41,7 +39,6 @@ jobs:
            with:
               path: ab_service_definition_manager
               repository: digi-serve/ab_service_definition_manager
-              ref: develop
          - name: Checkout ab_service_definition_manager > AppBuilder
            uses: actions/checkout@v3
            with:
@@ -53,7 +50,6 @@ jobs:
            with:
               path: ab_service_file_processor
               repository: digi-serve/ab_service_file_processor
-              ref: develop
          - name: Checkout ab_service_file_processor > AppBuilder
            uses: actions/checkout@v3
            with:
@@ -65,7 +61,6 @@ jobs:
            with:
               path: ab_service_process_manager
               repository: digi-serve/ab_service_process_manager
-              ref: develop
          - name: Checkout ab_service_process_manager > AppBuilder
            uses: actions/checkout@v3
            with:
@@ -77,7 +72,6 @@ jobs:
            with:
               path: ab_service_user_manager
               repository: digi-serve/ab_service_user_manager
-              ref: develop
          - name: Checkout ab_service_user_manager > AppBuilder
            uses: actions/checkout@v3
            with:
