@@ -1,6 +1,5 @@
 name: Dispatch Update Services
 on:
-  # Run on any commit to the #master branch
   workflow_call:
     inputs:
       version:
