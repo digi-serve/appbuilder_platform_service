@@ -6,6 +6,9 @@ on:
         description: The updated version of platform service
         type: string
         required: true
+    secrets:
+      TOKEN:
+        required: true
 
 jobs:
   dispatch-update-services:
@@ -26,7 +29,7 @@ jobs:
         env: 
           VERS: ${{ inputs.version }}
         with:
-          token: ${{ secrets.PAT }}
+          token: ${{ secrets.TOKEN }}
           repository: digi-serve/ab_service_${{ matrix.service }}
           event-type: platform_new_version
           client-payload: '{"type": "patch", "version": "${{ env.VERS }}"}'
