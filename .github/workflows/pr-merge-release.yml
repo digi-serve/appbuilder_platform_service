@@ -9,7 +9,7 @@ jobs:
   call-get-label:
     name: Label
     # Only run if the PR closed by merging and we have a label
-    if: $ {{ github.event.pull_request.merged }}
+    if: ${{ github.event.pull_request.merged }}
     uses: digi-serve/.github/.github/workflows/get-pr-release-label.yml@master
   call-e2e-tests:
     name: Test

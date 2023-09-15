@@ -21,7 +21,7 @@ jobs:
     with:
       ref: ${{ needs.call-update-sub.outputs.branch }}
 
-    call-generate-build-meta:
+  call-generate-build-meta:
     name: Meta
     uses: digi-serve/.github/.github/workflows/generate-build-meta.yml@master
     with: 
