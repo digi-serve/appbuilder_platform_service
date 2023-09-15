@@ -1,6 +1,10 @@
 name: E2E Tests
 on:
    workflow_call:
+      inputs:
+         ref:
+            type: string
+            default: master
 jobs:
    e2e-tests:
       name: E2E Tests
@@ -17,72 +21,72 @@ jobs:
            with:
               path: ab_service_appbuilder
               repository: digi-serve/ab_service_appbuilder
-              ref: develop
          - name: Checkout ab_service_appbuilder > AppBuilder
            uses: actions/checkout@v3
            with:
               path: ab_service_appbuilder/AppBuilder
               submodules: true
+              ref: ${{ inputs.ref }}
          # ab_service_custom_reports
-         - name: Checkout ab_service_custom_reportss
+         - name: Checkout ab_service_custom_reports
            uses: actions/checkout@v3
            with:
               path: ab_service_custom_reports
               repository: digi-serve/ab_service_custom_reports
-              ref: develop
          - name: Checkout ab_service_custom_reports > AppBuilder
            uses: actions/checkout@v3
            with:
               path: ab_service_custom_reports/AppBuilder
               submodules: true
+              ref: ${{ inputs.ref }}
          # ab_service_definition_manager
          - name: Checkout ab_service_definition_manager
            uses: actions/checkout@v3
            with:
               path: ab_service_definition_manager
               repository: digi-serve/ab_service_definition_manager
-              ref: develop
          - name: Checkout ab_service_definition_manager > AppBuilder
            uses: actions/checkout@v3
            with:
               path: ab_service_definition_manager/AppBuilder
               submodules: true
+              ref: ${{ inputs.ref }}
          # ab_service_file_processor
          - name: Checkout ab_service_file_processor
            uses: actions/checkout@v3
            with:
               path: ab_service_file_processor
               repository: digi-serve/ab_service_file_processor
-              ref: develop
          - name: Checkout ab_service_file_processor > AppBuilder
            uses: actions/checkout@v3
            with:
               path: ab_service_file_processor/AppBuilder
               submodules: true
+              ref: ${{ inputs.ref }}
          # ab_service_process_manager
          - name: Checkout ab_service_process_manager
            uses: actions/checkout@v3
            with:
               path: ab_service_process_manager
               repository: digi-serve/ab_service_process_manager
-              ref: develop
          - name: Checkout ab_service_process_manager > AppBuilder
            uses: actions/checkout@v3
            with:
               path: ab_service_process_manager/AppBuilder
               submodules: true
+              ref: ${{ inputs.ref }}
          # ab_service_user_manager
          - name: Checkout ab_service_user_manager
            uses: actions/checkout@v3
            with:
               path: ab_service_user_manager
               repository: digi-serve/ab_service_user_manager
-              ref: develop
          - name: Checkout ab_service_user_manager > AppBuilder
            uses: actions/checkout@v3
            with:
               path: ab_service_user_manager/AppBuilder
               submodules: true
+              ref: ${{ inputs.ref }}
          # install and test
          - name: Install AppBuilder
            uses: digi-serve/ab-install-action@v1
