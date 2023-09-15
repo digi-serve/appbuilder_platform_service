@@ -54,6 +54,7 @@ jobs:
     uses: ./.github/workflows/dispatch-update-services.yml
     with:
       version: ${{ needs.call-bump-version.outputs.new_version }}
+      type: patch
     secrets:
       TOKEN: ${{ secrets.PAT }}
 
