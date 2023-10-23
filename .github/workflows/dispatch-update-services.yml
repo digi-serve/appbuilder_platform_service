@@ -1,0 +1,36 @@
+name: Dispatch Update Services
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: The updated version of platform service
+        type: string
+        required: true
+      type:
+        type: string
+        required: true
+    secrets:
+      TOKEN:
+        required: true
+
+jobs:
+  dispatch-update-services:
+    name: Dispatch Update Services
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - appbuilder
+          - custom_reports
+          - definition_manager
+          - file_processor
+          - process_manager
+          - user_manager
+    steps:
+      - name: Repository Dispatch
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.TOKEN }}
+          repository: digi-serve/ab_service_${{ matrix.service }}
+          event-type: platform_new_version
+          client-payload: '{"type": "${{ inputs.type }}", "version": "${{ inputs.version }}"}'
