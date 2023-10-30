@@ -1,20 +1,14 @@
-const ABModel = require("./ABModel");
+//
+// ABModelAPI
+//
+// Represents the Data interface for an ABObjectQuery data.
 
-module.exports = class ABModelApi extends ABModel {
-   /**
-    * @method create
-    * performs an update operation
-    * @param {obj} values
-    *    A hash of the new values for this entry.
-    * @param {Knex.Transaction?} trx - [optional]
-    * @param {ABUtil.reqApi} req
-    *    The request object associated with the current tenant/request
-    * @return {Promise} resolved with the result of the find()
-    */
-   create(/* values, trx = null, condDefaults = null, req = null */) {
-      const error = new Error("ABModelApi.create() should not be called.");
-      return Promise.reject(error);
-   }
+const ABModelCore = require("../core/ABModelCore.js");
+
+module.exports = class ABModelAPI extends ABModelCore {
+   ///
+   /// Instance Methods
+   ///
 
    /**
     * @method findAll
@@ -27,11 +21,49 @@ module.exports = class ABModelApi extends ABModel {
     *       the multilingual data to return.
     *    conditionDefaults.username {string} the username of the user
     *       we should reference on any user based condition
+    * @param {ABUtil.reqService} req
+    *    The request object associated with the current tenant/request
     * @return {Promise} resolved with the result of the find()
     */
-   async findAll(options = {}, userData, req) {
-      const error = new Error("ABModelApi.findAll() should not be called.");
-      return Promise.reject(error);
+   async findAll(cond, conditionDefaults, req) {
+      const requestConfigs = this.object.request ?? {};
+      let url = requestConfigs.url;
+      let headers = this.object.headers;
+
+      // Paging
+      const pagingValues = this.object.getPagingValues({
+         skip: cond?.skip,
+         limit: cond?.limit,
+      });
+      if (Object.keys(pagingValues).length) {
+         switch (requestConfigs.paging.type) {
+            case "queryString":
+               url = `${url}?${new URLSearchParams(pagingValues).toString()}`;
+               break;
+            case "header":
+               headers = Object.assign(headers, pagingValues);
+               break;
+         }
+      }
+
+      // Load data
+      const response = await fetch(url, {
+         method: (requestConfigs.verb ?? "GET").toUpperCase(),
+         headers,
+         mode: "cors",
+         cache: "no-cache",
+      });
+
+      // Convert to JSON
+      let result = await response.json();
+
+      // Extract data from key
+      result = this.object.dataFromKey(result);
+
+      // Convert to an Array
+      if (result && !Array.isArray(result)) result = [result];
+
+      return result;
    }
 
    /**
@@ -45,49 +77,21 @@ module.exports = class ABModelApi extends ABModel {
     *       the multilingual data to return.
     *    conditionDefaults.username {string} the username of the user
     *       we should reference on any user based condition
+    * @param {ABUtil.reqService} req
+    *    The request object associated with the current tenant/request
     * @return {Promise} resolved with the result of the find()
     */
-   findCount(options, userData, req) {
-      const error = new Error("ABModelApi.findCount() should not be called.");
-      return Promise.reject(error);
-   }
+   async findCount(cond, conditionDefaults, req) {
+      const returnData = await this.findAll(cond, conditionDefaults, req);
 
-   /**
-    * @method update
-    * performs an update operation
-    * @param {string} id
-    *		the primary key for this update operation.
-    * @param {obj} values
-    *		A hash of the new values for this entry.
-    * @param {Knex.Transaction?} trx - [optional]
-    *
-    * @return {Promise} resolved with the result of the find()
-    */
-   update(/* id, values, trx = null */) {
-      const error = new Error("ABModelApi.update() should not be called.");
-      return Promise.reject(error);
-   }
+      // // Paging
+      // const pagingValues = this.object.getPagingValues({
+      //    skip: cond?.skip,
+      //    limit: cond?.limit,
+      // });
+      // pagingValues.total
 
-   /**
-    * @method relate()
-    * connect an object to another object via it's defined relation.
-    *
-    * this operation is ADDITIVE. It only appends additional relations.
-    *
-    * @param {string} id
-    *       the uuid of this object that is relating to these values
-    * @param {string} field
-    *       a reference to the object.fields() that we are connecting to
-    *       can be either .uuid or .columnName
-    * @param {array} values
-    *       one or more values to create a connection to.
-    *       these can be either .uuid values, or full {obj} values.
-    * @param {Knex.Transaction?} trx - [optional]
-    *
-    * @return {Promise}
-    */
-   relate(/* id, fieldRef, value, trx = null */) {
-      const error = new Error("ABModelApi.relate() should not be called.");
-      return Promise.reject(error);
+      return returnData?.length;
    }
 };
+
