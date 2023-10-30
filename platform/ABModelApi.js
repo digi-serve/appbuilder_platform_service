@@ -26,12 +26,13 @@ module.exports = class ABModelAPI extends ABModelCore {
     * @return {Promise} resolved with the result of the find()
     */
    async findAll(cond, conditionDefaults, req) {
-      const requestConfigs = this.object.request ?? {};
+      const object = this.object;
+      const requestConfigs = object.request ?? {};
       let url = requestConfigs.url;
-      let headers = this.object.headers;
+      let headers = object.headers;
 
       // Paging
-      const pagingValues = this.object.getPagingValues({
+      const pagingValues = object.getPagingValues({
          skip: cond?.skip,
          limit: cond?.limit,
       });
@@ -45,6 +46,25 @@ module.exports = class ABModelAPI extends ABModelCore {
                break;
          }
       }
+
+      // Get secret values and set to .headers
+      const pullSecretTasks = [];
+      Object.keys(headers).forEach((name) => {
+         const val = headers[name]?.toString() ?? "";
+
+         if (!val.startsWith("SECRET:")) return;
+
+         const secretName = val.replace(/SECRET:/g, "");
+
+         if (secretName)
+            pullSecretTasks.push(
+               (async () => {
+                  const secretVal = await object.getSecretValue(secretName);
+                  headers[name] = secretVal;
+               })()
+            );
+      });
+      await Promise.all(pullSecretTasks);
 
       // Load data
       const response = await fetch(url, {
@@ -94,4 +114,3 @@ module.exports = class ABModelAPI extends ABModelCore {
       return returnData?.length;
    }
 };
-
