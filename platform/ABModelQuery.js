@@ -203,6 +203,20 @@ module.exports = class ABModelQuery extends ABModel {
          this.querySort(query, options.sort, userData);
       }
 
+      ///
+      /// Limit
+      ///
+      if (options.limit) {
+         query.limit(options.limit);
+      }
+
+      ///
+      /// Offset
+      ///
+      if (options.offset) {
+         query.offset(options.offset);
+      }
+
       //
       // Final
       //
