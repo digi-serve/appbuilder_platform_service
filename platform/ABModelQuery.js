@@ -278,8 +278,7 @@ module.exports = class ABModelQuery extends ABModel {
 
       // added tableName to id because of non unique field error
       return this.findAll(opts, userData, req).then((result) => {
-         return result[0];
-         // return result[0]['count'];
+         return result[0]?.count ?? result[0];
       });
    }
 
