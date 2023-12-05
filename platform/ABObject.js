@@ -1636,13 +1636,13 @@ module.exports = class ABClassObject extends ABObjectCore {
    validExtension(filePath) {
       if (
          ![
-            "docx",
+            ".docx",
             // Image
-            "heic",
-            "jpg",
-            "png",
-            "tiff",
-            "webp",
+            ".heic",
+            ".jpg",
+            ".png",
+            ".tiff",
+            ".webp",
          ].includes(path.parse(filePath).ext)
       )
          return false;
