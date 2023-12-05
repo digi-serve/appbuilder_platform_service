@@ -1632,4 +1632,20 @@ module.exports = class ABClassObject extends ABObjectCore {
                : "not_in";
       }
    }
+
+   validExtension(filePath) {
+      if (
+         ![
+            "docx",
+            // Image
+            "heic",
+            "jpg",
+            "png",
+            "tiff",
+            "webp",
+         ].includes(path.parse(filePath).ext)
+      )
+         return false;
+      return true;
+   }
 };
