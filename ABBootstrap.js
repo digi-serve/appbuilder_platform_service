@@ -167,4 +167,7 @@ module.exports = {
             .catch(reject);
       });
    },
+   resetDefinitions: (req) => {
+      staleHandler(req);
+   },
 };
