@@ -4,7 +4,7 @@ const _ = require("lodash");
 const ABApplicationMobileCore = require("../core/ABApplicationMobileCore.js");
 
 const ABViewPageMobile = require("./mobile/ABMobilePage");
-const ABViewManager = require("./ABViewManager");
+// const ABViewManager = require("./ABViewManager");
 
 module.exports = class ABClassApplicationMobile extends (
    ABApplicationMobileCore
