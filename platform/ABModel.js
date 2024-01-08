@@ -1749,19 +1749,27 @@ module.exports = class ABModel extends ABModelCore {
       // query relation data
       if (query.withGraphFetched) {
          var relationNames = [];
-         var nameHash = {};
+         // var nameHash = {};
          if (populate) {
             this.populateFields(populate).forEach((f) => {
                let relationName = f.relationName();
 
                // Exclude .id column by adding (unselectId) function name to .withGraphFetched()
-               if (f.datasourceLink && f.datasourceLink.PK() === "uuid") {
+               if (f.datasourceLink?.PK() === "uuid") {
                   relationName += "(unselectId)";
                }
 
                relationNames.push(relationName);
-               nameHash[relationName] = nameHash[relationName] || [];
-               nameHash[relationName].push(f);
+               // nameHash[relationName] = nameHash[relationName] || [];
+               // nameHash[relationName].push(f);
+
+               // Include username data of user fields of linked object
+               // They are used to filter in FilterComplex on client
+               let userFieldRelations = f.datasourceLink.fields((fld) => fld?.key == "user").map((userFld) => `${userFld.relationName()}(username)`);
+               if (userFieldRelations.length) {
+                  userFieldRelations = _.uniq(userFieldRelations);
+                  relationNames.push(`${relationName}.[${userFieldRelations.join(",")}]`);
+               }
 
                // Get translation data of External object
                if (
@@ -1769,7 +1777,7 @@ module.exports = class ABModel extends ABModelCore {
                   f.datasourceLink.transColumnName &&
                   (f.datasourceLink.isExternal || f.datasourceLink.isImported)
                )
-                  relationNames.push(f.relationName() + ".[translations]");
+                  relationNames.push(`${f.relationName()}.[translations]`);
             });
          }
 
@@ -1782,7 +1790,7 @@ module.exports = class ABModel extends ABModelCore {
             relationNames.push("translations");
          }
 
-         var finalRelationNames = _.uniq(relationNames);
+         const finalRelationNames = _.uniq(relationNames);
 
          // TODO: test for faulty relationNames
          /*
@@ -1816,6 +1824,9 @@ module.exports = class ABModel extends ABModelCore {
                // if the linked object's PK is uuid, then exclude .id
                unselectId: (builder) => {
                   builder.omit(["id"]);
+               },
+               username: (builder) => {
+                  builder.select(["username"]);
                },
             });
 
@@ -2711,4 +2722,3 @@ function updateTranslationsValues(AB, object, id, translations, isInsert) {
 
    return Promise.all(tasks);
 }
-
