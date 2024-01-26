@@ -34,8 +34,8 @@ var RuleHash = {
    "≥": "greater_or_equal",
    equals: "equals",
    "does not equal": "not_equal",
-   "is checked": "equals", // == 1
-   "is not checked": "equals", // == 0
+   "is checked": "checked", // == 1
+   "is not checked": "unchecked", // == 0
    "is null": "is_null",
    "is not null": "is_not_null",
    "is current user": "is_current_user",

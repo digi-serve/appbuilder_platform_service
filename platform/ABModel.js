@@ -1234,6 +1234,8 @@ module.exports = class ABModel extends ABModelCore {
          less_or_equal_current: "<=",
          last_days: "BETWEEN",
          next_days: "BETWEEN",
+         checked: "IS TRUE",
+         unchecked: "IS NOT TRUE", // FALSE or NULL
       };
 
       // normal field name:
@@ -1496,6 +1498,11 @@ module.exports = class ABModel extends ABModelCore {
          case "is_not_empty":
             // returns NULL if they are equal. Otherwise, the first expression is returned.
             columnName = `NULLIF(${columnName}, '')`;
+            value = "";
+            break;
+
+         case "checked":
+         case "unchecked":
             value = "";
             break;
       }
