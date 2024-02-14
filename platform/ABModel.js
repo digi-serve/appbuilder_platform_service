@@ -1766,16 +1766,21 @@ module.exports = class ABModel extends ABModelCore {
                   relationName += "(unselectId)";
                }
 
-               relationNames.push(relationName);
                // nameHash[relationName] = nameHash[relationName] || [];
                // nameHash[relationName].push(f);
 
                // Include username data of user fields of linked object
                // They are used to filter in FilterComplex on client
-               let userFieldRelations = f.datasourceLink.fields((fld) => fld?.key == "user").map((userFld) => `${userFld.relationName()}(username)`);
+               let userFieldRelations = f.datasourceLink
+                  .fields((fld) => fld?.key == "user")
+                  .map((userFld) => `${userFld.relationName()}(username)`);
                if (userFieldRelations.length) {
                   userFieldRelations = _.uniq(userFieldRelations);
-                  relationNames.push(`${relationName}.[${userFieldRelations.join(",")}]`);
+                  relationNames.push(
+                     `${relationName}.[${userFieldRelations.join(",")}]`
+                  );
+               } else {
+                  relationNames.push(relationName);
                }
 
                // Get translation data of External object
