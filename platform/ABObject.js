@@ -310,10 +310,28 @@ module.exports = class ABClassObject extends ABObjectCore {
             if (allRoles.length == 0) {
                // Q: So no roles in the system means NO ACCESS. So let's not return any data:
                // add a 1=0 clause to prevent any results:
+
+               // NOTE: preventing error when cond.where == {}
+               // Actually: Since we are preventing access ... drop the original where?
                cond.where = {
                   glue: "and",
-                  rules: [cond.where, { key: "1", rule: "equals", value: "0" }],
+                  rules: [{ key: "1", rule: "equals", value: "0" }],
                };
+               // // decide if and how we add oldWhere:
+               // if (oldWhere.glue) {
+               //    if (oldWhere.glue == "and") {
+               //       oldWhere.rules.forEach((r) => {
+               //          cond.where.rules.push(r);
+               //       });
+               //    } else {
+               //       cond.where.rules.push(oldWhere);
+               //    }
+               // } else {
+               //    if (oldWhere.key) {
+               //       cond.where.rules.push(oldWhere);
+               //    }
+               // }
+
                req.notify.developer(
                   new Error(
                      "ABObject.includeScopes(): user has NO ROLES : preventing data access"
