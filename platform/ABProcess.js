@@ -148,9 +148,12 @@ module.exports = class ABProcess extends ABProcessCore {
             () =>
                new Promise((next, bad) =>
                   // Do NOT pass the dbTransaction to the ProcessInstance.create()
-                  this.AB.objectProcessInstance()
-                     .model()
-                     .create(newValues, null, req.userDefaults(), req)
+                  req
+                     .retry(() =>
+                        this.AB.objectProcessInstance()
+                           .model()
+                           .create(newValues, null, req.userDefaults(), req),
+                     )
                      .then(next)
                      .catch((error) => {
                         // This case is handled in ABProcessTrigger
@@ -162,8 +165,8 @@ module.exports = class ABProcess extends ABProcessCore {
                            req,
                         });
                         bad(error);
-                     })
-               )
+                     }),
+               ),
          )
          .then((newInstance) => this.run(newInstance, dbTransaction, req));
    }
@@ -256,7 +259,7 @@ module.exports = class ABProcess extends ABProcessCore {
                                     // display error message
                                     task.onError(
                                        instance,
-                                       new Error("error parsing next task")
+                                       new Error("error parsing next task"),
                                     );
 
                                     // WORKAROUND: `SITE_PROCESS_INSTANCE` table has a lot of "Did not find any outgoing flows for dID" error row data in production site.
@@ -292,7 +295,7 @@ module.exports = class ABProcess extends ABProcessCore {
                                  this.instanceError(instance, task, err).then(
                                     () => {
                                        cb();
-                                    }
+                                    },
                                  );
                               }
                            });
@@ -317,7 +320,7 @@ module.exports = class ABProcess extends ABProcessCore {
                               .then(() => next())
                               .catch(bad);
                         }
-                     }
+                     },
                   );
                });
             });
