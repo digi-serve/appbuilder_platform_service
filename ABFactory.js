@@ -494,6 +494,10 @@ class ABFactory extends ABFactoryCore {
       return _.isEmpty(...params);
    }
 
+   isNil(value) {
+      return _.isNil(value);
+   }
+
    isUndefined(...params) {
       return _.isUndefined(...params);
    }
