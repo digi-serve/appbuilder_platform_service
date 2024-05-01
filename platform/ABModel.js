@@ -1882,8 +1882,12 @@ module.exports = class ABModel extends ABModelCore {
             var linkObj = f.datasourceLink;
             var minFields = linkObj.minRelationData();
             var relationName = f.relationName();
+            // find a row that has exist relation values
+            const existsRelatedVal = data.filter(
+               (row) => row?.[relationName]?.[0] != null
+            )[0];
             var keysToRemove = Object.keys(
-               data[0]?.[relationName]?.[0] || []
+               existsRelatedVal?.[relationName]?.[0] || []
             ).filter((k) => minFields.indexOf(k) == -1);
 
             // using for loop for performance here
