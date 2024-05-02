@@ -1,6 +1,6 @@
 {
   "name": "ab_platform_service",
-  "version": "1.1.14+c20129",
+  "version": "1.1.15",
   "description": "(AppBuilder) A multi-tenant aware runtime for a micro-service platform.",
   "main": "ABBootstrap.js",
   "scripts": {
