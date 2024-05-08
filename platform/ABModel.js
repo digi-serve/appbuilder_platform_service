@@ -1967,7 +1967,16 @@ module.exports = class ABModel extends ABModelCore {
                   sortClause = "`" + sortClause.replace(/`/g, "") + "`";
                }
             }
-            query.orderByRaw(sortClause + " " + o.dir);
+
+            // Sort following the item list order
+            if (orderField.key == "list") {
+               // https://dev.mysql.com/doc/refman/8.0/en/string-functions.html#function_find-in-set
+               query.orderByRaw(
+                  `IFNULL(FIND_IN_SET(${sortClause}, "${o.dir}"), 999) ASC`
+               );
+            } else {
+               query.orderByRaw(sortClause + " " + o.dir);
+            }
          });
       }
    }
