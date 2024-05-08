@@ -1479,19 +1479,21 @@ module.exports = class ABModel extends ABModelCore {
                whereRaw = " 1=1 ";
             }
             break;
-
          case "greater_current":
          case "greater_or_equal_current":
          case "less_current":
          case "less_or_equal_current":
             value = "NOW()";
             break;
-
          case "last_days":
             value = `DATE_SUB(NOW(), INTERVAL ${condition.value} DAY) AND NOW()`;
             break;
          case "next_days":
             value = `NOW() AND DATE_ADD(NOW(), INTERVAL ${condition.value} DAY)`;
+            break;
+         case "is_current_date":
+            operator = "=";
+            value = `CURDATE()`;
             break;
 
          case "is_empty":
