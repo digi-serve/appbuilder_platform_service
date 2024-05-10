@@ -1492,6 +1492,7 @@ module.exports = class ABModel extends ABModelCore {
             value = `NOW() AND DATE_ADD(NOW(), INTERVAL ${condition.value} DAY)`;
             break;
          case "is_current_date":
+            columnName = `DATE(${columnName})`;
             operator = "=";
             value = `CURDATE()`;
             break;
