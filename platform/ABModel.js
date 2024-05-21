@@ -1528,13 +1528,13 @@ module.exports = class ABModel extends ABModelCore {
     * @return {string}
     */
    queryConditionsJoinConditions(cond, req) {
-      if (cond.glue) {
+      if (cond?.glue) {
          // combine my sub rules into a single condition
 
          var rules = cond.rules
             .map((r) => this.queryConditionsJoinConditions(r, req))
             .filter((r) => r)
-            .join(` ${cond.glue.toUpperCase()} `);
+            .join(` ${cond?.glue.toUpperCase()} `);
 
          if (rules) {
             // if there were > 1 rule, then
@@ -1593,9 +1593,9 @@ module.exports = class ABModel extends ABModelCore {
    queryConditionsParseConditions(cond, userData, req) {
       // if this is a top level "glue" constructor,
       // build a new one
-      if (cond.glue) {
+      if (cond?.glue) {
          var newCond = {
-            glue: cond.glue,
+            glue: cond?.glue,
             rules: [],
          };
          (cond.rules || []).forEach((r) => {
@@ -1630,7 +1630,7 @@ module.exports = class ABModel extends ABModelCore {
       if (!cond) return null;
 
       // if this is a "glue" condition, then process each of it's rules:
-      if (cond.glue) {
+      if (cond?.glue) {
          var newRules = [];
          (cond.rules || []).forEach((r) => {
             var pRule = this.queryConditionsPluckNoRelations(

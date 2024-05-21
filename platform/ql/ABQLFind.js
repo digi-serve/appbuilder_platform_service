@@ -111,7 +111,7 @@ class ABQLFind extends ABQLFindCore {
       if (cond) {
          // if this is a group condition, then reduce each of it's rules:
          if (cond.rules) {
-            newCond.glue = cond.glue;
+            newCond.glue = cond?.glue;
             newCond.rules = [];
             cond.rules.forEach((r) => {
                newCond.rules.push(this.conditionReduce(r, instance));
