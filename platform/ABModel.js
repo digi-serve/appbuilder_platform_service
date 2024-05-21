@@ -1168,7 +1168,8 @@ module.exports = class ABModel extends ABModelCore {
             else if (
                field.key == "date" &&
                condition.rule != "last_days" &&
-               condition.rule != "next_days"
+               condition.rule != "next_days" &&
+               condition.rule != "is_current_date"
             ) {
                condition.key = `DATE(${condition.key})`;
                condition.value = `DATE("${condition.value}")`;
@@ -1212,6 +1213,7 @@ module.exports = class ABModel extends ABModelCore {
          "number_",
          "string_",
          "date_",
+         "datetime_",
          "boolean_",
          "user_",
          "list_",
@@ -1492,11 +1494,10 @@ module.exports = class ABModel extends ABModelCore {
             value = `NOW() AND DATE_ADD(NOW(), INTERVAL ${condition.value} DAY)`;
             break;
          case "is_current_date":
-            columnName = `DATE(${columnName})`;
-            operator = "=";
-            value = `CURDATE()`;
+            operator = "BETWEEN";
+            var datetimerange = condition.value.split("|");
+            value = `"${datetimerange[0]}" AND "${datetimerange[1]}"`;
             break;
-
          case "is_empty":
          case "is_not_empty":
             // returns NULL if they are equal. Otherwise, the first expression is returned.
