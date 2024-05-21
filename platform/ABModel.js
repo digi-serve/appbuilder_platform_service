@@ -1528,6 +1528,7 @@ module.exports = class ABModel extends ABModelCore {
     * @return {string}
     */
    queryConditionsJoinConditions(cond, req) {
+      if (_.isUndefined(cond)) return null;
       if (cond.glue) {
          // combine my sub rules into a single condition
 
