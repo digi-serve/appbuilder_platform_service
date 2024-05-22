@@ -1535,7 +1535,7 @@ module.exports = class ABModel extends ABModelCore {
          var rules = cond.rules
             .map((r) => this.queryConditionsJoinConditions(r, req))
             .filter((r) => r)
-            .join(` ${cond.glue.toUpperCase()} `);
+            .join(` ${cond?.glue.toUpperCase()} `);
 
          if (rules) {
             // if there were > 1 rule, then
@@ -1594,9 +1594,9 @@ module.exports = class ABModel extends ABModelCore {
    queryConditionsParseConditions(cond, userData, req) {
       // if this is a top level "glue" constructor,
       // build a new one
-      if (cond.glue) {
+      if (cond?.glue) {
          var newCond = {
-            glue: cond.glue,
+            glue: cond?.glue,
             rules: [],
          };
          (cond.rules || []).forEach((r) => {
@@ -1631,7 +1631,7 @@ module.exports = class ABModel extends ABModelCore {
       if (!cond) return null;
 
       // if this is a "glue" condition, then process each of it's rules:
-      if (cond.glue) {
+      if (cond?.glue) {
          var newRules = [];
          (cond.rules || []).forEach((r) => {
             var pRule = this.queryConditionsPluckNoRelations(
@@ -1883,9 +1883,13 @@ module.exports = class ABModel extends ABModelCore {
             var linkObj = f.datasourceLink;
             var minFields = linkObj.minRelationData();
             var relationName = f.relationName();
-            var keysToRemove = Object.keys(
-               data[0]?.[relationName]?.[0] || []
-            ).filter((k) => minFields.indexOf(k) == -1);
+            let colNameList = f.object.fields().map((fld) => fld?.columnName);
+            colNameList = colNameList.concat(
+               f.object.connectFields().map((fld) => fld?.relationName?.())
+            );
+            var keysToRemove = colNameList.filter(
+               (k) => minFields.indexOf(k) == -1
+            );
 
             // using for loop for performance here
             for (var i = 0, data_length = data.length; i < data_length; ++i) {
@@ -1964,7 +1968,16 @@ module.exports = class ABModel extends ABModelCore {
                   sortClause = "`" + sortClause.replace(/`/g, "") + "`";
                }
             }
-            query.orderByRaw(sortClause + " " + o.dir);
+
+            // Sort following the item list order
+            if (orderField.key == "list") {
+               // https://dev.mysql.com/doc/refman/8.0/en/string-functions.html#function_find-in-set
+               query.orderByRaw(
+                  `IFNULL(FIND_IN_SET(${sortClause}, "${o.dir}"), 999) ASC`
+               );
+            } else {
+               query.orderByRaw(sortClause + " " + o.dir);
+            }
          });
       }
    }
