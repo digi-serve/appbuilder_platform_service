@@ -4,6 +4,8 @@ const ABProcessCore = require("../core/ABProcessCore.js");
 
 const ABProcessEngine = require("./process/ABProcessEngine");
 
+const cleanReturnData = require("../utils/cleanReturnData");
+
 const async = require("async");
 const convert = require("xml-js");
 
@@ -115,6 +117,8 @@ module.exports = class ABProcess extends ABProcessCore {
     * create a new running Instance of a process.
     * @param {obj} data
     *        the context data to send to the process.
+    * @param {ABObject} object
+    *        the object of the context data.
     * @param {Knex.Transaction} dbTransaction
     * @param {abutil.reqService} req
     *        the current request object for the api call.
@@ -122,7 +126,7 @@ module.exports = class ABProcess extends ABProcessCore {
     * duplicate processes from being added.
     * @return {Promise}
     */
-   instanceNew(data, dbTransaction, req, instanceKey) {
+   async instanceNew(data, object, dbTransaction, req, instanceKey, options = {}) {
       var context = data;
 
       this.elements().forEach((t) => {
@@ -131,10 +135,17 @@ module.exports = class ABProcess extends ABProcessCore {
          }
       });
 
+      // NOTE: minify the context to prevent [ER_NET_PACKET_TOO_LARGE] Got a packet bigger than 'max_allowed_packet' bytes error
+      let savedContext = context;
+      if (options?.pruneData && object) {
+         savedContext = this.AB.clone(context);
+         savedContext.input = (await cleanReturnData(this.AB, object, context.input))[0];
+      }
+
       const newValues = {
          processID: this.id,
          xmlDefinition: this.xmlDefinition,
-         context: context,
+         context: savedContext,
          status: "created",
          log: ["created"],
          jobID: req ? req.jobID : "??",
@@ -142,6 +153,11 @@ module.exports = class ABProcess extends ABProcessCore {
          instanceKey: instanceKey ?? "UUID()",
          // if no instance key provided generate a UUID with SQL so we have a unique string
       };
+
+      if (options?.rowLogID) {
+         newValues.context = newValues.context ?? {};
+         newValues.context.rowLogID = options?.rowLogID;
+      }
 
       return Promise.resolve()
          .then(

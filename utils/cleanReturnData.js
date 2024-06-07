@@ -17,17 +17,16 @@
  *        also return some of our problematic relations.
  * @return {Promise}
  */
-module.exports = function (AB, currentObject, data, populate = false) {
+ module.exports = function (AB, currentObject, data, populate = false) {
    // NOTE: kept this as a promise for future possibilities of data we might
    // need to check or verify...
-   // make sure data is an array with no null or undefined entries.
-   if (!Array.isArray(data)) data = [data];
-   data = data.filter((d) => !AB.isNil(d));
+
+   if (data && !Array.isArray(data)) data = [data];
 
    return new Promise((resolve /* , reject */) => {
       var UserObj = AB.objectUser();
       if (currentObject.id === UserObj.id) {
-         data.forEach((r) => {
+         (data || []).forEach((r) => {
             cleanEntry(r, populate);
          });
       } else {
@@ -35,7 +34,7 @@ module.exports = function (AB, currentObject, data, populate = false) {
          var connFields = currentObject.connectFields();
          (connFields || []).forEach((f) => {
             if ((f.datasourceLink || {}).id == UserObj.id) {
-               data.forEach((r) => {
+               (data || []).forEach((r) => {
                   var fdata = f.dataValue(r);
                   if (!Array.isArray(fdata)) {
                      fdata = [fdata];
@@ -87,7 +86,6 @@ function pruneRelations(object, data) {
    if (!Array.isArray(data)) data = [data];
    if (data.filter((row) => row != null).length == 0) return;
 
-   // find the connectedFields that are represented in the data object.
    let connectedFields = object
       .connectFields()
       .filter((f) => data[0]?.[f.relationName()]);
