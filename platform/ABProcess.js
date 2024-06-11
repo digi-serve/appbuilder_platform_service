@@ -137,9 +137,9 @@ module.exports = class ABProcess extends ABProcessCore {
 
       // NOTE: minify the context to prevent [ER_NET_PACKET_TOO_LARGE] Got a packet bigger than 'max_allowed_packet' bytes error
       let savedContext = context;
-      if (options?.pruneData && object) {
+      if (options?.pruneData && object && context.input) {
          savedContext = this.AB.clone(context);
-         savedContext.input = (await cleanReturnData(this.AB, object, context.input))[0];
+         savedContext.input = (await object.model().populateMin([context.input], true))[0];
       }
 
       const newValues = {
