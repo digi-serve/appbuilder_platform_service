@@ -17,7 +17,7 @@
  *        also return some of our problematic relations.
  * @return {Promise}
  */
- module.exports = function (AB, currentObject, data, populate = false) {
+module.exports = function (AB, currentObject, data, populate = false) {
    // NOTE: kept this as a promise for future possibilities of data we might
    // need to check or verify...
 
