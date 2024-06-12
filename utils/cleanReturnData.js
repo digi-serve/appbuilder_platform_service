@@ -86,6 +86,7 @@ function pruneRelations(object, data) {
    if (!Array.isArray(data)) data = [data];
    if (data.filter((row) => row != null).length == 0) return;
 
+   // find the connectedFields that are represented in the data object.
    let connectedFields = object
       .connectFields()
       .filter((f) => data[0]?.[f.relationName()]);
