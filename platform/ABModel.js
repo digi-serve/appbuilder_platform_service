@@ -1898,6 +1898,7 @@ module.exports = class ABModel extends ABModelCore {
             // using for loop for performance here
             for (var i = 0, data_length = data.length; i < data_length; ++i) {
                let set = data[i][relationName] || [];
+               if (set && !Array.isArray(set)) set = [set];
                for (var s = 0, set_length = set.length; s < set_length; ++s) {
                   let entry = set[s];
                   for (
