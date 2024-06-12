@@ -4,10 +4,7 @@ const ABProcessCore = require("../core/ABProcessCore.js");
 
 const ABProcessEngine = require("./process/ABProcessEngine");
 
-const cleanReturnData = require("../utils/cleanReturnData");
-
 const async = require("async");
-const convert = require("xml-js");
 
 module.exports = class ABProcess extends ABProcessCore {
    constructor(attributes, AB) {
