@@ -3,7 +3,7 @@ const path = require("path");
 const ABProcessTriggerCore = require(path.join(__dirname, "..", "..", "..", "core", "process", "tasks", "ABProcessTriggerCore.js"));
 
 module.exports = class ABProcessTaskTrigger extends ABProcessTriggerCore {
-   trigger(data, req, instanceKey) {
+   trigger(data, req, instanceKey, rowLogID = null) {
       // call my process.newInstance with
       if (!this.process) {
          var error = new Error("ABProcessTaskTrigger with a missing process?");
@@ -14,8 +14,13 @@ module.exports = class ABProcessTaskTrigger extends ABProcessTriggerCore {
       this.initState(context, { triggered: true, status: "completed", data });
       context.startTaskID = this.diagramID;
 
+      const object = this.AB.objectByID(this.objectID);
+
       return Promise.resolve()
-         .then(() => this.process.instanceNew(context, null, req, instanceKey))
+         .then(() => this.process.instanceNew(context, object, null, req, instanceKey, {
+            pruneData: true,
+            rowLogID,
+         }))
          .catch((error) => {
             if (error.nativeError?.code == "ER_DUP_ENTRY") {
                // This means the instanceKey already exisits in the database,
