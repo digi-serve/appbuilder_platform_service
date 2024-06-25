@@ -100,9 +100,11 @@ module.exports = class ABProcess extends ABProcessCore {
     * find the uuid
     * @returns {Object} the ProcessDefinition
     */
-   async instanceDefinition() {
+   async instanceDefinition(req) {
       try {
-         const definition = convert.xml2js(this.xmlDefinition, { compact: true });
+         const definition = convert.xml2js(this.xmlDefinition, {
+            compact: true,
+         });
          const defHash = hash(definition);
          const processDefModel = this.AB.objectProcessDefinition().model();
          let [defRecord] = await processDefModel.find({ hash: defHash }, req);
@@ -117,8 +119,6 @@ module.exports = class ABProcess extends ABProcessCore {
          this.AB.notify.developer(error, {
             context: "ABProcess.instanceDefinition",
             process: this,
-            newValues,
-            req,
          });
          throw error;
       }
@@ -154,7 +154,14 @@ module.exports = class ABProcess extends ABProcessCore {
     * duplicate processes from being added.
     * @return {Promise}
     */
-   async instanceNew(data, object, dbTransaction, req, instanceKey, options = {}) {
+   async instanceNew(
+      data,
+      object,
+      dbTransaction,
+      req,
+      instanceKey,
+      options = {},
+   ) {
       var context = data;
 
       this.elements().forEach((t) => {
@@ -167,10 +174,12 @@ module.exports = class ABProcess extends ABProcessCore {
       let savedContext = context;
       if (options?.pruneData && object && context.input) {
          savedContext = this.AB.clone(context);
-         savedContext.input = (await object.model().populateMin([context.input], true))[0];
+         savedContext.input = (
+            await object.model().populateMin([context.input], true)
+         )[0];
       }
 
-      const definition = await this.instanceDefinition();
+      const definition = await this.instanceDefinition(req);
 
       const newValues = {
          processID: this.id,
