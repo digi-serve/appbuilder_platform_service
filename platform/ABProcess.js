@@ -5,6 +5,8 @@ const ABProcessCore = require("../core/ABProcessCore.js");
 const ABProcessEngine = require("./process/ABProcessEngine");
 
 const async = require("async");
+const hash = require("object-hash");
+const convert = require("xml-js");
 
 module.exports = class ABProcess extends ABProcessCore {
    constructor(attributes, AB) {
@@ -94,6 +96,35 @@ module.exports = class ABProcess extends ABProcessCore {
    }
 
    /**
+    * Save a copy of the definitions in the DB. If the definition already exists
+    * find the uuid
+    * @returns {Object} the ProcessDefinition
+    */
+   async instanceDefinition() {
+      try {
+         const definition = convert.xml2js(this.xmlDefinition, { compact: true });
+         const defHash = hash(definition);
+         const processDefModel = this.AB.objectProcessDefinition().model();
+         let [defRecord] = await processDefModel.find({ hash: defHash }, req);
+         if (!defRecord) {
+            defRecord = await processDefModel.create({
+               hash: defHash,
+               definition,
+            });
+         }
+         return defRecord;
+      } catch (error) {
+         this.AB.notify.developer(error, {
+            context: "ABProcess.instanceDefinition",
+            process: this,
+            newValues,
+            req,
+         });
+         throw error;
+      }
+   }
+
+   /**
     * instanceError()
     * Mark the current instance as having an error.
     * @param {obj} instance the instance we are working with.
@@ -139,9 +170,12 @@ module.exports = class ABProcess extends ABProcessCore {
          savedContext.input = (await object.model().populateMin([context.input], true))[0];
       }
 
+      const definition = await this.instanceDefinition();
+
       const newValues = {
          processID: this.id,
-         xmlDefinition: this.xmlDefinition,
+         definition: definition.uuid,
+         // xmlDefinition: this.xmlDefinition,
          context: savedContext,
          status: "created",
          log: ["created"],
@@ -156,32 +190,27 @@ module.exports = class ABProcess extends ABProcessCore {
          newValues.context.rowLogID = options?.rowLogID;
       }
 
-      return Promise.resolve()
-         .then(
-            () =>
-               new Promise((next, bad) =>
-                  // Do NOT pass the dbTransaction to the ProcessInstance.create()
-                  req
-                     .retry(() =>
-                        this.AB.objectProcessInstance()
-                           .model()
-                           .create(newValues, null, req.userDefaults(), req),
-                     )
-                     .then(next)
-                     .catch((error) => {
-                        // This case is handled in ABProcessTrigger
-                        if (error.nativeError?.code == "ER_DUP_ENTRY")
-                           return bad(error);
-                        this.AB.notify.developer(error, {
-                           process: this,
-                           newValues,
-                           req,
-                        });
-                        bad(error);
-                     }),
-               ),
-         )
-         .then((newInstance) => this.run(newInstance, dbTransaction, req));
+      // Do NOT pass the dbTransaction to the ProcessInstance.create()
+      let newInstance;
+      try {
+         newInstance = await this.AB.objectProcessInstance()
+            .model()
+            .create(newValues, null, req.userDefaults(), req);
+         // Attach the full definitions to the newInstance
+         newInstance.jsonDefinition = definition;
+      } catch (error) {
+         // This case is handled in ABProcessTrigger
+         if (error.nativeError?.code != "ER_DUP_ENTRY") {
+            this.AB.notify.developer(error, {
+               process: this,
+               newValues,
+               req,
+            });
+         }
+         throw error;
+      }
+
+      return this.run(newInstance, dbTransaction, req);
    }
 
    /**
