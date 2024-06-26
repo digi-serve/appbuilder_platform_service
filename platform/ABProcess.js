@@ -269,9 +269,24 @@ module.exports = class ABProcess extends ABProcessCore {
     *        based operations.
     * @return {Promise}
     */
-   run(instance, dbTransaction, req) {
+   async run(instance, dbTransaction, req) {
       // make sure the current instance is runnable:
       if (instance.status != "error" && instance.status != "completed") {
+         // look up the full definition
+         if (!instance.jsonDefinition && instance.definition) {
+            try {
+               instance.jsonDefinition = await this.AB.objectProcessDefinition()
+                  .model()
+                  .find({ uuid: instance.definition }, req)[0];
+            } catch (err) {
+               this.AB.notify.developer(err, {
+                  context: "Error getting instance definition (ABProcess.run)",
+                  process: this,
+                  instance,
+                  req,
+               });
+            }
+         }
          var Engine = new ABProcessEngine(instance, this);
          // Engine.pendingTasks().then((listOfPendingTasks) => {
          // });

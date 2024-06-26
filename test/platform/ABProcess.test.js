@@ -32,17 +32,20 @@ const mockAB = {
 };
 
 describe("ABProcess", function () {
+   let process;
+   beforeEach(function () {
+      process = new ABProcess({}, mockAB);
+      hash.resetHistory();
+      xml2js.resetHistory();
+      find.resetHistory();
+      create.resetHistory();
+   });
+
    describe("instanceDefinition", function () {
-      let process;
       const xmlDefinition = "<test>test</test>";
 
       beforeEach(function () {
-         process = new ABProcess({}, mockAB);
          process.xmlDefinition = xmlDefinition;
-         hash.resetHistory();
-         xml2js.resetHistory();
-         find.resetHistory();
-         create.resetHistory();
       });
 
       it("returns the process definiton", function () {
@@ -75,13 +78,8 @@ describe("ABProcess", function () {
    });
 
    describe("instanceNew", function () {
-      before(function () {
-         find.resolves([modelResponse]);
-      });
-      beforeEach(function () {
-         create.resetHistory();
-      });
       it("calls this.instanceDefintion", function () {
+         find.resolves([modelResponse]);
          const process = new ABProcess({}, mockAB);
          // const instanceDefintion = sinon.fake.returns(modelResponse);
          sinon.replace(
@@ -100,6 +98,27 @@ describe("ABProcess", function () {
                modelResponse,
             );
          });
+      });
+   });
+
+   describe("run", function () {
+      it("loads missing jsonDefinitons", function () {
+         find.resolves([modelResponse]);
+         process.run({ definition: "uuid" }, undefined, {}).then(() => {
+            assert(find.calledOnce);
+            assert.deepEqual(find.firstCall.firstArg, { uuid: "uuid" });
+         });
+      });
+      it("doesn't load jsonDefinitons when instance has", function () {
+         process
+            .run(
+               { definition: "uuid", jsonDefintion: { test: "test" } },
+               undefined,
+               {},
+            )
+            .then(() => {
+               assert(find.notCalled);
+            });
       });
    });
 });
