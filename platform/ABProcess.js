@@ -118,7 +118,7 @@ module.exports = class ABProcess extends ABProcessCore {
       } catch (error) {
          this.AB.notify.developer(error, {
             context: "ABProcess.instanceDefinition",
-            process: this,
+            process: this.toObj(),
          });
          throw error;
       }
@@ -211,7 +211,7 @@ module.exports = class ABProcess extends ABProcessCore {
          // This case is handled in ABProcessTrigger
          if (error.nativeError?.code != "ER_DUP_ENTRY") {
             this.AB.notify.developer(error, {
-               process: this,
+               process: this.toObj(),
                newValues,
                req,
             });
@@ -281,7 +281,7 @@ module.exports = class ABProcess extends ABProcessCore {
             } catch (err) {
                this.AB.notify.developer(err, {
                   context: "Error getting instance definition (ABProcess.run)",
-                  process: this,
+                  process: this.toObj(),
                   instance,
                   req,
                });
