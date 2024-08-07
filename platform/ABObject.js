@@ -1140,7 +1140,9 @@ module.exports = class ABClassObject extends ABObjectCore {
     */
    requestParams(allParameters) {
       var usefulParameters = {};
-      this.fields().forEach((f) => {
+      this.fields(
+         (f) => !f.isConnection || (f.isConnection && f.linkType() != "many")
+      ).forEach((f) => {
          var p = f.requestParam(allParameters);
          if (p) {
             for (var a in p) {
