@@ -870,52 +870,61 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
 
    requestRelationParam(allParameters) {
       var myParameter = super.requestRelationParam(allParameters);
-      if (myParameter) {
-         if (myParameter[this.columnName]) {
-            // let PK;
+      if (!myParameter) return myParameter;
 
-            // if value is array, then get id of array
-            if (Array.isArray(myParameter[this.columnName])) {
-               let result = [];
+      if (myParameter[this.columnName]) {
+         // let PK;
 
-               myParameter[this.columnName].forEach((d) => {
-                  let val = this.getRelationValue(d, { forUpdate: true });
+         // if value is array, then get id of array
+         if (Array.isArray(myParameter[this.columnName])) {
+            let result = [];
 
-                  // if (PK == "id") {
-                  //    val = parseInt(d[PK] || d.id || d);
-
-                  //    // validate INT value
-                  //    if (val && !isNaN(val)) result.push(val);
-                  // }
-                  // // uuid
-                  // else {
-                  result.push(val);
-                  // }
-               });
-
-               myParameter[this.columnName] = result;
-            }
-            // if value is a object
-            else {
-               myParameter[this.columnName] = this.getRelationValue(
-                  myParameter[this.columnName],
-                  { forUpdate: true }
-               );
+            myParameter[this.columnName].forEach((d) => {
+               let val = this.getRelationValue(d, { forUpdate: true });
 
                // if (PK == "id") {
-               //    myParameter[this.columnName] = parseInt(
-               //       myParameter[this.columnName]
-               //    );
+               //    val = parseInt(d[PK] || d.id || d);
 
                //    // validate INT value
-               //    if (isNaN(myParameter[this.columnName]))
-               //       myParameter[this.columnName] = null;
+               //    if (val && !isNaN(val)) result.push(val);
                // }
-            }
-         } else {
-            // myParameter[this.columnName] = [];
-            myParameter[this.columnName] = null;
+               // // uuid
+               // else {
+               result.push(val);
+               // }
+            });
+
+            myParameter[this.columnName] = result;
          }
+         // if value is a object
+         else {
+            myParameter[this.columnName] = this.getRelationValue(
+               myParameter[this.columnName],
+               { forUpdate: true }
+            );
+
+            // if (PK == "id") {
+            //    myParameter[this.columnName] = parseInt(
+            //       myParameter[this.columnName]
+            //    );
+
+            //    // validate INT value
+            //    if (isNaN(myParameter[this.columnName]))
+            //       myParameter[this.columnName] = null;
+            // }
+         }
+      }
+
+      if (!myParameter[this.columnName]) {
+         // myParameter[this.columnName] = [];
+         myParameter[this.columnName] = null;
+      }
+      // If this field is .linkType == one, then should not return an array
+      else if (
+         this.linkType?.() == "one" &&
+         Array.isArray(myParameter[this.columnName])
+      ) {
+         myParameter[this.columnName] = myParameter[this.columnName][0] ?? null;
       }
 
       return myParameter;
