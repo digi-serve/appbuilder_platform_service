@@ -69,41 +69,42 @@ module.exports = class ABModel extends ABModelCore {
                      }.create() successful. Now loading full value from DB.`
                   );
                }
+               if (returnVals) {
+                  var relateTasks = [];
+                  // {array}
+                  // all the fn() calls that need to be performed to relate a task.
 
-               var relateTasks = [];
-               // {array}
-               // all the fn() calls that need to be performed to relate a task.
-
-               for (var colName in addRelationParams) {
-                  let newVals = addRelationParams[colName];
-                  if (!Array.isArray(newVals)) {
-                     newVals = [newVals];
-                  }
-
-                  let fPK = "uuid";
-                  let field = this.object.fields(
-                     (f) => f.columnName == colName
-                  )[0];
-                  if (field) {
-                     let objectLink = field.datasourceLink;
-                     if (objectLink) {
-                        fPK = objectLink.PK();
+                  for (var colName in addRelationParams) {
+                     let newVals = addRelationParams[colName];
+                     if (!Array.isArray(newVals)) {
+                        newVals = [newVals];
                      }
-                  }
 
-                  newVals = newVals.map((v) => v[fPK] || v.id || v.uuid || v);
+                     let fPK = "uuid";
+                     let field = this.object.fields(
+                        (f) => f.columnName == colName
+                     )[0];
+                     if (field) {
+                        let objectLink = field.datasourceLink;
+                        if (objectLink) {
+                           fPK = objectLink.PK();
+                        }
+                     }
 
-                  // insert relation values of relation
-                  // NOTE: doing the fn call here to properly preserve the
-                  // closure(val) property.
-                  if (returnVals) {
-                     AddToRelateTasks(
-                        relateTasks,
-                        this.object,
-                        colName,
-                        returnVals[PK],
-                        newVals
+                     newVals = newVals.map(
+                        (v) => v[fPK] || v.id || v.uuid || v
                      );
+
+                     relateTasks.push(() =>
+                        this.relate(returnVals[PK], colName, newVals, trx, req)
+                     );
+                     // AddToRelateTasks(
+                     //    relateTasks,
+                     //    this.object,
+                     //    colName,
+                     //    returnVals[PK],
+                     //    newVals
+                     // );
                   }
                }
 
@@ -601,6 +602,7 @@ module.exports = class ABModel extends ABModelCore {
                      id,
                      updateRelationParams,
                      oldValue,
+                     trx,
                      req
                   )
                );
@@ -737,11 +739,7 @@ module.exports = class ABModel extends ABModelCore {
             .then((objInstance) => {
                let relateQuery = objInstance
                   .$relatedQuery(relationName)
-                  .alias(
-                     "#column#_#relation#"
-                        .replace("#column#", abField.columnName)
-                        .replace("#relation#", relationName)
-                  ) // FIX: SQL syntax error because alias name includes special characters
+                  .alias(`${abField.columnName}_${relationName}`) // FIX: SQL syntax error because alias name includes special characters
                   .relate(useableValues);
 
                // Used by knex.transaction, the transacting method may be chained to any query and
@@ -2596,6 +2594,7 @@ function setRelate(obj, columnName, rowId, values, req) {
  * @param {obj} oldValue
  *        "key"=>"value" hash of the old entry in the DB.  We will use this to
  *        figure out what adjustments need to be made to the Relations.
+ * @param {} trx
  * @param {req} req
  *        The request object if this is being used from a service.
  * @return {array}  array of update operations to perform the relations.
@@ -2606,6 +2605,7 @@ function updateRelationValues(
    id,
    updateRelationParams,
    oldValue,
+   trx,
    req
 ) {
    var updateTasks = [];
@@ -2659,6 +2659,7 @@ function updateRelationValues(
                      update[sourceField.columnName] = null;
 
                      let query = object.model().modelKnex().query();
+                     if (trx) query = query.transacting(trx);
                      query
                         .update(update)
                         .clearWhere()
@@ -2682,6 +2683,7 @@ function updateRelationValues(
                         update[sourceField.columnName] = relateRowId;
 
                         let query = object.model().modelKnex().query();
+                        if (trx) query = query.transacting(trx);
                         query
                            .update(update)
                            .clearWhere()
@@ -2700,6 +2702,7 @@ function updateRelationValues(
                         update[sourceField.columnName] = id;
 
                         let query = object.model().modelKnex().query();
+                        if (trx) query = query.transacting(trx);
                         query
                            .update(update)
                            .clearWhere()
@@ -2762,7 +2765,7 @@ function updateRelationValues(
 
             if (newValues.length > 0) {
                updateTasks.push(() =>
-                  setRelate(object, colName, id, newValues, req)
+                  object.model().relate(id, colName, newValues, trx, req)
                );
             }
          }
