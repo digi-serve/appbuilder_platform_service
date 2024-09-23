@@ -2410,9 +2410,9 @@ module.exports = class ABModel extends ABModelCore {
  * @param {string} val
  *        the value of the relationship being stored.
  */
-function AddToRelateTasks(listTasks, obj, colName, pk, vals) {
-   listTasks.push(() => setRelate(obj, colName, pk, vals));
-}
+// function AddToRelateTasks(listTasks, obj, colName, pk, vals) {
+//    listTasks.push(() => setRelate(obj, colName, pk, vals));
+// }
 
 /**
  * doSequential()
