@@ -207,6 +207,10 @@ module.exports = class ABFieldLongText extends ABFieldLongTextCore {
          myParameter = super.requestParam(allParameters);
       }
 
+      if (typeof myParameter[this.columnName] == "string") {
+         myParameter[this.columnName] = myParameter[this.columnName].trim();
+      }
+
       return myParameter;
    }
 
