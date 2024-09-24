@@ -95,16 +95,18 @@ module.exports = class ABModel extends ABModelCore {
                         (v) => v[fPK] || v.id || v.uuid || v
                      );
 
-                     relateTasks.push(() =>
-                        this.relate(returnVals[PK], colName, newVals, trx, req)
-                     );
-                     // AddToRelateTasks(
-                     //    relateTasks,
-                     //    this.object,
-                     //    colName,
-                     //    returnVals[PK],
-                     //    newVals
+                     // relateTasks.push(() =>
+                     //    this.relate(returnVals[PK], colName, newVals, trx, req)
                      // );
+                     AddToRelateTasks(
+                        relateTasks,
+                        this.object,
+                        colName,
+                        returnVals[PK],
+                        newVals,
+                        trx,
+                        req
+                     );
                   }
                }
 
@@ -737,30 +739,23 @@ module.exports = class ABModel extends ABModelCore {
             .query()
             .findById(id)
             .then((objInstance) => {
-               let relateQuery = objInstance
-                  .$relatedQuery(relationName)
-                  .alias(`${abField.columnName}_${relationName}`) // FIX: SQL syntax error because alias name includes special characters
-                  .relate(useableValues);
-
-               // Used by knex.transaction, the transacting method may be chained to any query and
-               // passed the object you wish to join the query as part of the transaction for.
-               if (trx) relateQuery = relateQuery.transacting(trx);
-
-               return relateQuery;
+               doRelate(
+                  useableValues,
+                  objInstance,
+                  relationName,
+                  `${abField.columnName}_${relationName}`,
+                  trx,
+                  (err) => {
+                     if (err) {
+                        reject(err);
+                     } else {
+                        resolve();
+                     }
+                  }
+               );
             })
-            .then(resolve)
             .catch(reject);
       });
-      // let objInstance = this.modelKnex()
-      //    .query()
-      //    .findById(id);
-      // return objInstance.$relatedQuery(relationName).relate(useableValues);
-
-      // let query = this.modelKnex().query();
-      // return query
-      //    .relatedQuery(relationName)
-      //    .for(id)
-      //    .relate(useableValues);
    }
 
    modelDefaultFields() {
@@ -2396,6 +2391,44 @@ module.exports = class ABModel extends ABModelCore {
  ************************/
 
 /**
+ * doRelate()
+ * perform a series of .relate() operations on a given record.
+ *
+ * @param {array} list
+ *        the list uuid/PK() values to connect to this record
+ * @param {Knex.record} objInst
+ *        the Knex record instance that we want to add relations to
+ * @param {string} rname
+ * @param {string} alias
+ * @param {Knex.Transaction?} trx - [optional]
+ * @param {callback} cb
+ *        The node style callback for when all values are processed.
+ */
+function doRelate(list, objInst, rname, alias, trx, cb) {
+   if (list.length == 0) {
+      cb();
+   } else {
+      let val = list.shift();
+      let relateQuery = objInst
+         .$relatedQuery(rname)
+         .alias(alias) // FIX: SQL syntax error because alias name includes special characters
+         .relate(val);
+
+      // Used by knex.transaction, the transacting method may be chained to any query and
+      // passed the object you wish to join the query as part of the transaction for.
+      if (trx) relateQuery = relateQuery.transacting(trx);
+
+      relateQuery
+         .then(() => {
+            doRelate(list, objInst, rname, alias, trx, cb);
+         })
+         .catch((err) => {
+            cb(err);
+         });
+   }
+}
+
+/**
  * AddToRelateTasks()
  * Adds a properly formatted call to setRelate() to a list of tasks
  * that is passed in.
@@ -2409,10 +2442,35 @@ module.exports = class ABModel extends ABModelCore {
  *        the {uuid} of the row being updated with the relationship
  * @param {string} val
  *        the value of the relationship being stored.
+ * @param {Knex.Transaction?} trx - [optional]
+ * @param {ABUtil.reqService} req
+ *    The request object associated with the current tenant/request
  */
-// function AddToRelateTasks(listTasks, obj, colName, pk, vals) {
-//    listTasks.push(() => setRelate(obj, colName, pk, vals));
-// }
+function AddToRelateTasks(listTasks, obj, colName, pk, vals, trx, req) {
+   listTasks.push(() => obj.model().relate(pk, colName, vals, trx, req));
+}
+
+/**
+ * AddToUnRelateTasks()
+ * Adds a properly formatted call to setRelate() to a list of tasks
+ * that is passed in.
+ * The primary use of this fn() is to preserve the param values for
+ * when the delayed fn() is called so it references the correct values.
+ * @param {array} listTasks
+ *        the list of setRelate() calls that need to be made.
+ * @param {ABObject} obj
+ * @param {string} colName
+ * @param {string} pk
+ *        the {uuid} of the row being updated with the relationship
+ * @param {string} val
+ *        the value of the relationship being stored.
+ * @param {Knex.Transaction?} trx - [optional]
+ * @param {ABUtil.reqService} req
+ *    The request object associated with the current tenant/request
+ */
+function AddToUnRelateTasks(listTasks, obj, colName, pk, vals, trx, req) {
+   listTasks.push(() => unRelate(obj, colName, pk, vals, trx, req));
+}
 
 /**
  * doSequential()
@@ -2466,9 +2524,12 @@ function done(resolve, alias, req) {
  *        the .uuid of the row we are working on.
  * @param {array} values
  *        the specific entries to remove.
+ * @param {Knex.Transaction?} trx - [optional]
+ * @param {ABUtil.reqService} req
+ *    The request object associated with the current tenant/request
  * @return {Promise}
  */
-function unRelate(obj, columnName, rowId, values, req) {
+function unRelate(obj, columnName, rowId, values, trx, req) {
    return new Promise((resolve, reject) => {
       // WORKAROUND : HRIS tables have non null columns
       if (obj.isExternal) return resolve();
@@ -2476,6 +2537,7 @@ function unRelate(obj, columnName, rowId, values, req) {
       // create a new query to update relation data
       // NOTE: when use same query, it will have a "created duplicate" error
       let query = obj.model().modelKnex().query();
+      if (trx) query = query.transacting(trx);
 
       let clearRelationName = obj.AB.rules.toFieldRelationFormat(columnName);
       let alias = `${columnName}_${clearRelationName}`;
@@ -2758,14 +2820,26 @@ function updateRelationValues(
             }
 
             if (delThese.length > 0) {
-               updateTasks.push(() =>
-                  unRelate(object, colName, id, delThese, req)
+               AddToUnRelateTasks(
+                  updateTasks,
+                  object,
+                  colName,
+                  id,
+                  delThese,
+                  trx,
+                  req
                );
             }
 
             if (newValues.length > 0) {
-               updateTasks.push(() =>
-                  object.model().relate(id, colName, newValues, trx, req)
+               AddToRelateTasks(
+                  updateTasks,
+                  object,
+                  colName,
+                  id,
+                  newValues,
+                  trx,
+                  req
                );
             }
          }
