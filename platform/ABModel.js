@@ -152,7 +152,11 @@ module.exports = class ABModel extends ABModelCore {
             .catch((error) => {
                // populate any error messages with the SQL of this
                // query:
-               error._sql = query.toKnexQuery().toSQL().sql;
+               try {
+                  error._sql = query.toKnexQuery().toSQL().sql;
+               } catch (e) {
+                  error._sql = "??";
+               }
                reject(error);
             });
       });
@@ -188,7 +192,11 @@ module.exports = class ABModel extends ABModelCore {
             .catch((error) => {
                // populate any error messages with the SQL of this
                // query:
-               error._sql = query.toKnexQuery().toSQL().sql;
+               try {
+                  error._sql = query.toKnexQuery().toSQL().sql;
+               } catch (e) {
+                  error._sql = "??";
+               }
                reject(error);
             });
       });
@@ -502,7 +510,11 @@ module.exports = class ABModel extends ABModelCore {
             .catch((error) => {
                // populate any error messages with the SQL of this
                // query:
-               error._sql = query.toKnexQuery().toSQL().sql;
+               try {
+                  error._sql = query.toKnexQuery().toSQL().sql;
+               } catch (e) {
+                  error._sql = "??";
+               }
                reject(error);
             });
       });
@@ -652,7 +664,11 @@ module.exports = class ABModel extends ABModelCore {
             .catch((error) => {
                // populate any error messages with the SQL of this
                // query:
-               error._sql = query.toKnexQuery().toSQL().sql;
+               try {
+                  error._sql = query.toKnexQuery().toSQL().sql;
+               } catch (e) {
+                  error._sql = "??";
+               }
                reject(error);
             });
       });
@@ -2570,14 +2586,22 @@ function unRelate(obj, columnName, rowId, values, trx, req) {
                .catch((err) => {
                   // populate any error messages with the SQL of this
                   // query:
-                  err._sql = record.$query().toKnexQuery().toSQL().sql;
+                  try {
+                     err._sql = record.$query().toKnexQuery().toSQL().sql;
+                  } catch (e) {
+                     error._sql = "??";
+                  }
                   reject(err);
                });
          })
          .catch((error) => {
             // populate any error messages with the SQL of this
             // query:
-            error._sql = query.toKnexQuery().toSQL().sql;
+            try {
+               error._sql = query.toKnexQuery().toSQL().sql;
+            } catch (e) {
+               error._sql = "??";
+            }
             reject(error);
          });
    });
@@ -2627,14 +2651,22 @@ function setRelate(obj, columnName, rowId, values, req) {
                .catch((err) => {
                   // populate any error messages with the SQL of this
                   // query:
-                  err._sql = record.$query().toKnexQuery().toSQL().sql;
+                  try {
+                     err._sql = record.$query().toKnexQuery().toSQL().sql;
+                  } catch (e) {
+                     err._sql = "??";
+                  }
                   reject(err);
                });
          })
          .catch((error) => {
             // populate any error messages with the SQL of this
             // query:
-            error._sql = query.toKnexQuery().toSQL().sql;
+            try {
+               error._sql = query.toKnexQuery().toSQL().sql;
+            } catch (e) {
+               error._sql = "??";
+            }
             reject(error);
          });
    });
