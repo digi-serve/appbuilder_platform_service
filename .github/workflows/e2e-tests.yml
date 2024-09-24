@@ -108,13 +108,13 @@ jobs:
            run: npm run test:e2e:app -- --browser chrome
            working-directory: ./AppBuilder
          - name: Save Screenshots
-           uses: actions/upload-artifact@v2
+           uses: actions/upload-artifact@v4
            if: failure()
            with:
               name: cypress-screenshots
               path: ./AppBuilder/test/e2e/cypress/screenshots
          - name: Save Service Logs
-           uses: actions/upload-artifact@v2
+           uses: actions/upload-artifact@v4
            if: failure()
            with:
               name: ABServices.log
