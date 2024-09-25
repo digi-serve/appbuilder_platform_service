@@ -91,9 +91,9 @@ module.exports = class ABModel extends ABModelCore {
                         }
                      }
 
-                     newVals = newVals.map(
-                        (v) => v[fPK] || v.id || v.uuid || v
-                     );
+                     newVals = newVals
+                        .filter((v) => v !== null)
+                        .map((v) => v[fPK] || v.id || v.uuid || v);
 
                      // relateTasks.push(() =>
                      //    this.relate(returnVals[PK], colName, newVals, trx, req)
@@ -2829,7 +2829,9 @@ function updateRelationValues(
             let fPK = field.datasourceLink.PK();
 
             // make sure newValues are just the IDs
-            newValues = newValues.map((v) => v[fPK] || v.id || v.uuid || v);
+            newValues = newValues
+               .filter((v) => v !== null)
+               .map((v) => v[fPK] || v.id || v.uuid || v);
 
             let i = 0,
                len = origValues.length;
