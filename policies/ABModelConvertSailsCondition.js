@@ -12,6 +12,26 @@ var _ = require("lodash");
 
 var DebugWhere = "";
 
+// now lookup the standard key value conditions:
+var RuleHash = {
+   // sails version    :  QueryBuilder version
+   startsWith: "begins_with",
+   contains: "contains",
+   endsWith: "ends_with",
+   "<": "less",
+   "<=": "less_or_equal",
+   ">": "greater",
+   ">=": "greater_or_equal",
+
+   // NOTE: this isn't a Sails condition, it is one of our own
+   // special conditions, we need to pass on:
+   // { 'fieldName': { 'haveNoRelation':XX } }  // the value XX isn't important.
+   haveNoRelation: "have_no_relation",
+
+   // SQL common conditions:
+   like: "like",
+};
+
 /**
  * packageBetween
  * return a properly formatted Query Builder BETWEEN rule.
@@ -99,24 +119,7 @@ function parseCondition(field, opValue) {
       };
    }
 
-   // now lookup the standard key value conditions:
-   var ruleHash = {
-      // sails version    :  QueryBuilder version
-      startsWith: "begins_with",
-      contains: "contains",
-      endsWith: "ends_with",
-      "<": "less",
-      "<=": "less_or_equal",
-      ">": "greater",
-      ">=": "greater_or_equal",
-
-      // NOTE: this isn't a Sails condition, it is one of our own
-      // special conditions, we need to pass on:
-      // { 'fieldName': { 'haveNoRelation':XX } }  // the value XX isn't important.
-      haveNoRelation: "have_no_relation",
-   };
-
-   for (var r in ruleHash) {
+   for (var r in RuleHash) {
       if (typeof opValue[r] != "undefined") {
          // special case:  BETWEEN:
          // if  r is '<='  then see if '>=' is ALSO included:
@@ -134,7 +137,7 @@ function parseCondition(field, opValue) {
          if (!result) {
             result = {
                key: field,
-               rule: ruleHash[r],
+               rule: RuleHash[r],
                value: opValue[r],
             };
          }

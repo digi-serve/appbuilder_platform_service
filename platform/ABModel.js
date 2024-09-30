@@ -1287,6 +1287,8 @@ module.exports = class ABModel extends ABModelCore {
          next_days: "BETWEEN",
          checked: "IS TRUE",
          unchecked: "IS NOT TRUE", // FALSE or NULL
+         // SQL queries
+         like: "LIKE",
       };
 
       // normal field name:
@@ -1331,6 +1333,12 @@ module.exports = class ABModel extends ABModelCore {
 
       // special operation cases:
       switch (condition.rule) {
+         case "like":
+            // like: "searchTermWith%"
+            operator = "LIKE";
+            value = quoteMe(condition.value);
+            break;
+
          case "begins_with":
             operator = "LIKE";
             value = quoteMe(condition.value + "%");
