@@ -127,6 +127,9 @@ module.exports = class ABProcessTask extends ABProcessElementCore {
       const trimedInstance = {
          uuid: instance.uuid,
          processID: instance.processID,
+         processName: `${this.process.name}[${this.process.id}]`,
+         elementID: this.id,
+         elementName: `${this.name}`,
          status: instance.status,
          statriggeredBy: instance.triggeredBy,
          log: instance.log,
