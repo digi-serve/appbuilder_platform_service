@@ -69,36 +69,45 @@ module.exports = class ABModel extends ABModelCore {
                      }.create() successful. Now loading full value from DB.`
                   );
                }
+               if (returnVals) {
+                  var relateTasks = [];
+                  // {array}
+                  // all the fn() calls that need to be performed to relate a task.
 
-               var relateTasks = [];
-               // {array}
-               // all the fn() calls that need to be performed to relate a task.
-
-               for (var colName in addRelationParams) {
-                  if (!Array.isArray(addRelationParams[colName])) {
-                     addRelationParams[colName] = [addRelationParams[colName]];
-                  }
-
-                  addRelationParams[colName].forEach((val) => {
-                     // no insert row
-                     if (returnVals == null) {
-                        return;
+                  for (var colName in addRelationParams) {
+                     let newVals = addRelationParams[colName];
+                     if (!Array.isArray(newVals)) {
+                        newVals = [newVals];
                      }
 
-                     // insert relation values of relation
-                     // NOTE: doing the fn call here to properly preserve the
-                     // closure(val) property.
+                     let fPK = "uuid";
+                     let field = this.object.fields(
+                        (f) => f.columnName == colName
+                     )[0];
+                     if (field) {
+                        let objectLink = field.datasourceLink;
+                        if (objectLink) {
+                           fPK = objectLink.PK();
+                        }
+                     }
+
+                     newVals = newVals
+                        .filter((v) => v !== null)
+                        .map((v) => v[fPK] || v.id || v.uuid || v);
+
+                     // relateTasks.push(() =>
+                     //    this.relate(returnVals[PK], colName, newVals, trx, req)
+                     // );
                      AddToRelateTasks(
                         relateTasks,
                         this.object,
                         colName,
                         returnVals[PK],
-                        val
+                        newVals,
+                        trx,
+                        req
                      );
-                     // relateTasks.push(() =>
-                     //    setRelate(this.object, colName, returnVals[PK], val)
-                     // );
-                  });
+                  }
                }
 
                doSequential(relateTasks, (err) => {
@@ -143,7 +152,11 @@ module.exports = class ABModel extends ABModelCore {
             .catch((error) => {
                // populate any error messages with the SQL of this
                // query:
-               error._sql = query.toKnexQuery().toSQL().sql;
+               try {
+                  error._sql = query.toKnexQuery().toSQL().sql;
+               } catch (e) {
+                  error._sql = "??";
+               }
                reject(error);
             });
       });
@@ -179,7 +192,11 @@ module.exports = class ABModel extends ABModelCore {
             .catch((error) => {
                // populate any error messages with the SQL of this
                // query:
-               error._sql = query.toKnexQuery().toSQL().sql;
+               try {
+                  error._sql = query.toKnexQuery().toSQL().sql;
+               } catch (e) {
+                  error._sql = "??";
+               }
                reject(error);
             });
       });
@@ -493,7 +510,11 @@ module.exports = class ABModel extends ABModelCore {
             .catch((error) => {
                // populate any error messages with the SQL of this
                // query:
-               error._sql = query.toKnexQuery().toSQL().sql;
+               try {
+                  error._sql = query.toKnexQuery().toSQL().sql;
+               } catch (e) {
+                  error._sql = "??";
+               }
                reject(error);
             });
       });
@@ -510,7 +531,7 @@ module.exports = class ABModel extends ABModelCore {
     *
     * @return {Promise} resolved with the result of the find()
     */
-   update(id, values, userData, trx = null) {
+   async update(id, values, userData, trx = null, req = null) {
       id = id.id || id.uuid || id;
       // id should be just the .uuid or .id value of the row we are updating
       // but in case they sent in a condition obj: { uuid: 'xyz' } lets try to
@@ -530,6 +551,31 @@ module.exports = class ABModel extends ABModelCore {
       // get translations values for the external object
       // it will update to translations table after model values updated
 
+      let PK = this.object.PK();
+      let findAllParams = {
+         where: {
+            glue: "and",
+            rules: [
+               {
+                  key: PK,
+                  rule: "equals",
+                  value: id,
+               },
+            ],
+         },
+         offset: 0,
+         limit: 1,
+         populate: true,
+      };
+      // {obj} findAllParams
+      // the .findAll() condition params to pull the current value of this obj
+      // out of the DB.
+
+      let oldValue = await this.findAll(findAllParams, userData);
+      oldValue = oldValue[0];
+      // {obj} oldValue
+      // the current value of the entry in the DB.
+
       return new Promise((resolve, reject) => {
          // get a Knex Query Object
          let query = this.modelKnex().query();
@@ -538,13 +584,25 @@ module.exports = class ABModel extends ABModelCore {
          // passed the object you wish to join the query as part of the transaction for.
          if (trx) query = query.transacting(trx);
 
-         var PK = this.object.PK();
+         if (req) {
+            req.log("ABModel.update(): updating initial params:", updateParams);
+            req.performance.mark("update-base");
+         }
 
          // update our value
          query
             .patch(updateParams)
             .where(PK, id)
             .then((/* returnVals */) => {
+               if (req) {
+                  req.performance.measure("update-base");
+                  req.performance.mark("update-relations");
+                  req.log(
+                     "ABModel.update(): updating relationships",
+                     updateRelationParams
+                  );
+               }
+
                // create a new query when use same query, then new data are created duplicate
                let updateTasks = [];
                // {array} Promise
@@ -556,7 +614,10 @@ module.exports = class ABModel extends ABModelCore {
                      this.AB,
                      this.object,
                      id,
-                     updateRelationParams
+                     updateRelationParams,
+                     oldValue,
+                     trx,
+                     req
                   )
                );
 
@@ -579,27 +640,22 @@ module.exports = class ABModel extends ABModelCore {
                Promise.all(updateTasks)
                   // Query the new row to response to client
                   .then((/* values */) => {
-                     return this.findAll(
-                        {
-                           where: {
-                              glue: "and",
-                              rules: [
-                                 {
-                                    key: PK,
-                                    rule: "equals",
-                                    value: id,
-                                 },
-                              ],
-                           },
-                           offset: 0,
-                           limit: 1,
-                           populate: true,
-                        },
-                        userData
-                     ).then((newItem) => {
-                        let result = newItem[0];
-                        resolve(result);
-                     });
+                     if (req) {
+                        req.performance.measure("update-relations");
+                        req.performance.mark("update-find-updated-entry");
+                        req.log("ABModel.update(): finding return value");
+                     }
+                     return this.findAll(findAllParams, userData).then(
+                        (newItem) => {
+                           if (req) {
+                              req.performance.measure(
+                                 "update-find-updated-entry"
+                              );
+                           }
+                           let result = newItem[0];
+                           resolve(result);
+                        }
+                     );
                   })
                   .catch((err) => {
                      reject(err);
@@ -608,7 +664,11 @@ module.exports = class ABModel extends ABModelCore {
             .catch((error) => {
                // populate any error messages with the SQL of this
                // query:
-               error._sql = query.toKnexQuery().toSQL().sql;
+               try {
+                  error._sql = query.toKnexQuery().toSQL().sql;
+               } catch (e) {
+                  error._sql = "??";
+               }
                reject(error);
             });
       });
@@ -695,34 +755,23 @@ module.exports = class ABModel extends ABModelCore {
             .query()
             .findById(id)
             .then((objInstance) => {
-               let relateQuery = objInstance
-                  .$relatedQuery(relationName)
-                  .alias(
-                     "#column#_#relation#"
-                        .replace("#column#", abField.columnName)
-                        .replace("#relation#", relationName)
-                  ) // FIX: SQL syntax error because alias name includes special characters
-                  .relate(useableValues);
-
-               // Used by knex.transaction, the transacting method may be chained to any query and
-               // passed the object you wish to join the query as part of the transaction for.
-               if (trx) relateQuery = relateQuery.transacting(trx);
-
-               return relateQuery;
+               doRelate(
+                  useableValues,
+                  objInstance,
+                  relationName,
+                  `${abField.columnName}_${relationName}`,
+                  trx,
+                  (err) => {
+                     if (err) {
+                        reject(err);
+                     } else {
+                        resolve();
+                     }
+                  }
+               );
             })
-            .then(resolve)
             .catch(reject);
       });
-      // let objInstance = this.modelKnex()
-      //    .query()
-      //    .findById(id);
-      // return objInstance.$relatedQuery(relationName).relate(useableValues);
-
-      // let query = this.modelKnex().query();
-      // return query
-      //    .relatedQuery(relationName)
-      //    .for(id)
-      //    .relate(useableValues);
    }
 
    modelDefaultFields() {
@@ -1238,6 +1287,8 @@ module.exports = class ABModel extends ABModelCore {
          next_days: "BETWEEN",
          checked: "IS TRUE",
          unchecked: "IS NOT TRUE", // FALSE or NULL
+         // SQL queries
+         like: "LIKE",
       };
 
       // normal field name:
@@ -1282,6 +1333,12 @@ module.exports = class ABModel extends ABModelCore {
 
       // special operation cases:
       switch (condition.rule) {
+         case "like":
+            // like: "searchTermWith%"
+            operator = "LIKE";
+            value = quoteMe(condition.value);
+            break;
+
          case "begins_with":
             operator = "LIKE";
             value = quoteMe(condition.value + "%");
@@ -2358,6 +2415,44 @@ module.exports = class ABModel extends ABModelCore {
  ************************/
 
 /**
+ * doRelate()
+ * perform a series of .relate() operations on a given record.
+ *
+ * @param {array} list
+ *        the list uuid/PK() values to connect to this record
+ * @param {Knex.record} objInst
+ *        the Knex record instance that we want to add relations to
+ * @param {string} rname
+ * @param {string} alias
+ * @param {Knex.Transaction?} trx - [optional]
+ * @param {callback} cb
+ *        The node style callback for when all values are processed.
+ */
+function doRelate(list, objInst, rname, alias, trx, cb) {
+   if (list.length == 0) {
+      cb();
+   } else {
+      let val = list.shift();
+      let relateQuery = objInst
+         .$relatedQuery(rname)
+         .alias(alias) // FIX: SQL syntax error because alias name includes special characters
+         .relate(val);
+
+      // Used by knex.transaction, the transacting method may be chained to any query and
+      // passed the object you wish to join the query as part of the transaction for.
+      if (trx) relateQuery = relateQuery.transacting(trx);
+
+      relateQuery
+         .then(() => {
+            doRelate(list, objInst, rname, alias, trx, cb);
+         })
+         .catch((err) => {
+            cb(err);
+         });
+   }
+}
+
+/**
  * AddToRelateTasks()
  * Adds a properly formatted call to setRelate() to a list of tasks
  * that is passed in.
@@ -2371,9 +2466,34 @@ module.exports = class ABModel extends ABModelCore {
  *        the {uuid} of the row being updated with the relationship
  * @param {string} val
  *        the value of the relationship being stored.
+ * @param {Knex.Transaction?} trx - [optional]
+ * @param {ABUtil.reqService} req
+ *    The request object associated with the current tenant/request
  */
-function AddToRelateTasks(listTasks, obj, colName, pk, val) {
-   listTasks.push(() => setRelate(obj, colName, pk, val));
+function AddToRelateTasks(listTasks, obj, colName, pk, vals, trx, req) {
+   listTasks.push(() => obj.model().relate(pk, colName, vals, trx, req));
+}
+
+/**
+ * AddToUnRelateTasks()
+ * Adds a properly formatted call to setRelate() to a list of tasks
+ * that is passed in.
+ * The primary use of this fn() is to preserve the param values for
+ * when the delayed fn() is called so it references the correct values.
+ * @param {array} listTasks
+ *        the list of setRelate() calls that need to be made.
+ * @param {ABObject} obj
+ * @param {string} colName
+ * @param {string} pk
+ *        the {uuid} of the row being updated with the relationship
+ * @param {string} val
+ *        the value of the relationship being stored.
+ * @param {Knex.Transaction?} trx - [optional]
+ * @param {ABUtil.reqService} req
+ *    The request object associated with the current tenant/request
+ */
+function AddToUnRelateTasks(listTasks, obj, colName, pk, vals, trx, req) {
+   listTasks.push(() => unRelate(obj, colName, pk, vals, trx, req));
 }
 
 /**
@@ -2402,16 +2522,38 @@ function doSequential(tasks, cb) {
 }
 
 /**
- * clearRelate()
- * clear the relations on the provided obj[columnName]
+ * done()
+ * A common callback routine that handles ending a performance measurement, and
+ * resolving a Promise.
+ * @param {Promise.resolve} resolve
+ * @param {string} alias
+ *        the performance measurement key
+ * @param {req} req
+ *        the incoming request object that performs the measurements.
+ */
+function done(resolve, alias, req) {
+   if (req) {
+      req.performance.measure(alias);
+   }
+   return resolve();
+}
+
+/**
+ * unRelate()
+ * remove the relations on the provided obj[columnName] from values
  * @param {ABObject} obj
  * @param {string} columnName
  *        the column name of the relations we are clearing.
  * @param {string} rowId
  *        the .uuid of the row we are working on.
+ * @param {array} values
+ *        the specific entries to remove.
+ * @param {Knex.Transaction?} trx - [optional]
+ * @param {ABUtil.reqService} req
+ *    The request object associated with the current tenant/request
  * @return {Promise}
  */
-function clearRelate(obj, columnName, rowId) {
+function unRelate(obj, columnName, rowId, values, trx, req) {
    return new Promise((resolve, reject) => {
       // WORKAROUND : HRIS tables have non null columns
       if (obj.isExternal) return resolve();
@@ -2419,31 +2561,57 @@ function clearRelate(obj, columnName, rowId) {
       // create a new query to update relation data
       // NOTE: when use same query, it will have a "created duplicate" error
       let query = obj.model().modelKnex().query();
+      if (trx) query = query.transacting(trx);
 
       let clearRelationName = obj.AB.rules.toFieldRelationFormat(columnName);
+      let alias = `${columnName}_${clearRelationName}`;
+
+      if (req) {
+         req.log(`ABModel.update().unRelate(): ${alias}`);
+         req.performance.mark(alias);
+      }
 
       query
          .where(obj.PK(), rowId)
          .first()
          .then((record) => {
-            if (record == null) return resolve();
+            if (record == null) return done(resolve, alias, req);
 
             let fieldLink = obj.fields((f) => f.columnName == columnName)[0];
-            if (fieldLink == null) return resolve();
+            if (fieldLink == null) return done(resolve, alias, req);
 
             let objectLink = fieldLink.object;
-            if (objectLink == null) return resolve();
+            if (objectLink == null) return done(resolve, alias, req);
 
             record
                .$relatedQuery(clearRelationName)
-               .alias(`${columnName}_${clearRelationName}`)
+               .alias(alias)
                .unrelate()
+               .where(objectLink.PK(), "in", values)
                .then(() => {
-                  resolve();
+                  done(resolve, alias, req);
                })
-               .catch((err) => reject(err));
+               .catch((err) => {
+                  // populate any error messages with the SQL of this
+                  // query:
+                  try {
+                     err._sql = record.$query().toKnexQuery().toSQL().sql;
+                  } catch (e) {
+                     error._sql = "??";
+                  }
+                  reject(err);
+               });
          })
-         .catch((err) => reject(err));
+         .catch((error) => {
+            // populate any error messages with the SQL of this
+            // query:
+            try {
+               error._sql = query.toKnexQuery().toSQL().sql;
+            } catch (e) {
+               error._sql = "??";
+            }
+            reject(error);
+         });
    });
 }
 
@@ -2455,11 +2623,11 @@ function clearRelate(obj, columnName, rowId) {
  *        the column name of the relations we are creating.
  * @param {string} rowId
  *        the .uuid of the row we are working on.
- * @param {valueHash} value
- *        the new value we are establishing a relation to.
+ * @param {array} values
+ *        one or more new values we are establishing a relation to.
  * @return {Promise}
  */
-function setRelate(obj, columnName, rowId, value) {
+function setRelate(obj, columnName, rowId, values, req) {
    return new Promise((resolve, reject) => {
       // create a new query to update relation data
       // NOTE: when use same query, it will have a "created duplicate" error
@@ -2467,22 +2635,48 @@ function setRelate(obj, columnName, rowId, value) {
 
       let relationName = obj.AB.rules.toFieldRelationFormat(columnName);
 
+      let alias = `${columnName}_${relationName}`;
+      let pAlias = `set_${alias}`;
+
+      if (req) {
+         req.log(`ABModel.update().setRelate(): ${alias}`);
+         req.performance.mark(pAlias);
+      }
+
       query
          .where(obj.PK(), rowId)
          .first()
          .then((record) => {
-            if (record == null) return resolve();
+            if (record == null) return done(resolve, pAlias, req);
 
             record
                .$relatedQuery(relationName)
-               .alias(`${columnName}_${relationName}`)
-               .relate(value)
+               .alias(alias)
+               .relate(values)
                .then(() => {
-                  resolve();
+                  done(resolve, pAlias, req);
                })
-               .catch((err) => reject(err));
+               .catch((err) => {
+                  // populate any error messages with the SQL of this
+                  // query:
+                  try {
+                     err._sql = record.$query().toKnexQuery().toSQL().sql;
+                  } catch (e) {
+                     err._sql = "??";
+                  }
+                  reject(err);
+               });
          })
-         .catch((err) => reject(err));
+         .catch((error) => {
+            // populate any error messages with the SQL of this
+            // query:
+            try {
+               error._sql = query.toKnexQuery().toSQL().sql;
+            } catch (e) {
+               error._sql = "??";
+            }
+            reject(error);
+         });
    });
 }
 
@@ -2499,19 +2693,26 @@ function setRelate(obj, columnName, rowId, value) {
  * @param {obj} updateRelationParams
  *        "key"=>"value" hash of the related fields and current state of
  *        values.
+ * @param {obj} oldValue
+ *        "key"=>"value" hash of the old entry in the DB.  We will use this to
+ *        figure out what adjustments need to be made to the Relations.
+ * @param {} trx
+ * @param {req} req
+ *        The request object if this is being used from a service.
  * @return {array}  array of update operations to perform the relations.
  */
-function updateRelationValues(AB, object, id, updateRelationParams) {
+function updateRelationValues(
+   AB,
+   object,
+   id,
+   updateRelationParams,
+   oldValue,
+   trx,
+   req
+) {
    var updateTasks = [];
    // {array} updateTasks
    // an array of the {Promise}s that are performing the updates.
-
-   ////
-   //// We are given a current state of values that should be related to our object.
-   //// It is not clear if these are new relations or existing ones, so we first
-   //// remove any existing relation and then go back and add in the one we have been
-   //// told to keep.
-   ////
 
    // NOTE : There is a error when update values and foreign keys at same time
    // - Error: Double call to a write method. You can only call one of the write methods
@@ -2532,6 +2733,11 @@ function updateRelationValues(AB, object, id, updateRelationParams) {
          // {string}
          // What is the R'ship between this field and it's connection: "one:one",
          // "one:many", etc...
+
+         if (req)
+            req.log(
+               `ABModel.update().updateRelationValues(): ${colName} => ${LinkType}`
+            );
 
          if (
             field &&
@@ -2555,6 +2761,7 @@ function updateRelationValues(AB, object, id, updateRelationParams) {
                      update[sourceField.columnName] = null;
 
                      let query = object.model().modelKnex().query();
+                     if (trx) query = query.transacting(trx);
                      query
                         .update(update)
                         .clearWhere()
@@ -2578,6 +2785,7 @@ function updateRelationValues(AB, object, id, updateRelationParams) {
                         update[sourceField.columnName] = relateRowId;
 
                         let query = object.model().modelKnex().query();
+                        if (trx) query = query.transacting(trx);
                         query
                            .update(update)
                            .clearWhere()
@@ -2596,6 +2804,7 @@ function updateRelationValues(AB, object, id, updateRelationParams) {
                         update[sourceField.columnName] = id;
 
                         let query = object.model().modelKnex().query();
+                        if (trx) query = query.transacting(trx);
                         query
                            .update(update)
                            .clearWhere()
@@ -2611,42 +2820,81 @@ function updateRelationValues(AB, object, id, updateRelationParams) {
 
          // Normal relations
          else {
-            let needToClear = true;
+            ////
+            //// Optimize the updating of the relationships by first comparing
+            //// the new values with the old values.  Only update the
+            //// differences
 
-            // If link column is in the table, then will not need to clear connect data
-            if (
-               updateRelationParams[colName] &&
-               field &&
-               field.settings &&
-               // 1:M
-               (LinkType === "one:many" ||
-                  // 1:1 && isSource = true
-                  (LinkType == "one:one" && field.settings.isSource))
-            ) {
-               needToClear = false;
+            let delThese = [];
+            // {array} entries that need to be removed from the relationship
+
+            let origValues = oldValue[colName] || [];
+            let newValues = updateRelationParams[colName] || [];
+
+            if (!Array.isArray(origValues)) origValues = [origValues];
+            if (!Array.isArray(newValues)) newValues = [newValues];
+
+            let fPK = field.datasourceLink.PK();
+
+            // make sure newValues are just the IDs
+            newValues = newValues
+               .filter((v) => v !== null)
+               .map((v) => v[fPK] || v.id || v.uuid || v);
+
+            let i = 0,
+               len = origValues.length;
+            while (i < len) {
+               let o = origValues[i];
+               // make sure it is the PK
+               o = o[fPK] || o.id || o.uuid || o;
+
+               let n = newValues.find((v) => v == o);
+               if (n) {
+                  // if they are found, nothing needs to happen
+                  // so remove them from newValues;
+                  newValues = newValues.filter((v) => v != o);
+               } else {
+                  // not found, so o is not supposed to be in there
+                  delThese.push(o);
+               }
+
+               i++;
             }
 
-            // Clear relations
-            if (needToClear) {
-               updateTasks.push(() => clearRelate(object, colName, id));
+            if (delThese.length > 0) {
+               AddToUnRelateTasks(
+                  updateTasks,
+                  object,
+                  colName,
+                  id,
+                  delThese,
+                  trx,
+                  req
+               );
             }
 
-            // convert relation data to array
-            if (!Array.isArray(updateRelationParams[colName])) {
-               updateRelationParams[colName] = [updateRelationParams[colName]];
+            if (newValues.length > 0) {
+               AddToRelateTasks(
+                  updateTasks,
+                  object,
+                  colName,
+                  id,
+                  newValues,
+                  trx,
+                  req
+               );
             }
-
-            // We could not insert many relation values at same time
-            // NOTE : Error: batch insert only works with Postgresql
-            updateRelationParams[colName].forEach((val) => {
-               // insert relation values of relation
-               updateTasks.push(() => setRelate(object, colName, id, val));
-            });
          }
       });
    }
 
    return new Promise((resolve, reject) => {
+      // if (req) {
+      //    req.log(
+      //       `ABModel.update().updateRelationValues(): there are ${updateTasks.length} tasks to perform sequentially`
+      //    );
+      // }
+
       // be sure all our updateTasks are executed sequentially
       doSequential(updateTasks, (err) => {
          if (err) {
