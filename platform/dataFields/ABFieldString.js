@@ -234,6 +234,10 @@ module.exports = class ABFieldString extends ABFieldStringCore {
          myParameter = super.requestParam(allParameters);
       }
 
+      if (typeof myParameter?.[this.columnName] == "string") {
+         myParameter[this.columnName] = myParameter[this.columnName].trim();
+      }
+
       return myParameter;
    }
 
