@@ -74,10 +74,27 @@ module.exports = class ABProcessTaskUserApproval extends (
 
          // pull user data from the user fields
          if (parseInt(this.toUsers.useField) == 1) {
+            const usedFields = this.toUsers.userFields ?? [];
+
             jobData.users = jobData.users || [];
 
             // Copy the array because I don't want to mess up this.toUsers.account
             jobData.users = jobData.users.slice(0, jobData.users.length);
+
+            if (Array.isArray(usedFields) && usedFields?.length) {
+               usedFields.forEach((f) => {
+                  let foundUser = this.process.processData(this, [
+                     instance,
+                     f,
+                  ]);
+                  if (foundUser) {
+                     if (!Array.isArray(foundUser))
+                        foundUser = [foundUser];
+
+                     jobData.users = jobData.users.concat(foundUser.map((u) => u.uuid || u.id || u.username || u));
+                  }
+               });
+            }
 
             // Combine user list
             let allUserFields = [];
@@ -101,13 +118,6 @@ module.exports = class ABProcessTaskUserApproval extends (
 
             // Remove empty items
             jobData.users = jobData.users.concat(listUsers.map((u) => u.uuid));
-
-            // Remove duplicate items
-            jobData.users = this.AB.uniq(
-               jobData.users,
-               false,
-               (u) => u.toString() // support compare with different types
-            );
          }
       } else {
          // get roles & users from Lane
@@ -134,6 +144,13 @@ module.exports = class ABProcessTaskUserApproval extends (
 
       if (jobData.users && !Array.isArray(jobData.users))
          jobData.users = [jobData.users];
+
+      // Remove duplicate items
+      jobData.users = this.AB.uniq(
+         jobData.users,
+         false,
+         (u) => u.toString() // support compare with different types
+      );
 
       return new Promise((resolve, reject) => {
          this._req.serviceRequest(
