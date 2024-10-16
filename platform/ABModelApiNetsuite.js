@@ -6,6 +6,7 @@
 const _ = require("lodash");
 const axios = require("axios");
 const crypto = require("crypto");
+const moment = require("moment");
 const OAuth = require("oauth-1.0a");
 
 const ABModel = require("./ABModel.js");
@@ -118,6 +119,19 @@ module.exports = class ABModelAPINetsuite extends ABModel {
    /// Instance Methods
    ///
 
+   processError(url, msg, err, req) {
+      if (req) {
+         req.log(url);
+         req.log(msg, err.response.status, err.response.data);
+      }
+
+      let message = "Rejected by NetSuite. ";
+      if (err.response.data["o:errorDetails"]) {
+         message += err.response.data["o:errorDetails"][0].detail;
+      }
+      throw new Error(message);
+   }
+
    /**
     * @method create
     * performs an update operation
@@ -136,19 +150,6 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       // make sure we ONLY have valid field values in {values}
       var baseValues = this.object.requestParams(values);
       var addRelationParams = this.object.requestRelationParams(values);
-
-      /*
-      // make sure a UUID is set
-      var PK = this.object.PK();
-      // Keep the passed in uuid if provided.
-      if (PK === "uuid" && values[PK]) {
-         baseValues[PK] = values[PK];
-      }
-      // if not, create a uuid
-      if (PK === "uuid" && baseValues[PK] == null) {
-         baseValues[PK] = this.AB.uuid();
-      }
-      */
 
       // created_at & updated_at
       // we might have these values set already due to some of our widgets
@@ -176,9 +177,19 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          this.credentials.NETSUITE_BASE_URL
       }/${this.object.dbTableName()}`;
 
-      let response = await fetch(this.credentials, url, "POST", baseValues);
+      let response;
+      try {
+         response = await fetch(this.credentials, url, "POST", baseValues);
+      } catch (err) {
+         this.processError(
+            `POST ${url}`,
+            `Error creatomg ${this.object.dbTableName()} data`,
+            err,
+            req
+         );
+      }
 
-      let location = response.headers["location"];
+      let location = response?.headers["location"];
       // let regEx = new RegExp(`${this.object.dbTableName()}\/(\d+)$`);
       // let match = location.match(regEx);
       // let id = match[1];
@@ -208,120 +219,59 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       );
 
       return rows[0];
+   }
 
-      /*    
+   /**
+    * @method delete
+    * performs a delete operation
+    * @param {string} id
+    *    the primary key for this update operation.
+    * @param {Knex.Transaction?} trx - [optional]
+    *
+    * @return {Promise} resolved with {int} numRows : the # rows affected
+    */
+   async delete(id, trx = null, req = null) {
+      // make sure we have built our credentials
+      if (!this.credentials) {
+         this.credentials = this.pullCredentials();
+      }
 
-      return new Promise((resolve, reject) => {
-         // get a Knex Query Object
-         let query = this.modelKnex().query();
+      let url = `${
+         this.credentials.NETSUITE_BASE_URL
+      }/${this.object.dbTableName()}/${id}`;
 
-         // Used by knex.transaction, the transacting method may be chained to any query and
-         // passed the object you wish to join the query as part of the transaction for.
-         if (trx) query = query.transacting(trx);
+      if (req) {
+         req.performance.mark("delete-call");
+      }
 
-         // update our value
-         query
-            .insert(baseValues)
-            .then((returnVals) => {
-               if (req) {
-                  req.log(
-                     `${
-                        this.object.label || this.object.name
-                     }.create() successful. Now loading full value from DB.`
-                  );
-               }
-               if (returnVals) {
-                  var relateTasks = [];
-                  // {array}
-                  // all the fn() calls that need to be performed to relate a task.
+      try {
+         let response = await fetch(this.credentials, url, "DELETE");
+         // let location = response.headers["location"];
+         // let parts = location.split(`${this.object.dbTableName()}/`);
+         // let id = parts[1];
 
-                  for (var colName in addRelationParams) {
-                     let newVals = addRelationParams[colName];
-                     if (!Array.isArray(newVals)) {
-                        newVals = [newVals];
-                     }
+         if (req) {
+            req.performance.measure("delete-call");
+            if (response?.headers?.["x-netsuite-jobid"]) {
+               req.log(
+                  "Netsuite JobID:",
+                  response?.headers?.["x-netsuite-jobid"]
+               );
+            }
+         }
 
-                     let fPK = "uuid";
-                     let field = this.object.fields(
-                        (f) => f.columnName == colName
-                     )[0];
-                     if (field) {
-                        let objectLink = field.datasourceLink;
-                        if (objectLink) {
-                           fPK = objectLink.PK();
-                        }
-                     }
-
-                     newVals = newVals
-                        .filter((v) => v !== null)
-                        .map((v) => v[fPK] || v.id || v.uuid || v);
-
-                     // relateTasks.push(() =>
-                     //    this.relate(returnVals[PK], colName, newVals, trx, req)
-                     // );
-                     AddToRelateTasks(
-                        relateTasks,
-                        this.object,
-                        colName,
-                        returnVals[PK],
-                        newVals,
-                        trx,
-                        req
-                     );
-                  }
-               }
-
-               doSequential(relateTasks, (err) => {
-                  if (err) {
-                     return reject(err);
-                  }
-
-                  // no insert row
-                  if (returnVals == null) {
-                     resolve(null);
-                     return;
-                  }
-
-                  // make sure we get a fully updated value for
-                  // the return value
-                  this.findAll(
-                     {
-                        where: {
-                           glue: "and",
-                           rules: [
-                              {
-                                 key: PK,
-                                 rule: "equals",
-                                 value: returnVals[PK],
-                              },
-                           ],
-                        },
-                        offset: 0,
-                        limit: 1,
-                        populate: true,
-                     },
-                     condDefaults,
-                     req
-                  )
-                     .then((rows) => {
-                        // this returns an [] so pull 1st value:
-                        resolve(rows[0]);
-                     })
-                     .catch(reject);
-               });
-            })
-            .catch((error) => {
-               // populate any error messages with the SQL of this
-               // query:
-               try {
-                  error._sql = query.toKnexQuery().toSQL().sql;
-               } catch (e) {
-                  error._sql = "??";
-               }
-               reject(error);
-            });
-      });
-*/
+         return 1;
+      } catch (err) {
+         if (req) {
+            req.performance.measure("delete-call");
+         }
+         this.processError(
+            `DELETE ${url}`,
+            `Error deleting ${this.object.dbTableName()} data`,
+            err,
+            req
+         );
+      }
    }
 
    /**
@@ -340,65 +290,6 @@ module.exports = class ABModelAPINetsuite extends ABModel {
     * @return {Promise} resolved with the result of the find()
     */
    async findAll(cond, conditionDefaults, req) {
-      // const object = this.object;
-      // const requestConfigs = object.request ?? {};
-      // let url = requestConfigs.url;
-      // let headers = object.headers;
-
-      // // Paging
-      // const pagingValues = object.getPagingValues({
-      //    skip: cond?.skip,
-      //    limit: cond?.limit,
-      // });
-      // if (Object.keys(pagingValues).length) {
-      //    switch (requestConfigs.paging.type) {
-      //       case "queryString":
-      //          url = `${url}?${new URLSearchParams(pagingValues).toString()}`;
-      //          break;
-      //       case "header":
-      //          headers = Object.assign(headers, pagingValues);
-      //          break;
-      //    }
-      // }
-
-      // // Get secret values and set to .headers
-      // const pullSecretTasks = [];
-      // Object.keys(headers).forEach((name) => {
-      //    const val = headers[name]?.toString() ?? "";
-
-      //    if (!val.startsWith("SECRET:")) return;
-
-      //    const secretName = val.replace(/SECRET:/g, "");
-
-      //    if (secretName)
-      //       pullSecretTasks.push(
-      //          (async () => {
-      //             const secretVal = await object.getSecretValue(secretName);
-      //             headers[name] = secretVal;
-      //          })()
-      //       );
-      // });
-      // await Promise.all(pullSecretTasks);
-
-      // // Load data
-      // const response = await fetch(url, {
-      //    method: (requestConfigs.verb ?? "GET").toUpperCase(),
-      //    headers,
-      //    mode: "cors",
-      //    cache: "no-cache",
-      // });
-
-      // // Convert to JSON
-      // let result = await response.json();
-
-      // // Extract data from key
-      // result = this.object.dataFromKey(result);
-
-      // // Convert to an Array
-      // if (result && !Array.isArray(result)) result = [result];
-
-      // return result;
-
       // make sure we have built our credentials
       if (!this.credentials) {
          this.credentials = this.pullCredentials();
@@ -533,19 +424,30 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          sql = `${sql} WHERE ${where.join(" AND")}`;
       }
 
-      req.log("Netsuite SQL:", sql);
-      let response = await fetch(
-         this.credentials,
-         URL,
-         "POST",
-         {
-            q: sql,
-         },
-         { Prefer: "transient" }
-      );
-      // console.log(response);
+      if (req) {
+         req.log("Netsuite SQL:", sql);
+      }
+      try {
+         let response = await fetch(
+            this.credentials,
+            URL,
+            "POST",
+            {
+               q: sql,
+            },
+            { Prefer: "transient" }
+         );
+         // console.log(response);
 
-      return response.data.items;
+         return response.data.items;
+      } catch (err) {
+         this.processError(
+            `POST ${URL}`,
+            `Error finding ${this.object.dbTableName()} data`,
+            err,
+            req
+         );
+      }
    }
 
    /**
@@ -574,6 +476,135 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       // pagingValues.total
 
       return returnData?.length;
+   }
+
+   /**
+    * @method update
+    * performs an update operation
+    * @param {string} id
+    *   the primary key for this update operation.
+    * @param {obj} values
+    *   A hash of the new values for this entry.
+    * @param {Knex.Transaction?} trx - [optional]
+    *
+    * @return {Promise} resolved with the result of the find()
+    */
+   async update(id, values, userData, trx = null, req = null) {
+      let PK = this.object.PK();
+      id = id[PK] || id.id || id.uuid || id;
+      // id should be just the .uuid or .id value of the row we are updating
+      // but in case they sent in a condition obj: { uuid: 'xyz' } lets try to
+      // de-reference it.
+
+      let baseValues = this.object.requestParams(values);
+      // {valueHash} baseValues
+      // return the parameters from the input params that relate to this object
+      // exclude connectObject data field values
+
+      let updateRelationParams = this.object.requestRelationParams(values);
+      // {valueHash} updateRelationParams
+      // return the parameters of connectObject data field values
+
+      let transParams = this.AB.cloneDeep(baseValues.translations);
+      // {array} transParams
+      // get translations values for the external object
+      // it will update to translations table after model values updated
+
+      // oldValue = oldValue[0];
+      // {obj} oldValue
+      // the current value of the entry in the DB.
+
+      if (!this.credentials) {
+         this.credentials = this.pullCredentials();
+      }
+
+      // created_at & updated_at
+      // we might have these values set already due to some of our widgets
+      // so let's pull those values out, and translate them back into the
+      // Netsuite related values:
+      var date = this.AB.rules.toSQLDateTime(new Date());
+      ["updated_at"].forEach((field) => {
+         let val = baseValues[field] || date;
+         delete baseValues[field];
+         if (this.object.columnRef[field]) {
+            baseValues[this.object.columnRef[field]] = val;
+         }
+      });
+
+      // All Netsuite DateTime fields need to be in ISOFormat:
+      this.object
+         .fields((f) => f.key == "datetime")
+         .forEach((f) => {
+            if (baseValues[f.columnName]) {
+               baseValues[f.columnName] = new Date(
+                  baseValues[f.columnName]
+               ).toISOString();
+            }
+         });
+
+      let validationErrors = this.object.isValidData(baseValues);
+      if (validationErrors.length > 0) {
+         return Promise.reject(validationErrors);
+      }
+
+      // TODO:
+      // we can insert the connections in this manner:
+      // "subsidiary": { "id": "1" }
+
+      let url = `${
+         this.credentials.NETSUITE_BASE_URL
+      }/${this.object.dbTableName()}/${id}`;
+
+      if (req) {
+         req.log(
+            "ABModelApiNetsuite.update(): updating initial params:",
+            baseValues
+         );
+         req.performance.mark("update-base");
+      }
+
+      try {
+         let response = await fetch(this.credentials, url, "PATCH", baseValues);
+      } catch (err) {
+         this.processError(
+            `PATCH ${url}`,
+            `Error updating ${this.object.dbTableName()} data`,
+            err,
+            req
+         );
+      }
+
+      if (req) {
+         req.performance.measure("update-base");
+         req.performance.mark("update-find-updated-entry");
+      }
+
+      let findAllParams = {
+         where: {
+            glue: "and",
+            rules: [
+               {
+                  key: PK,
+                  rule: "equals",
+                  value: id,
+               },
+            ],
+         },
+         offset: 0,
+         limit: 1,
+         populate: true,
+      };
+      // {obj} findAllParams
+      // the .findAll() condition params to pull the current value of this obj
+      // out of the DB.
+
+      let newValue = await this.findAll(findAllParams, userData, req);
+
+      if (req) {
+         req.performance.measure("update-find-updated-entry");
+      }
+
+      return newValue[0];
    }
 
    sqlConditions(where, conditionDefaults, req) {
