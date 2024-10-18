@@ -122,11 +122,11 @@ module.exports = class ABModelAPINetsuite extends ABModel {
    processError(url, msg, err, req) {
       if (req) {
          req.log(url);
-         req.log(msg, err.response.status, err.response.data);
+         req.log(msg, err.response?.status, err.response?.data);
       }
 
       let message = "Rejected by NetSuite. ";
-      if (err.response.data["o:errorDetails"]) {
+      if (err.response?.data["o:errorDetails"]) {
          message += err.response.data["o:errorDetails"][0].detail;
       }
       throw new Error(message);
@@ -169,9 +169,10 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          return Promise.reject(validationErrors);
       }
 
-      // TODO:
+      // Make sure our Relations are set:
       // we can insert the connections in this manner:
       // "subsidiary": { "id": "1" }
+      this.insertRelationValuesToSave(baseValues, addRelationParams);
 
       let url = `${
          this.credentials.NETSUITE_BASE_URL
@@ -272,6 +273,148 @@ module.exports = class ABModelAPINetsuite extends ABModel {
             req
          );
       }
+   }
+
+   /**
+    * @method populateColumn()
+    * given a ABFieldConnect definition, parse through the rows of data
+    * and provide fully populated results for that column in the result.
+    * @param {ABFieldConnect} field
+    *    The field representing the specific column of data we are
+    *    populating
+    * @param {array} data
+    *    The result of a fetch operation that now needs to populate
+    *    it's results.
+    *    NOTE: the data is populated in place.
+    * @param {ABUtil.reqService} req
+    *    The request object associated with the current tenant/request
+    * @return {Promise}
+    */
+   async populateColumn(field, data, req) {
+      // ok, so data = [ {row}, {row}... ]
+      // each row will have a value (maybe) for this field
+
+      // the value might be row.columnName = #
+      // or it might be row.columnName = { PK : # }
+
+      let pks = [];
+      for (let i = 0; i < data.length; i++) {
+         let row = data[i];
+         let v = row[field.columnName];
+         if (typeof v != "undefined") {
+            if (Array.isArray(v)) {
+               v.forEach((vv) => {
+                  pks.push(vv);
+               });
+            } else {
+               pks.push(v);
+            }
+         }
+      }
+
+      let linkObj = field.datasourceLink;
+      let PK = linkObj.PK();
+
+      // transform any { PK:# } into just #
+      pks = pks
+         .filter((v) => v)
+         .map((val) => val[PK] || val)
+         .filter((v) => v);
+
+      let values = [];
+      let where = {};
+      where[PK] = pks;
+      if (req) {
+         values = await req.retry(() => linkObj.model().find(where));
+      } else {
+         values = await linkObj.model().find(where);
+      }
+
+      // convert to a hash  ID : { value }
+      let valueHash = {};
+      for (let i = 0; i < values.length; i++) {
+         let val = values[i];
+         valueHash[val[PK]] = val;
+      }
+
+      // now step through all the data rows, and update our values
+      let linkType = field.linkType();
+      for (let i = 0; i < data.length; i++) {
+         let row = data[i];
+         let v = row[field.columnName];
+         if (v) {
+            if (linkType == "one") {
+               // ONE:xxx  this should only be 1 value
+               v = v[PK] || v; // make sure it is just the PK
+
+               row[field.relationName()] = valueHash[v];
+               row[field.columnName] = v;
+            } else {
+               // Many:xxx : there could be > 1 here:
+               if (!Array.isArray(v)) v = [v];
+
+               v = v.map((vv) => vv[PK] || vv);
+
+               row[field.relationName()] = v.map((vv) => valueHash[vv]);
+               row[field.columnName] = v;
+            }
+         }
+      }
+
+      // done!
+   }
+
+   /**
+    * @method populate()
+    * given the requested condition value, perform any relevant population
+    * of the data result.
+    * @param {json} cond
+    *    The condition value passed into our find() operations. There can
+    *    be a cond.populate field that specifies how to populate the data.
+    * @param {array} data
+    *    The result of a fetch operation that now needs to populate
+    *    it's results.
+    *    NOTE: the data is populated in place.
+    * @param {ABUtil.reqService} req
+    *    The request object associated with the current tenant/request
+    * @return {Promise}
+    */
+   async populate(cond, data, req) {
+      let columns = [];
+
+      // if .populate == false
+      // if .populate not set, assume no
+      if (!cond.populate || cond.populate === "false") return;
+      // if .populate == true
+      else if (typeof cond.populate == "boolean" || cond.populate === "true") {
+         // pick ALL relations and populate them
+         columns = this.object.connectFields();
+      }
+
+      // if .populate = [ "col1", "col2" ]
+      else if (Array.isArray(cond.populate)) {
+         // find these specific columns to populate
+         cond.populate.forEach((col) => {
+            let field = this.object.connectFields(
+               (f) => f.columnName == col || f.id == col
+            )[0];
+            if (field) {
+               columns.push(field);
+            }
+         });
+      }
+      if (req) {
+         req.log(
+            `populating columns : ${columns
+               .map((f) => f.columnName)
+               .join(", ")}`
+         );
+      }
+      let allColumns = [];
+      columns.forEach((col) => {
+         allColumns.push(this.populateColumn(col, data, req));
+      });
+      await Promise.all(allColumns);
    }
 
    /**
@@ -421,11 +564,12 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       // Now put this SQL together:
       let sql = `SELECT * FROM ${tableNJoin.join(" ")}`;
       if (where.length) {
-         sql = `${sql} WHERE ${where.join(" AND")}`;
+         sql = `${sql} WHERE ${where.join(" AND ")}`;
       }
 
       if (req) {
          req.log("Netsuite SQL:", sql);
+         req.performance.mark("initial-find");
       }
       try {
          let response = await fetch(
@@ -439,7 +583,16 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          );
          // console.log(response);
 
-         return response.data.items;
+         let list = response.data.items;
+         if (req) {
+            req.performance.measure("initial-find");
+            req.performance.mark("populate");
+         }
+         await this.populate(cond, list, req);
+         if (req) {
+            req.performance.measure("populate");
+         }
+         return list;
       } catch (err) {
          this.processError(
             `POST ${URL}`,
@@ -476,6 +629,31 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       // pagingValues.total
 
       return returnData?.length;
+   }
+
+   insertRelationValuesToSave(baseValues, updateRelationParams) {
+      // Make sure our Relations are set:
+      // we can insert the connections in this manner:
+      // "subsidiary": { "id": "1" }
+      Object.keys(updateRelationParams).forEach((k) => {
+         let updateValue = updateRelationParams[k];
+         let val = {};
+         // if we are clearing the value then set to null
+         if (updateValue == null) {
+            val = null;
+         } else {
+            // else format { PK: val }
+            let field = this.object.connectFields((f) => f.columnName == k)[0];
+            if (!field) return;
+
+            let linkObj = field.datasourceLink;
+            if (!linkObj) return;
+
+            val[linkObj.PK()] = updateValue;
+         }
+
+         baseValues[k] = val;
+      });
    }
 
    /**
@@ -547,9 +725,10 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          return Promise.reject(validationErrors);
       }
 
-      // TODO:
+      // Make sure our Relations are set:
       // we can insert the connections in this manner:
       // "subsidiary": { "id": "1" }
+      this.insertRelationValuesToSave(baseValues, updateRelationParams);
 
       let url = `${
          this.credentials.NETSUITE_BASE_URL
