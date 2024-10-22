@@ -187,6 +187,13 @@ class ABQLSetPluck extends ABQLSetPluckCore {
                            });
                         });
 
+                        // Reduce the size of relation data to prevent excessive data in the SITE_PROCESS_INSTANCE table.
+                        (linkedConnections || []).forEach((f) => {
+                           (rows || []).forEach((r) => {
+                              delete r[f.relationName()];
+                           });
+                        });
+
                         nextContext._condition = cond;
                         nextContext.object = linkObj;
                         nextContext.data = rows;
