@@ -74,9 +74,8 @@ class ABQLFind extends ABQLFindCore {
                      // if we didn't get any data, then add some additional
                      // info in case we need to evaluate why.
                      nextContext.origCond = JSON.stringify(cond);
-                     nextContext.reducedCondition = JSON.stringify(
-                        reducedCondition
-                     );
+                     nextContext.reducedCondition =
+                        JSON.stringify(reducedCondition);
                      nextContext.log = "no rows returned";
                   }
                   resolve(nextContext);
@@ -141,6 +140,10 @@ class ABQLFind extends ABQLFindCore {
                }
             }
          }
+      }
+
+      if (this.next?.key == "set_pluck" && this.next?.field) {
+         newCond.populate = [this.next.field.columnName];
       }
 
       return newCond;

@@ -135,24 +135,26 @@ class ABQLSetPluck extends ABQLSetPluckCore {
                   glue: "or",
                   rules: [],
                };
-               cond.rules.push({
-                  key: PK,
-                  rule: "contains",
-                  value: this.AB.uniq(ids),
-               });
-               if (this.field.indexField) {
+               if (ids?.length) {
                   cond.rules.push({
-                     key: this.field.indexField.id,
-                     rule: "contains",
+                     key: PK,
+                     rule: "in",
                      value: this.AB.uniq(ids),
                   });
-               }
-               if (this.field.indexField2) {
-                  cond.rules.push({
-                     key: this.field.indexField2.id,
-                     rule: "contains",
-                     value: this.AB.uniq(ids),
-                  });
+                  if (this.field?.indexField) {
+                     cond.rules.push({
+                        key: this.field.indexField.id,
+                        rule: "in",
+                        value: this.AB.uniq(ids),
+                     });
+                  }
+                  if (this.field?.indexField2) {
+                     cond.rules.push({
+                        key: this.field.indexField2.id,
+                        rule: "in",
+                        value: this.AB.uniq(ids),
+                     });
+                  }
                }
 
                return new Promise((resolve, reject) => {
