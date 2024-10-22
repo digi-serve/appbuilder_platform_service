@@ -365,6 +365,97 @@ module.exports = class ABModelAPINetsuite extends ABModel {
    }
 
    /**
+    * @method populateColumnNonSource()
+    * given a ABFieldConnect definition, parse through the rows of data
+    * and provide fully populated results for that column in the result.
+    * In this case, the provided data WONT contain the info for the connection.
+    * We have to go lookup that data from the other table.
+    * @param {ABFieldConnect} field
+    *    The field representing the specific column of data we are
+    *    populating
+    * @param {array} data
+    *    The result of a fetch operation that now needs to populate
+    *    it's results.
+    *    NOTE: the data is populated in place.
+    * @param {ABUtil.reqService} req
+    *    The request object associated with the current tenant/request
+    * @return {Promise}
+    */
+   async populateColumnNonSource(field, data, req) {
+      // ok, so data = [ {row}, {row}... ]
+
+      let PK = field.object.PK();
+
+      let pks = [];
+      for (let i = 0; i < data.length; i++) {
+         let row = data[i];
+         pks.push(row[PK]);
+      }
+
+      let linkObj = field.datasourceLink;
+      let linkField = field.fieldLink;
+
+      // transform any { PK:# } into just #
+      pks = pks.filter((v) => v);
+
+      let values = [];
+      let where = {};
+      let col = linkField.columnName;
+      where[col] = pks;
+      if (req) {
+         values = await req.retry(() => linkObj.model().find(where));
+      } else {
+         values = await linkObj.model().find(where);
+      }
+
+      // convert to a hash  ID : [{ value }]
+      let valueHash = {};
+      for (let i = 0; i < values.length; i++) {
+         let val = values[i];
+         if (typeof valueHash[val[col]] == "undefined") {
+            valueHash[val[col]] = [];
+         }
+         valueHash[val[col]].push(val);
+      }
+
+      // now step through all the data rows, and update our values
+      // let linkType = field.linkType();
+      let otherPK = linkObj.PK();
+      for (let i = 0; i < data.length; i++) {
+         let row = data[i];
+         let rowPK = row[PK];
+         if (valueHash[rowPK]) {
+            row[field.relationName()] = valueHash[rowPK];
+            row[field.columnName] = valueHash[rowPK].map((v) => v[otherPK]);
+         } else {
+            row[field.relationName()] = [];
+            row[field.columnName] = [];
+         }
+
+         // let v = row[field.columnName];
+         // if (v) {
+         //    if (linkType == "one") {
+         //       // ONE:xxx  this should only be 1 value
+         //       v = v[PK] || v; // make sure it is just the PK
+
+         //       row[field.relationName()] = valueHash[v];
+         //       row[field.columnName] = v;
+         //    } else {
+         //       // Many:xxx : there could be > 1 here:
+         //       if (!Array.isArray(v)) v = [v];
+
+         //       v = v.map((vv) => vv[PK] || vv);
+
+         //       row[field.relationName()] = v.map((vv) => valueHash[vv]);
+         //       row[field.columnName] = v;
+         //    }
+         // }
+      }
+
+      // done!
+   }
+
+   /**
     * @method populate()
     * given the requested condition value, perform any relevant population
     * of the data result.
@@ -412,7 +503,17 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       }
       let allColumns = [];
       columns.forEach((col) => {
-         allColumns.push(this.populateColumn(col, data, req));
+         let linkType = `${col.linkType()}:${col.linkViaType()}`;
+         switch (linkType) {
+            case "one:many":
+               allColumns.push(this.populateColumn(col, data, req));
+               break;
+            case "many:one":
+               allColumns.push(this.populateColumnNonSource(col, data, req));
+               break;
+            default:
+               console.log("TODO: figure out additional link types");
+         }
       });
       await Promise.all(allColumns);
    }
@@ -638,22 +739,153 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       Object.keys(updateRelationParams).forEach((k) => {
          let updateValue = updateRelationParams[k];
          let val = {};
-         // if we are clearing the value then set to null
-         if (updateValue == null) {
-            val = null;
-         } else {
-            // else format { PK: val }
-            let field = this.object.connectFields((f) => f.columnName == k)[0];
-            if (!field) return;
 
-            let linkObj = field.datasourceLink;
-            if (!linkObj) return;
+         let field = this.object.connectFields((f) => f.columnName == k)[0];
+         if (!field) return;
 
-            val[linkObj.PK()] = updateValue;
+         // only do this if we are "one:many", or "one:one" & isSource
+         let linkType = `${field.linkType()}:${field.linkViaType()}`;
+         if (
+            linkType == "one:many" ||
+            (linkType == "one:one" && field.isSource())
+         ) {
+            // if we are clearing the value then set to null
+            if (updateValue == null) {
+               val = null;
+            } else {
+               // else format { PK: val }
+
+               let linkObj = field.datasourceLink;
+               if (!linkObj) return;
+
+               val[linkObj.PK()] = updateValue;
+            }
+
+            baseValues[k] = val;
+
+            delete updateRelationParams[k];
          }
-
-         baseValues[k] = val;
       });
+   }
+
+   async synchronizeRelationValues(id, values, req) {
+      let allColumns = [];
+      Object.keys(values).forEach((k) => {
+         let field = this.object.connectFields((f) => f.columnName == k)[0];
+         if (!field) return;
+
+         let colVals = this.AB.cloneDeep(values[k]);
+
+         allColumns.push(this.syncColumn(id, field, colVals, req));
+      });
+
+      await Promise.all(allColumns);
+   }
+
+   async syncColumn(id, field, values, req) {
+      let URL = `${this.credentials.NETSUITE_QUERY_BASE_URL}/suiteql`;
+
+      let linkField = field.fieldLink;
+      let linkObject = field.datasourceLink;
+
+      let sql = `SELECT * FROM ${linkObject.dbTableName()} WHERE ${
+         linkField.columnName
+      }=${id}`;
+      if (req) {
+         req.performance.mark(`${linkField.columnName}-lookup`);
+      }
+      // first get the old values:
+      let response = await fetch(
+         this.credentials,
+         URL,
+         "POST",
+         {
+            q: sql,
+         },
+         { Prefer: "transient" }
+      );
+
+      let oldValues = response.data.items;
+      if (req) {
+         req.performance.measure(`${linkField.columnName}-lookup`);
+      }
+
+      // just want the PKs here:
+      oldValues = oldValues.map((v) => v[linkObject.PK()] || v);
+
+      let removeThese = [];
+      oldValues.forEach((v) => {
+         // if v is in values,
+         let newV = values.find((nV) => nV == v);
+         if (newV) {
+            // if we found it, then remove that entry from values
+            values = values.filter((nV) => nV != v);
+         } else {
+            // we didn't find it, so add it to removeThese
+            removeThese.push(v);
+         }
+      });
+
+      let addDrop = [];
+
+      addDrop.push(this.relate(id, field, values, req));
+      addDrop.push(this.unRelate(id, field, removeThese, req));
+
+      await Promise.all(addDrop);
+   }
+
+   async relate(id, field, values, req) {
+      if (values.length == 0) return;
+
+      let linkField = field.fieldLink;
+      let setVal = {};
+      setVal[linkField.columnName] = id;
+
+      await this.relateOP(id, field, values, setVal, req);
+   }
+
+   async unRelate(id, field, values, req) {
+      if (values.length == 0) return;
+
+      let linkField = field.fieldLink;
+      let setVal = {};
+      setVal[linkField.columnName] = null;
+
+      await this.relateOP(id, field, values, setVal, req);
+   }
+
+   async relateOP(id, field, values, setVal, req) {
+      let URL = `${this.credentials.NETSUITE_QUERY_BASE_URL}/suiteql`;
+
+      // let linkField = field.fieldLink;
+      let linkObject = field.datasourceLink;
+
+      // let where = `${linkObject.PK()}`;
+      // if (values.length == 1) {
+      //    where = ` ${where} = ${values[0]}`;
+      // } else {
+      //    where = ` ${where} IN ( ${values.join(", ")} )`;
+      // }
+
+      let allUpdates = [];
+      values.forEach((vid) => {
+         let url = `${
+            this.credentials.NETSUITE_BASE_URL
+         }/${linkObject.dbTableName()}/${vid}`;
+
+         try {
+            allUpdates.push(fetch(this.credentials, url, "PATCH", setVal));
+         } catch (err) {
+            this.processError(
+               `PATCH ${url}`,
+               `Error updating ${this.object.dbTableName()} data`,
+               err,
+               req
+            );
+         }
+      });
+
+      await Promise.all(allUpdates);
    }
 
    /**
@@ -726,6 +958,8 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       }
 
       // Make sure our Relations are set:
+      // This routine will insert values that are one:many where we
+      // track the connection value ourselves.
       // we can insert the connections in this manner:
       // "subsidiary": { "id": "1" }
       this.insertRelationValuesToSave(baseValues, updateRelationParams);
@@ -755,6 +989,13 @@ module.exports = class ABModelAPINetsuite extends ABModel {
 
       if (req) {
          req.performance.measure("update-base");
+         req.performance.mark("update-syncRelationValues");
+      }
+
+      await this.synchronizeRelationValues(id, updateRelationParams, req);
+
+      if (req) {
+         req.performance.measure("update-syncRelationValues");
          req.performance.mark("update-find-updated-entry");
       }
 
