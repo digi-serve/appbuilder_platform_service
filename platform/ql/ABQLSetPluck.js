@@ -189,6 +189,12 @@ class ABQLSetPluck extends ABQLSetPluckCore {
 
                         // Reduce the size of relation data to prevent excessive data in the SITE_PROCESS_INSTANCE table.
                         (linkedConnections || []).forEach((f) => {
+
+                           // If the next step is to pluck this field, skip to reduce the data.
+                           if (this.next?.key == "set_pluck" && this.next?.field?.id == f.id) {
+                              return;
+                           }
+
                            (rows || []).forEach((r) => {
                               if (Array.isArray(r[f.relationName()])) {
                                  r[f.relationName()] = r[f.relationName()].map((rItem) => {
