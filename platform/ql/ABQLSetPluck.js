@@ -74,7 +74,7 @@ class ABQLSetPluck extends ABQLSetPluckCore {
 
       // capture the new promise from the .then() and
       // return that as the next link in the chain
-      var nextLink = chain.then((context) => {
+      var nextLink = chain.then(async (context) => {
          var nextContext = {
             label: "ABQLSetPluck",
             object: context.object,
@@ -115,12 +115,26 @@ class ABQLSetPluck extends ABQLSetPluckCore {
 
             // CASE 1:  Connected Objects:
             if (this.field.isConnection) {
+
+               // Pull relation value of this.field
+               const rowIds = context.data.map((row) => row.id ?? row.uuid);
+               const data = await context.object.model().findAll({
+                  glue: "and",
+                  rules: [{
+                     key: context.object.PK(),
+                     rule: "in",
+                     value: this.AB.uniq(rowIds),
+                  }],
+               }, {
+                  populate: [this.field.columnName],
+               }, req);
+
                var linkObj = this.field.datasourceLink;
                var PK = linkObj.PK();
 
                // we need to go lookup the connected values:
                var ids = [];
-               context.data.forEach((d) => {
+               data.forEach((d) => {
                   var entry = this.field.dataValue(d);
                   if (!Array.isArray(entry)) entry = [entry];
                   entry.forEach((e) => {
@@ -189,12 +203,6 @@ class ABQLSetPluck extends ABQLSetPluckCore {
 
                         // Reduce the size of relation data to prevent excessive data in the SITE_PROCESS_INSTANCE table.
                         (linkedConnections || []).forEach((f) => {
-
-                           // If the next step is to pluck this field, skip to reduce the data.
-                           if (this.next?.key == "set_pluck" && this.next?.field?.id == f.id) {
-                              return;
-                           }
-
                            (rows || []).forEach((r) => {
                               if (Array.isArray(r[f.relationName()])) {
                                  r[f.relationName()] = r[f.relationName()].map((rItem) => {
