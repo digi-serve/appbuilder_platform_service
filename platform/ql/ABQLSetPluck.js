@@ -127,7 +127,7 @@ class ABQLSetPluck extends ABQLSetPluckCore {
                   }],
                }, {
                   populate: [this.field.columnName],
-               }, req)
+               }, req);
 
                var linkObj = this.field.datasourceLink;
                var PK = linkObj.PK();
