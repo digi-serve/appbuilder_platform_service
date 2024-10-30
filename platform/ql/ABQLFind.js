@@ -142,10 +142,6 @@ class ABQLFind extends ABQLFindCore {
          }
       }
 
-      if (this.next?.key == "set_pluck" && this.next?.field) {
-         newCond.populate = [this.next.field.columnName];
-      }
-
       return newCond;
    }
 }
