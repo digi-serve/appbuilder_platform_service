@@ -456,6 +456,126 @@ module.exports = class ABModelAPINetsuite extends ABModel {
    }
 
    /**
+    * @method populateColumnManyMany()
+    * given a ABFieldConnect definition, parse through the rows of data
+    * and provide fully populated results for that column in the result.
+    * In this case, the data we are connecting to will happen through a
+    * MANY:MANY connection.
+    * @param {ABFieldConnect} field
+    *    The field representing the specific column of data we are
+    *    populating
+    * @param {array} data
+    *    The result of a fetch operation that now needs to populate
+    *    it's results.
+    *    NOTE: the data is populated in place.
+    * @param {ABUtil.reqService} req
+    *    The request object associated with the current tenant/request
+    * @return {Promise}
+    */
+   async populateColumnManyMany(field, data, req) {
+      // ok, so data = [ {row}, {row}... ]
+
+      // 1) Get All Our PKs out of the data
+      let PK = field.object.PK();
+
+      let pks = [];
+      for (let i = 0; i < data.length; i++) {
+         let row = data[i];
+         pks.push(row[PK]);
+      }
+
+      // 2) Now SQL lookup on join table to find ALL PKs of connected table
+      let linkField = field.fieldLink;
+
+      let sql = `SELECT * FROM ${field.settings.joinTable} WHERE ${
+         field.settings.joinTableReference
+      } IN ( ${pks.join(", ")} )`;
+
+      let URL = `${this.credentials.NETSUITE_QUERY_BASE_URL}/suiteql`;
+
+      let response = await fetch(
+         this.credentials,
+         URL,
+         "POST",
+         {
+            q: sql,
+         },
+         { Prefer: "transient" }
+      );
+
+      let list = response.data.items;
+      let hashConnections = {
+         /* thisPK : { thatPK1:true, thatPK2: true } */
+      };
+      let thatPKs = {
+         /* thatPK : true */
+      }; // all the other objects we need to lookup
+      let thisRef = field.settings.joinTableReference;
+      let thatRef = linkField.settings.joinTableReference;
+
+      for (let i = 0; i < list.length; i++) {
+         let conn = list[i];
+         let thisPK = conn[thisRef];
+         if (typeof hashConnections[thisPK] == "undefined") {
+            hashConnections[thisPK] = {};
+         }
+         hashConnections[thisPK][conn[thatRef]] = true;
+         thatPKs[conn[thatRef]] = true;
+      }
+      thatPKs = Object.keys(thatPKs);
+
+      // 3) SQL select all the rows from the dest table
+      let linkObj = field.datasourceLink;
+      let thatPK = linkObj.PK();
+
+      sql = `SELECT * FROM ${linkObj.dbTableName()}  WHERE ${thatPK} IN ( ${thatPKs.join(
+         ", "
+      )} )`;
+
+      let responseLinkObj = await fetch(
+         this.credentials,
+         URL,
+         "POST",
+         {
+            q: sql,
+         },
+         { Prefer: "transient" }
+      );
+
+      let listLinkObj = responseLinkObj.data.items;
+      let lookupLinkObj = {};
+      for (let i = 0; i < listLinkObj.length; i++) {
+         let lObj = listLinkObj[i];
+         lookupLinkObj[lObj[thatPK]] = lObj;
+      }
+
+      // 4) Now for each row of data, insert linked objects
+      for (let i = 0; i < data.length; i++) {
+         let row = data[i];
+
+         let connections = [];
+         let values = [];
+         let hashConn = hashConnections[row[PK]];
+         if (hashConn) {
+            connections = Object.keys(hashConn);
+
+            for (let x = 0; x < connections.length; x++) {
+               let cPK = connections[x];
+               let v = lookupLinkObj[cPK];
+               if (v) {
+                  values.push(v);
+               }
+            }
+         }
+
+         row[field.relationName()] = values;
+         row[field.columnName] = connections;
+      }
+
+      // done!
+   }
+
+   /**
     * @method populate()
     * given the requested condition value, perform any relevant population
     * of the data result.
@@ -504,12 +624,22 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       let allColumns = [];
       columns.forEach((col) => {
          let linkType = `${col.linkType()}:${col.linkViaType()}`;
+         if (linkType == "one:one") {
+            if (col.isSource()) {
+               linkType = "one:many";
+            } else {
+               linkType = "many:one";
+            }
+         }
          switch (linkType) {
             case "one:many":
                allColumns.push(this.populateColumn(col, data, req));
                break;
             case "many:one":
                allColumns.push(this.populateColumnNonSource(col, data, req));
+               break;
+            case "many:many":
+               allColumns.push(this.populateColumnManyMany(col, data, req));
                break;
             default:
                console.log("TODO: figure out additional link types");
