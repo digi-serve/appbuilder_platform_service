@@ -11,6 +11,11 @@ const OAuth = require("oauth-1.0a");
 
 const ABModel = require("./ABModel.js");
 
+const CONCURRENCY_LIMIT = 20;
+// {int}
+// This is the number of parallel operations we want to limit ourselves to
+// so we avoid trippig NetSuit's CONCURRENCY_LIMIT_EXCEEDED
+
 /**
  * (taken from https://github.com/digi-serve/global-hr-update/blob/master/back-end/api/netsuite.js)
  * Make an authorized HTTP request to NetSuite.
@@ -527,22 +532,24 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       // 3) SQL select all the rows from the dest table
       let linkObj = field.datasourceLink;
       let thatPK = linkObj.PK();
+      let listLinkObj = [];
+      if (thatPKs.length > 0) {
+         sql = `SELECT * FROM ${linkObj.dbTableName()}  WHERE ${thatPK} IN ( ${thatPKs.join(
+            ", "
+         )} )`;
 
-      sql = `SELECT * FROM ${linkObj.dbTableName()}  WHERE ${thatPK} IN ( ${thatPKs.join(
-         ", "
-      )} )`;
+         let responseLinkObj = await fetch(
+            this.credentials,
+            URL,
+            "POST",
+            {
+               q: sql,
+            },
+            { Prefer: "transient" }
+         );
 
-      let responseLinkObj = await fetch(
-         this.credentials,
-         URL,
-         "POST",
-         {
-            q: sql,
-         },
-         { Prefer: "transient" }
-      );
-
-      let listLinkObj = responseLinkObj.data.items;
+         listLinkObj = responseLinkObj.data.items;
+      }
       let lookupLinkObj = {};
       for (let i = 0; i < listLinkObj.length; i++) {
          let lObj = listLinkObj[i];
@@ -798,6 +805,22 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          sql = `${sql} WHERE ${where.join(" AND ")}`;
       }
 
+      // Let's not forget SORT:
+      let sorts = [];
+      if (!_.isEmpty(cond.sort)) {
+         cond.sort.forEach((o) => {
+            // o.key. : reference to the field
+            // o.dir. : "ASC" or "DESC"
+            var orderField = this.object.fieldByID(o.key);
+            if (!orderField) return;
+
+            sorts.push(`${orderField.columnName} ${o.dir}`);
+         });
+      }
+      if (sorts.length > 0) {
+         sql = `${sql} ORDER BY ${sorts.join(", ")}`;
+      }
+
       if (req) {
          req.log("Netsuite SQL:", sql);
          req.performance.mark("initial-find");
@@ -884,11 +907,13 @@ module.exports = class ABModelAPINetsuite extends ABModel {
                val = null;
             } else {
                // else format { PK: val }
-
+               /*
                let linkObj = field.datasourceLink;
                if (!linkObj) return;
 
-               val[linkObj.PK()] = updateValue;
+               val[linkObj.PK()] = updateValue; // `${updateValue}`;
+*/
+               val = `${updateValue}`;
             }
 
             baseValues[k] = val;
@@ -898,6 +923,16 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       });
    }
 
+   /**
+    * @method synchronizeRelationValues()
+    * Synchronize the remaining relations values that are not part of the
+    * base values of this object. ( many:one or many:many relationships)
+    * @param {int} id
+    * @param {obj} values
+    *        contains the remaining relation values sent into the update()
+    *        command.
+    * @param {ABUtils.req} req
+    */
    async synchronizeRelationValues(id, values, req) {
       let allColumns = [];
       Object.keys(values).forEach((k) => {
@@ -906,13 +941,19 @@ module.exports = class ABModelAPINetsuite extends ABModel {
 
          let colVals = this.AB.cloneDeep(values[k]);
 
-         allColumns.push(this.syncColumn(id, field, colVals, req));
+         let linkType = `${field.linkType}:${field.linkViaType}`;
+         if (linkType == "many:one") {
+            allColumns.push(this.syncColumnManyOne(id, field, colVals, req));
+         } else {
+            // must be many:many
+            allColumns.push(this.syncColumnManyMany(id, field, colVals, req));
+         }
       });
 
       await Promise.all(allColumns);
    }
 
-   async syncColumn(id, field, values, req) {
+   async syncColumnManyOne(id, field, values, req) {
       let URL = `${this.credentials.NETSUITE_QUERY_BASE_URL}/suiteql`;
 
       let linkField = field.fieldLink;
@@ -968,8 +1009,11 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       if (values.length == 0) return;
 
       let linkField = field.fieldLink;
+      let object = field.object;
       let setVal = {};
-      setVal[linkField.columnName] = id;
+      let newVal = {};
+      newVal[object.PK()] = id; // `"${id}"`;
+      setVal[linkField.columnName] = newVal;
 
       await this.relateOP(id, field, values, setVal, req);
    }
@@ -985,17 +1029,8 @@ module.exports = class ABModelAPINetsuite extends ABModel {
    }
 
    async relateOP(id, field, values, setVal, req) {
-      let URL = `${this.credentials.NETSUITE_QUERY_BASE_URL}/suiteql`;
-
       // let linkField = field.fieldLink;
       let linkObject = field.datasourceLink;
-
-      // let where = `${linkObject.PK()}`;
-      // if (values.length == 1) {
-      //    where = ` ${where} = ${values[0]}`;
-      // } else {
-      //    where = ` ${where} IN ( ${values.join(", ")} )`;
-      // }
 
       let allUpdates = [];
       values.forEach((vid) => {
@@ -1016,6 +1051,211 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       });
 
       await Promise.all(allUpdates);
+   }
+
+   async syncColumnManyMany(id, field, values, req) {
+      let URL = `${this.credentials.NETSUITE_QUERY_BASE_URL}/suiteql`;
+
+      let sql = `SELECT * FROM ${field.settings.joinTable} `;
+
+      let cond = [];
+      // set initial myPK condition
+      cond.push(`${field.settings.joinTableReference}=${id}`);
+
+      // if this joinTable has an active/inactive fields,
+      // then push the active cond
+      if (field.settings.joinActiveField) {
+         cond.push(
+            `${field.settings.joinActiveField}=${field.settings.joinActiveValue}`
+         );
+      }
+
+      // now combine the full SQL here
+      sql = `${sql} WHERE ${cond.join(" AND ")}`;
+
+      if (req) {
+         req.performance.mark(`${field.columnName}-lookup`);
+      }
+      // first get the old values:
+      let response = await fetch(
+         this.credentials,
+         URL,
+         "POST",
+         {
+            q: sql,
+         },
+         { Prefer: "transient" }
+      );
+
+      let oldValues = response.data.items;
+      if (req) {
+         req.performance.measure(`${field.columnName}-lookup`);
+      }
+
+      // just want the PKs of the incoming values here:
+      let linkField = field.fieldLink;
+      let PK = linkField.settings.joinTableReference;
+      oldValues = oldValues.map((v) => v[PK] || v);
+
+      let removeThese = [];
+      oldValues.forEach((v) => {
+         // if v is in values,
+         let newV = values.find((nV) => nV == v);
+         if (newV) {
+            // if we found it, then remove that entry from values
+            values = values.filter((nV) => nV != v);
+         } else {
+            // we didn't find it, so add it to removeThese
+            removeThese.push(v);
+         }
+      });
+
+      let addDrop = [];
+
+      addDrop.push(this.relateMany(id, field, values, req));
+      addDrop.push(this.unRelateMany(id, field, removeThese, req));
+
+      await Promise.all(addDrop);
+   }
+
+   async relateMany(id, field, values, req) {
+      if (values.length == 0) return;
+
+      let url = `${this.credentials.NETSUITE_BASE_URL}/${field.settings.joinTable}`;
+
+      let linkField = field.fieldLink;
+
+      let allRelates = [];
+      let parallelCount = 0;
+      for (let i = 0; i < values.length; i++) {
+         let v = values[i];
+
+         let newVal = {};
+         newVal[field.settings.joinTableReference] = id;
+         newVal[linkField.settings.joinTableReference] = v;
+
+         if (field.settings.joinActiveField) {
+            newVal[field.settings.joinActiveField] =
+               field.settings.joinActiveValue;
+         }
+
+         allRelates.push(fetch(this.credentials, url, "POST", newVal));
+
+         // check concurrency limit
+         parallelCount++;
+         if (parallelCount >= CONCURRENCY_LIMIT) {
+            await Promise.all(allRelates); // wait for those to complete
+            allRelates = []; // start next batch
+            parallelCount = 0;
+         }
+      }
+
+      // finish off any remaining operations
+      await Promise.all(allRelates);
+   }
+
+   async unRelateMany(id, field, values, req) {
+      if (values.length == 0) return;
+
+      let linkField = field.fieldLink;
+
+      // get the related rows we need to unrelate:
+      let URL = `${this.credentials.NETSUITE_QUERY_BASE_URL}/suiteql`;
+
+      let sql = `SELECT * FROM ${field.settings.joinTable}`;
+
+      let conditions = [];
+      conditions.push(`${field.settings.joinTableReference}=${id}`);
+      conditions.push(
+         `${linkField.settings.joinTableReference} IN ( ${values.join(", ")} )`
+      );
+      if (field.settings.joinActiveField) {
+         conditions.push(
+            `${field.settings.joinActiveField}=${field.settings.joinActiveValue}`
+         );
+      }
+
+      sql = `${sql} WHERE ${conditions.join(" AND ")}`;
+
+      let response = await fetch(
+         this.credentials,
+         URL,
+         "POST",
+         {
+            q: sql,
+         },
+         { Prefer: "transient" }
+      );
+
+      let oldValues = response.data.items;
+      oldValues = oldValues.map((v) => v[field.settings.joinTablePK]);
+
+      // there are 2 ways to unrelate
+      // 1) by setting the link inactive
+      // 2) by removing the link
+
+      if (field.settings.joinActiveField) {
+         await this.unRelateManyInactive(id, field, oldValues, req);
+      } else {
+         await this.unRelateManyDelete(id, field, oldValues, req);
+      }
+   }
+
+   async unRelateManyInactive(id, field, pks, req) {
+      let url = `${this.credentials.NETSUITE_BASE_URL}/${field.settings.joinTable}/`;
+
+      let updateValue = {};
+      updateValue[field.settings.joinActiveField] =
+         field.settings.joinInActiveValue;
+
+      if (req) {
+         req.performance.mark("update-unrelate-many");
+      }
+
+      let allUnRelates = [];
+      let parallelCount = 0;
+      for (let i = 0; i < pks.length; i++) {
+         allUnRelates.push(
+            await fetch(
+               this.credentials,
+               `${url}${pks[i]}`,
+               "PATCH",
+               updateValue
+            )
+         );
+         parallelCount++;
+         if (parallelCount >= CONCURRENCY_LIMIT) {
+            await Promise.all(allUnRelates);
+            allUnRelates = [];
+            parallelCount = 0;
+         }
+      }
+
+      await Promise.all(allUnRelates);
+   }
+
+   async unRelateManyDelete(id, field, pks, req) {
+      let url = `${this.credentials.NETSUITE_BASE_URL}/${field.settings.joinTable}/`;
+
+      if (req) {
+         req.performance.mark("update-unrelate-many");
+      }
+
+      let allUnRelates = [];
+      let parallelCount = 0;
+      for (let i = 0; i < pks.length; i++) {
+         allUnRelates.push(
+            await fetch(this.credentials, `${url}${pks[i]}`, "DELETE")
+         );
+         parallelCount++;
+         if (parallelCount >= CONCURRENCY_LIMIT) {
+            await Promise.all(allUnRelates);
+            allUnRelates = [];
+            parallelCount = 0;
+         }
+      }
+
+      await Promise.all(allUnRelates);
    }
 
    /**
@@ -1082,6 +1322,19 @@ module.exports = class ABModelAPINetsuite extends ABModel {
             }
          });
 
+      // Booleans should be "T" or "F"
+      this.object
+         .fields((f) => f.key == "boolean")
+         .forEach((f) => {
+            if (typeof baseValues[f.columnName] != "undefined") {
+               if (baseValues[f.columnName]) {
+                  baseValues[f.columnName] = "T";
+               } else {
+                  baseValues[f.columnName] = "F";
+               }
+            }
+         });
+
       let validationErrors = this.object.isValidData(baseValues);
       if (validationErrors.length > 0) {
          return Promise.reject(validationErrors);
@@ -1097,6 +1350,20 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       let url = `${
          this.credentials.NETSUITE_BASE_URL
       }/${this.object.dbTableName()}/${id}`;
+
+      // // insert our replace header
+      // let allConnectionColumns = this.object
+      //    .connectFields()
+      //    .map((f) => f.columnName);
+      // let replace = [];
+      // Object.keys(baseValues).forEach((k) => {
+      //    if (allConnectionColumns.indexOf(k) > -1) {
+      //       replace.push(k);
+      //    }
+      // });
+      // if (replace.length > 0) {
+      //    url = `${url}?replace=${replace.join(",")}`;
+      // }
 
       if (req) {
          req.log(
