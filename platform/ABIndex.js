@@ -153,13 +153,13 @@ module.exports = class ABIndex extends ABIndexCore {
       if (this.fields == null || !this.fields.length) {
          req.notify.builder(
             new Error(
-               `ABIndex[${this.name}][${this.id}] defined with no fields referenced`
+               `ABIndex[${this.name}][${this.id}] defined with no fields referenced`,
             ),
             {
                context: "ABIndex.migrateCreate()",
                field: this,
-               AB: this.AB,
-            }
+               // AB: this.AB,
+            },
          );
          return Promise.resolve();
       }
@@ -311,7 +311,7 @@ module.exports = class ABIndex extends ABIndexCore {
                   tableName,
                   indexName,
                   field: this,
-                  AB: this.AB,
+                  // AB: this.AB,
                });
 
                reject(err);
