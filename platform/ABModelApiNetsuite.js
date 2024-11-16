@@ -509,6 +509,17 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       );
 
       let list = response.data.items;
+
+      // workaround: remove any inactive entries
+      if (field.settings.joinActiveField) {
+         let val = field.settings.joinActiveValue;
+         list = list.filter(
+            (o) =>
+               o[field.settings.joinActiveField] == val ||
+               o[field.settings.joinActiveField.toLowerCase()] == val
+         );
+      }
+
       let hashConnections = {
          /* thisPK : { thatPK1:true, thatPK2: true } */
       };
@@ -931,9 +942,12 @@ module.exports = class ABModelAPINetsuite extends ABModel {
     * @param {obj} values
     *        contains the remaining relation values sent into the update()
     *        command.
+    * @param {obj} baseValues
+    *        the non connection field values for this entry. (we need this
+    *        for accessing the entity value in many:many rships)
     * @param {ABUtils.req} req
     */
-   async synchronizeRelationValues(id, values, req) {
+   async synchronizeRelationValues(id, values, baseValues, req) {
       let allColumns = [];
       Object.keys(values).forEach((k) => {
          let field = this.object.connectFields((f) => f.columnName == k)[0];
@@ -946,7 +960,9 @@ module.exports = class ABModelAPINetsuite extends ABModel {
             allColumns.push(this.syncColumnManyOne(id, field, colVals, req));
          } else {
             // must be many:many
-            allColumns.push(this.syncColumnManyMany(id, field, colVals, req));
+            allColumns.push(
+               this.syncColumnManyMany(id, field, colVals, baseValues, req)
+            );
          }
       });
 
@@ -1053,7 +1069,7 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       await Promise.all(allUpdates);
    }
 
-   async syncColumnManyMany(id, field, values, req) {
+   async syncColumnManyMany(id, field, values, baseValues, req) {
       let URL = `${this.credentials.NETSUITE_QUERY_BASE_URL}/suiteql`;
 
       let sql = `SELECT * FROM ${field.settings.joinTable} `;
@@ -1062,18 +1078,40 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       // set initial myPK condition
       cond.push(`${field.settings.joinTableReference}=${id}`);
 
-      // if this joinTable has an active/inactive fields,
-      // then push the active cond
-      if (field.settings.joinActiveField) {
-         cond.push(
-            `${field.settings.joinActiveField}=${field.settings.joinActiveValue}`
-         );
-      }
+      //// MAJOR HEADACHE:
+      //// I have been working on figuring out how Netsuite handles
+      //// Boolean values in SQL: SELECT ... WHERE boolField = false|0
+      //// I've tried using:
+      //// boolField = false
+      //// boolField = f
+      //// boolFiled = 0    <--- this worked once, I think
+      //// NOT boolField
+      ////
+      //// However nothing has worked consistently.  I keep getting
+      //// error messages back.
+
+      // // if this joinTable has an active/inactive fields,
+      // // then push the active cond
+      // if (field.settings.joinActiveField) {
+      //    let val = field.settings.joinActiveValue.toLowerCase();
+      //    if (["1", "t", "true"].indexOf(val) > -1) {
+      //       val = true;
+      //       val = 1;
+      //    } else {
+      //       val = false;
+      //       val = 0;
+      //    }
+      //    cond.push(`${field.settings.joinActiveField}=${val}`);
+      // }
+
+      //// Workaround: we will get all the rows, and filter out the
+      //// false values manually:
 
       // now combine the full SQL here
       sql = `${sql} WHERE ${cond.join(" AND ")}`;
 
       if (req) {
+         req.log(sql);
          req.performance.mark(`${field.columnName}-lookup`);
       }
       // first get the old values:
@@ -1090,6 +1128,16 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       let oldValues = response.data.items;
       if (req) {
          req.performance.measure(`${field.columnName}-lookup`);
+      }
+
+      //// workaround: manually filter out the inactive values:
+      if (field.settings.joinActiveField) {
+         let val = field.settings.joinActiveValue;
+         oldValues = oldValues.filter(
+            (o) =>
+               o[field.settings.joinActiveField] == val ||
+               o[field.settings.joinActiveField.toLowerCase()] == val
+         );
       }
 
       // just want the PKs of the incoming values here:
@@ -1112,13 +1160,13 @@ module.exports = class ABModelAPINetsuite extends ABModel {
 
       let addDrop = [];
 
-      addDrop.push(this.relateMany(id, field, values, req));
+      addDrop.push(this.relateMany(id, field, values, baseValues, req));
       addDrop.push(this.unRelateMany(id, field, removeThese, req));
 
       await Promise.all(addDrop);
    }
 
-   async relateMany(id, field, values, req) {
+   async relateMany(id, field, values, baseValues, req) {
       if (values.length == 0) return;
 
       let url = `${this.credentials.NETSUITE_BASE_URL}/${field.settings.joinTable}`;
@@ -1130,15 +1178,56 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       for (let i = 0; i < values.length; i++) {
          let v = values[i];
 
+         // // subsidary: {id: XXX}. format
+         // let newVal = {};
+         // let fieldVal = {};
+         // fieldVal[field.object.PK()] = `${id}`;
+         // newVal[field.settings.joinTableReference] = fieldVal;
+         // let linkVal = {};
+         // linkVal[linkField.object.PK()] = `${v}`;
+         // newVal[linkField.settings.joinTableReference] = linkVal;
+
          let newVal = {};
          newVal[field.settings.joinTableReference] = id;
          newVal[linkField.settings.joinTableReference] = v;
 
          if (field.settings.joinActiveField) {
-            newVal[field.settings.joinActiveField] =
-               field.settings.joinActiveValue;
+            let val = field.settings.joinActiveValue.toLowerCase();
+            if (["1", "t", "true"].indexOf(val) > -1) {
+               val = true;
+            } else {
+               val = false;
+            }
+            newVal[field.settings.joinActiveField] = val;
          }
 
+         // find the Entity Field on this Object so we can set the Entity value
+         // on the connection:
+         let thisEntityField = this.object.connectFields((f) => {
+            // does this field connect to an Object that has tablename "subsidary"
+            if (f.datasourceLink.tableName == "subsidiary") {
+               return true;
+            }
+            return false;
+         })[0];
+
+         let entityValue = baseValues[thisEntityField?.columnName];
+         if (!entityValue) {
+            let errorMissingEntity = new Error(
+               "Could not find Entity value to make many:many joins"
+            );
+            if (req) {
+               req.log(errorMissingEntity);
+            }
+            throw errorMissingEntity;
+         }
+         newVal[field.settings.joinTableEntity] = entityValue;
+
+         if (req) {
+            req.log("relateMany:");
+            req.log(url);
+            req.log(newVal);
+         }
          allRelates.push(fetch(this.credentials, url, "POST", newVal));
 
          // check concurrency limit
@@ -1169,11 +1258,13 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       conditions.push(
          `${linkField.settings.joinTableReference} IN ( ${values.join(", ")} )`
       );
-      if (field.settings.joinActiveField) {
-         conditions.push(
-            `${field.settings.joinActiveField}=${field.settings.joinActiveValue}`
-         );
-      }
+
+      // Workaround:  manually filter the inactive values
+      // if (field.settings.joinActiveField) {
+      //    conditions.push(
+      //       `${field.settings.joinActiveField}=${field.settings.joinActiveValue}`
+      //    );
+      // }
 
       sql = `${sql} WHERE ${conditions.join(" AND ")}`;
 
@@ -1188,6 +1279,17 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       );
 
       let oldValues = response.data.items;
+
+      // workaround: manually filter the inactive values
+      if (field.settings.joinActiveField) {
+         let val = field.settings.joinActiveValue;
+         oldValues = oldValues.filter(
+            (o) =>
+               o[field.settings.joinActiveField] == val ||
+               o[field.settings.joinActiveField.toLowerCase()] == val
+         );
+      }
+
       oldValues = oldValues.map((v) => v[field.settings.joinTablePK]);
 
       // there are 2 ways to unrelate
@@ -1205,8 +1307,16 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       let url = `${this.credentials.NETSUITE_BASE_URL}/${field.settings.joinTable}/`;
 
       let updateValue = {};
-      updateValue[field.settings.joinActiveField] =
-         field.settings.joinInActiveValue;
+
+      let val = false;
+      if (
+         ["1", "t", "true"].indexOf(
+            field.settings.joinInActiveValue.toLowerCase()
+         ) > -1
+      ) {
+         val = true;
+      }
+      updateValue[field.settings.joinActiveField] = val;
 
       if (req) {
          req.performance.mark("update-unrelate-many");
@@ -1322,18 +1432,18 @@ module.exports = class ABModelAPINetsuite extends ABModel {
             }
          });
 
-      // Booleans should be "T" or "F"
-      this.object
-         .fields((f) => f.key == "boolean")
-         .forEach((f) => {
-            if (typeof baseValues[f.columnName] != "undefined") {
-               if (baseValues[f.columnName]) {
-                  baseValues[f.columnName] = "T";
-               } else {
-                  baseValues[f.columnName] = "F";
-               }
-            }
-         });
+      // // Booleans should be "T" or "F"
+      // this.object
+      //    .fields((f) => f.key == "boolean")
+      //    .forEach((f) => {
+      //       if (typeof baseValues[f.columnName] != "undefined") {
+      //          if (baseValues[f.columnName]) {
+      //             baseValues[f.columnName] = "T";
+      //          } else {
+      //             baseValues[f.columnName] = "F";
+      //          }
+      //       }
+      //    });
 
       let validationErrors = this.object.isValidData(baseValues);
       if (validationErrors.length > 0) {
@@ -1389,7 +1499,12 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          req.performance.mark("update-syncRelationValues");
       }
 
-      await this.synchronizeRelationValues(id, updateRelationParams, req);
+      await this.synchronizeRelationValues(
+         id,
+         updateRelationParams,
+         baseValues,
+         req
+      );
 
       if (req) {
          req.performance.measure("update-syncRelationValues");
