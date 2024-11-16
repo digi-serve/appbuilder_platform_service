@@ -25,11 +25,11 @@ const ABFieldConnectCore = require(path.join(__dirname, "..", "..", "core", "dat
 function getJuntionInfo(objectName, linkObjectName) {
    var sourceModel = _.filter(
       sails.models,
-      (m) => m.tableName == objectName
+      (m) => m.tableName == objectName,
    )[0];
    var targetModel = _.filter(
       sails.models,
-      (m) => m.tableName == linkObjectName
+      (m) => m.tableName == linkObjectName,
    )[0];
    var juntionModel = _.filter(sails.models, (m) => {
       return (
@@ -69,12 +69,12 @@ function getJuntionInfo(objectName, linkObjectName) {
    var sourceColumnName = _.filter(
          juntionModel.definition,
          (def) =>
-            def.foreignKey == true && def.references == sourceModel.identity
+            def.foreignKey == true && def.references == sourceModel.identity,
       )[0].via,
       targetColumnName = _.filter(
          juntionModel.definition,
          (def) =>
-            def.foreignKey == true && def.references == targetModel.identity
+            def.foreignKey == true && def.references == targetModel.identity,
       )[0].via;
 
    return {
@@ -191,7 +191,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
          if (!linkObject) {
             // Builder Notification already published in this.datasourceLink
             var err = new Error(
-               `Error: ABFieldConnect.migrateCreate(): Unable to find datasourceLink for object[${this.object.label}]->field[${this.label}][${this.id}]`
+               `Error: ABFieldConnect.migrateCreate(): Unable to find datasourceLink for object[${this.object.label}]->field[${this.label}][${this.id}]`,
             );
             return reject(err);
          }
@@ -207,8 +207,8 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                }]->field[${this.label}][${this.id}] : settings[${JSON.stringify(
                   this.settings,
                   null,
-                  4
-               )}]`
+                  4,
+               )}]`,
             );
             missingFieldLink.field = this.toObj();
             reject(missingFieldLink);
@@ -241,13 +241,13 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                   // check column already exist
                   (next) => {
                      req.retry(() =>
-                        knex.schema.hasColumn(tableName, this.columnName)
+                        knex.schema.hasColumn(tableName, this.columnName),
                      )
                         .then((exists) => {
                            didExist = exists;
                            if (exists) {
                               req.log(
-                                 `   ... exists O[${this.object.name}].f[${this.columnName}] -> skip create attempt.`
+                                 `   ... exists O[${this.object.name}].f[${this.columnName}] -> skip create attempt.`,
                               );
                            }
                            next(null, exists);
@@ -261,7 +261,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                      this.getIndexColumnType(
                         knex,
                         indexField.object.tableName,
-                        indexField.columnName
+                        indexField.columnName,
                      )
                         .then((result) => {
                            indexType = result;
@@ -273,7 +273,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                   (exists, next) => {
                      if (exists) return next();
                      req.log(
-                        `   ... creating O[${this.object.name}].f[${this.columnName}]`
+                        `   ... creating O[${this.object.name}].f[${this.columnName}]`,
                      );
                      req.retry(() =>
                         knex.schema.table(tableName, (t) => {
@@ -281,7 +281,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                               t,
                               this.columnName,
                               indexType,
-                              linkFK
+                              linkFK,
                            );
 
                            // NOTE: federated table does not support reference column
@@ -296,15 +296,15 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                                  .withKeyName(
                                     this.getConstraintName(
                                        this.object.name,
-                                       this.columnName
-                                    )
+                                       this.columnName,
+                                    ),
                                  );
                            } else {
                               req.log(
-                                 `[1:M] object[${this.object.label}]->Field[${this.label}][${this.id}] skipping reference column creation: !linkObject.isExternal[${linkObject.isExternal}] && this.connName[${this.connName}] == linkObject.connName[${linkObject.connName}]`
+                                 `[1:M] object[${this.object.label}]->Field[${this.label}][${this.id}] skipping reference column creation: !linkObject.isExternal[${linkObject.isExternal}] && this.connName[${this.connName}] == linkObject.connName[${linkObject.connName}]`,
                               );
                            }
-                        })
+                        }),
                      )
                         .then(() => {
                            next();
@@ -349,7 +349,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                   // check column already exist
                   (next) => {
                      req.retry(() =>
-                        knex.schema.hasColumn(tableName, this.columnName)
+                        knex.schema.hasColumn(tableName, this.columnName),
                      )
                         .then((exists) => {
                            next(null, exists);
@@ -363,7 +363,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                      this.getIndexColumnType(
                         knex,
                         indexField.object.tableName,
-                        indexField.columnName
+                        indexField.columnName,
                      )
                         .then((result) => {
                            indexType = result;
@@ -381,7 +381,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                               t,
                               this.columnName,
                               indexType,
-                              linkFK
+                              linkFK,
                            );
 
                            // NOTE: federated table does not support reference column
@@ -396,12 +396,12 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                                  .withKeyName(
                                     this.getConstraintName(
                                        this.object.name,
-                                       this.columnName
-                                    )
+                                       this.columnName,
+                                    ),
                                  );
                            } else {
                               req.log(
-                                 `[1:1] object[${this.object.label}]->Field[${this.label}][${this.id}] skipping reference column creation: !linkObject.isExternal[${linkObject.isExternal}] && this.connName[${this.connName}] == linkObject.connName[${linkObject.connName}]`
+                                 `[1:1] object[${this.object.label}]->Field[${this.label}][${this.id}] skipping reference column creation: !linkObject.isExternal[${linkObject.isExternal}] && this.connName[${this.connName}] == linkObject.connName[${linkObject.connName}]`,
                               );
                            }
 
@@ -410,10 +410,10 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                               .dbTableName(false)
                               .substring(0, 28)}_${this.columnName.substring(
                               0,
-                              28
+                              28,
                            )}_UNIQUE`;
                            t.unique(this.columnName, uniqueName);
-                        })
+                        }),
                      )
                         .then(() => {
                            next();
@@ -430,7 +430,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                (err) => {
                   if (err) reject(err);
                   else resolve();
-               }
+               },
             );
          }
 
@@ -448,14 +448,17 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                      if (!linkColumnName) {
                         req.log(
                            "ABFieldConnect:migrateCreate(): could not resolve linkColumnName. This is unexpected.",
-                           this.toObj()
+                           this.toObj(),
                         );
                         next(null, true);
                         return;
                      }
 
                      req.retry(() =>
-                        linkKnex.schema.hasColumn(linkTableName, linkColumnName)
+                        linkKnex.schema.hasColumn(
+                           linkTableName,
+                           linkColumnName,
+                        ),
                      )
                         .then((exists) => {
                            next(null, exists);
@@ -469,7 +472,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                      this.getIndexColumnType(
                         knex,
                         indexField.object.tableName,
-                        indexField.columnName
+                        indexField.columnName,
                      )
                         .then((result) => {
                            indexType = result;
@@ -487,7 +490,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                               t,
                               linkColumnName,
                               indexType,
-                              linkFK
+                              linkFK,
                            );
 
                            // NOTE: federated table does not support reference column
@@ -502,15 +505,15 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                                  .withKeyName(
                                     this.getConstraintName(
                                        linkObject.name,
-                                       linkColumnName
-                                    )
+                                       linkColumnName,
+                                    ),
                                  );
                            } else {
                               req.log(
-                                 `[M:1] object[${this.object.label}]->Field[${this.label}][${this.id}] skipping linkCol creation: !isExternal[${this.object.isExternal}]  && connName[${this.connName}] == linkObj.connName[${linkObject.connName}]`
+                                 `[M:1] object[${this.object.label}]->Field[${this.label}][${this.id}] skipping linkCol creation: !isExternal[${this.object.isExternal}]  && connName[${this.connName}] == linkObj.connName[${linkObject.connName}]`,
                               );
                            }
-                        })
+                        }),
                      )
                         .then(() => {
                            next();
@@ -531,7 +534,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                   } else {
                      resolve();
                   }
-               }
+               },
             );
          }
 
@@ -575,14 +578,14 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                               this.getIndexColumnType(
                                  knex,
                                  indexField.object.tableName,
-                                 indexField.columnName
+                                 indexField.columnName,
                               )
                                  .then((result) => {
                                     indexType = result;
                                     next();
                                  })
                                  .catch(bad);
-                           })
+                           }),
                      )
                      .then(
                         () =>
@@ -593,14 +596,14 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                               this.getIndexColumnType(
                                  knex,
                                  indexField2.object.tableName,
-                                 indexField2.columnName
+                                 indexField2.columnName,
                               )
                                  .then((result) => {
                                     indexType2 = result;
                                     next();
                                  })
                                  .catch(bad);
-                           })
+                           }),
                      )
                      .then(() =>
                         req.retry(() =>
@@ -613,11 +616,11 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
 
                               var sourceFkName = getFkName(
                                  this.object.name,
-                                 this.columnName
+                                 this.columnName,
                               );
                               var targetFkName = getFkName(
                                  linkObject.name,
-                                 linkColumnName
+                                 linkColumnName,
                               );
 
                               // create columns
@@ -643,14 +646,14 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                                  t,
                                  this.object.name,
                                  indexType,
-                                 linkFK
+                                 linkFK,
                               );
 
                               linkCol2 = this.setNewColumnSchema(
                                  t,
                                  linkObject.name,
                                  indexType2,
-                                 linkFK2
+                                 linkFK2,
                               );
 
                               // NOTE: federated table does not support reference column
@@ -672,7 +675,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                                     .onDelete("SET NULL");
                               } else {
                                  req.log(
-                                    `[M:N] object[${this.object.label}]->Field[${this.label}][${this.id}] skipping linkCol creation: !this.object.isExternal[${this.object.isExternal}] && !linkObject.isExternal[${linkObject.isExternal}] && connName[${this.connName}] == linkObj.connName[${linkObject.connName}]`
+                                    `[M:N] object[${this.object.label}]->Field[${this.label}][${this.id}] skipping linkCol creation: !this.object.isExternal[${this.object.isExternal}] && !linkObject.isExternal[${linkObject.isExternal}] && connName[${this.connName}] == linkObj.connName[${linkObject.connName}]`,
                                  );
                               }
 
@@ -688,8 +691,8 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                               // 	.inTable(linkTableName)
                               // 	.withKeyName(targetFkName)
                               // 	.onDelete('SET NULL');
-                           })
-                        )
+                           }),
+                        ),
                      )
                      .then(() => {
                         resolve();
@@ -759,7 +762,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
             var sourceKnex = knex;
             if (!this.settings.isSource) {
                sourceKnex = this.AB.Knex.connection(
-                  this.datasourceLink.connName
+                  this.datasourceLink.connName,
                );
             }
 
@@ -775,14 +778,14 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
             tasks.push(
                knex.schema.table(tableName, (t) => {
                   t.dropUnique(this.columnName);
-               })
+               }),
             );
 
             // Drop Index
             tasks.push(
                knex.schema.table(tableName, (t) => {
                   t.dropIndex(this.columnName);
-               })
+               }),
             );
 
             // Drop Foreign key
@@ -790,9 +793,9 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                knex.schema.table(tableName, (t) => {
                   t.dropForeign(
                      this.columnName,
-                     this.getConstraintName(this.object.name, this.columnName)
+                     this.getConstraintName(this.object.name, this.columnName),
                   );
-               })
+               }),
             );
 
             Promise.all(tasks)
@@ -900,7 +903,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
          else {
             myParameter[this.columnName] = this.getRelationValue(
                myParameter[this.columnName],
-               { forUpdate: true }
+               { forUpdate: true },
             );
 
             // if (PK == "id") {
@@ -956,13 +959,13 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
 
       if (this.object.isExternal && linkObject.isExternal) {
          var errorNoSails = new Error(
-            "ABFieldConnect.joinTableName(): two ABObjectExternal are connected and current code wants to search sails.models for the connection info. That's a problem"
+            "ABFieldConnect.joinTableName(): two ABObjectExternal are connected and current code wants to search sails.models for the connection info. That's a problem",
          );
          throw errorNoSails;
 
          var juntionModel = getJuntionInfo(
             this.object.tableName,
-            this.datasourceLink.tableName
+            this.datasourceLink.tableName,
          );
 
          tableName = juntionModel.tableName;
@@ -985,7 +988,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
          // if columnName is not set, we can't proceed:
          if (!columnName) {
             var tryThisField = linkObject.fields(
-               (f) => f.id == this.settings.linkColumn
+               (f) => f.id == this.settings.linkColumn,
             )[0];
             if (tryThisField) {
                columnName = tryThisField.columnName;
@@ -1003,7 +1006,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
             "JOINMN",
             sourceObjectName, // table name
             targetObjectName, // linked table name
-            columnName
+            columnName,
          ); // column name
       }
 
@@ -1039,7 +1042,7 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
       if (this.object.isExternal && objectLink.isExternal) {
          var juntionModel = getJuntionInfo(
             this.object.tableName,
-            this.datasourceLink.tableName
+            this.datasourceLink.tableName,
          );
 
          sourceColumnName = juntionModel.sourceColumnName;

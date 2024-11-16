@@ -5,7 +5,7 @@ const ABObjectCore = require(path.join(
    __dirname,
    "..",
    "core",
-   "ABObjectCore.js"
+   "ABObjectCore.js",
 ));
 // const Model = require("objection").Model;
 // const ABModel = require(path.join(__dirname, "ABModel.js"));
@@ -63,7 +63,7 @@ module.exports = class ABClassObject extends ABObjectCore {
          let currViewId = attributes.objectWorkspaceViews.currentViewID;
 
          let currView = attributes.objectWorkspaceViews.list.filter(
-            (v) => v.id == currViewId
+            (v) => v.id == currViewId,
          )[0];
          if (currView) {
             this.objectWorkspace.filterConditions =
@@ -84,7 +84,7 @@ module.exports = class ABClassObject extends ABObjectCore {
          } else {
             let appName = app.name || "GEN";
             this.tableName = this.AB.rules.toObjectNameFormat(
-               `${appName}_${this.name}`
+               `${appName}_${this.name}`,
             );
          }
 
@@ -219,7 +219,7 @@ module.exports = class ABClassObject extends ABObjectCore {
             // export object
             // export fields that don't connect to other NonSystemObjects
             exportObject(
-               (f) => !f.isConnection || f.datasourceLink.isSystemObject
+               (f) => !f.isConnection || f.datasourceLink.isSystemObject,
             );
          }
 
@@ -285,13 +285,13 @@ module.exports = class ABClassObject extends ABObjectCore {
             SiteUser.find({
                where: { username: condDefaults.username, isActive: 1 },
                populate: ["SITE_ROLE", "SITE_SCOPE"],
-            })
+            }),
          ).then((list) => {
             var user = list[0];
             if (!user) {
                // This is unexpected ...
                var error = new Error(
-                  `ABObject.includeScopes(): unknown or inactive user[${condDefaults.username}] `
+                  `ABObject.includeScopes(): unknown or inactive user[${condDefaults.username}] `,
                );
                req.notify.developer(error, {
                   context:
@@ -334,12 +334,12 @@ module.exports = class ABClassObject extends ABObjectCore {
 
                req.notify.developer(
                   new Error(
-                     "ABObject.includeScopes(): user has NO ROLES : preventing data access"
+                     "ABObject.includeScopes(): user has NO ROLES : preventing data access",
                   ),
                   {
                      context: "ABObject.includeScopes(): user has NO ROLES",
                      condDefaults,
-                  }
+                  },
                );
                // but continue on since this isn't technically an Error ...
                return resolve();
@@ -464,7 +464,7 @@ module.exports = class ABClassObject extends ABObjectCore {
             (indx.fields || []).filter((f) => f.isConnection).length > 0;
          if (hasConnect) {
             console.log(
-               `:::: STASHING INDEX O[${this.label}].I[${indx.indexName}]`
+               `:::: STASHING INDEX O[${this.label}].I[${indx.indexName}]`,
             );
             this._stashIndexes.push(indx);
             this._indexes = this.indexes(function (o) {
@@ -590,7 +590,7 @@ module.exports = class ABClassObject extends ABObjectCore {
             //// let's go add our normal fields to it:
 
             let normalFields = this.fields(
-               (f) => f && !nonNormalFields.find((c) => c.id == f.id)
+               (f) => f && !nonNormalFields.find((c) => c.id == f.id),
             );
 
             // {fix} ER_TABLE_EXISTS_ERROR: Table '`appbuilder-admin`.`#sql-alter-1-67`' already exists"
@@ -639,7 +639,7 @@ module.exports = class ABClassObject extends ABObjectCore {
                   req.log(
                      `    ... creating -> O[${
                         this.name || this.label
-                     }]->table[${tableName}]`
+                     }]->table[${tableName}]`,
                   );
 
                   return req
@@ -661,7 +661,7 @@ module.exports = class ABClassObject extends ABObjectCore {
 
                            // Adding a new field to store various item properties in JSON (ex: height)
                            t.text("properties");
-                        })
+                        }),
                      )
                      .then(() => {
                         return this.migrateCreateFields(req, knex);
@@ -672,7 +672,7 @@ module.exports = class ABClassObject extends ABObjectCore {
                   req.log(
                      `    ... exists -> O[${
                         this.name || this.label
-                     }] -> table[${tableName}]`
+                     }] -> table[${tableName}]`,
                   );
 
                   // the Object might already exist,  but we need to make sure any added
@@ -1141,7 +1141,7 @@ module.exports = class ABClassObject extends ABObjectCore {
    requestParams(allParameters) {
       var usefulParameters = {};
       this.fields(
-         (f) => !f.isConnection || (f.isConnection && f.linkType() != "many")
+         (f) => !f.isConnection || (f.isConnection && f.linkType() != "many"),
       ).forEach((f) => {
          var p = f.requestParam(allParameters);
          if (p) {
@@ -1271,7 +1271,7 @@ module.exports = class ABClassObject extends ABObjectCore {
                      processPolicy(indx + 1, cb);
                   }
                },
-               req
+               req,
             );
             /*
              * OLD FORMAT:
@@ -1360,7 +1360,7 @@ module.exports = class ABClassObject extends ABObjectCore {
                   // Check user in role
                   if (
                      !(r.users || []).filter(
-                        (u) => (u.id || u) == options.username
+                        (u) => (u.id || u) == options.username,
                      )[0]
                   )
                      return;
@@ -1368,7 +1368,7 @@ module.exports = class ABClassObject extends ABObjectCore {
                   (r.scopes__relation || []).forEach((sData) => {
                      if (
                         !scopes.filter(
-                           (s) => (s.id || s.uuid) == (sData.id || sData.uuid)
+                           (s) => (s.id || s.uuid) == (sData.id || sData.uuid),
                         )[0]
                      )
                         scopes.push(sData);
@@ -1484,7 +1484,7 @@ module.exports = class ABClassObject extends ABObjectCore {
             // selectSQL += ` AS ${this.dbTableName(true)}.${f.columnName}`;
             selectSQL += ` AS \`${f.columnName}\``;
             query = query.select(
-               this.AB.Knex.connection(/* connectionName */).raw(selectSQL)
+               this.AB.Knex.connection(/* connectionName */).raw(selectSQL),
             );
          }
       });
@@ -1533,8 +1533,8 @@ module.exports = class ABClassObject extends ABObjectCore {
          }\`)
                   FROM ${connectedObj.dbTableName(true)}
                   WHERE ${connectedObj.dbTableName(true)}.\`${
-            linkField.columnName
-         }\` = ${this.dbTableName(true)}.\`${this.PK()}\`)`;
+                     linkField.columnName
+                  }\` = ${this.dbTableName(true)}.\`${this.PK()}\`)`;
       }
       // 1:M , 1:1 isSource: true
       else if (
@@ -1549,10 +1549,10 @@ module.exports = class ABClassObject extends ABObjectCore {
          }\`)
                   FROM ${connectedObj.dbTableName(true)}
                   WHERE ${connectedObj.dbTableName(
-                     true
+                     true,
                   )}.\`${connectedObj.PK()}\` = ${this.dbTableName(true)}.\`${
-            connectedField.columnName
-         }\`)`;
+                     connectedField.columnName
+                  }\`)`;
       }
       // M:N
       else if (
@@ -1568,11 +1568,11 @@ module.exports = class ABClassObject extends ABObjectCore {
                FROM ${connectedObj.dbTableName(true)}
                INNER JOIN ${joinTable}
                ON ${joinTable}.\`${
-            joinColumnNames.targetColumnName
-         }\` = ${connectedObj.dbTableName(true)}.${connectedObj.PK()}
+                  joinColumnNames.targetColumnName
+               }\` = ${connectedObj.dbTableName(true)}.${connectedObj.PK()}
                WHERE ${joinTable}.\`${
-            joinColumnNames.sourceColumnName
-         }\` = ${this.dbTableName(true)}.\`${this.PK()}\`)`;
+                  joinColumnNames.sourceColumnName
+               }\` = ${this.dbTableName(true)}.\`${this.PK()}\`)`;
       }
 
       return selectSQL;
@@ -1584,7 +1584,7 @@ module.exports = class ABClassObject extends ABObjectCore {
             .replace("{prefix}", f.dbPrefix())
             .replace(
                "{columnName}",
-               fCustomIndex ? fCustomIndex.columnName : f.object.PK()
+               fCustomIndex ? fCustomIndex.columnName : f.object.PK(),
             );
       };
 
