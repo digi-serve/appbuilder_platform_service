@@ -116,6 +116,12 @@ module.exports = class ABProcess extends ABProcessCore {
          }
          return defRecord;
       } catch (error) {
+         // strange edge case: numerous parallel calls can result in attempts
+         // to create the same entry >1 time.  If that is the case, these are
+         // those who weren't the first, so lets return this attempt again:
+         if (error.toString().indexOf("ER_DUP_ENTRY") > -1) {
+            return await this.instanceDefinition(req);
+         }
          this.AB.notify.developer(error, {
             context: "ABProcess.instanceDefinition",
             process: this.toObj(),
