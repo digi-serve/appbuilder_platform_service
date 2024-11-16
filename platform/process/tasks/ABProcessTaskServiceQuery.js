@@ -87,7 +87,7 @@ module.exports = class ABProcessTaskServiceQuery extends (
                   instance,
                   `${
                      this.name
-                  } : QL Operation reported an error: ${err.toString()}`
+                  } : QL Operation reported an error: ${err.toString()}`,
                );
                reject(err);
             });

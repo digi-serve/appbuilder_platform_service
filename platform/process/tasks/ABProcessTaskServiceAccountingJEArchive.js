@@ -33,7 +33,7 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
          return this.errorConfig(
             instance,
             `Could not find Batch object [${this.objectBatch}]`,
-            "objectBatch"
+            "objectBatch",
          );
       }
 
@@ -41,7 +41,7 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
          return this.errorConfig(
             instance,
             `Could not found JE object [${this.objectJE}]`,
-            "objectJE"
+            "objectJE",
          );
       }
 
@@ -49,7 +49,7 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
          return this.errorConfig(
             instance,
             `Could not found JE Archive object [${this.objectJEArchive}]`,
-            "objectJEArchive"
+            "objectJEArchive",
          );
       }
 
@@ -58,13 +58,13 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
          (f) =>
             f &&
             f.key == "connectObject" &&
-            f.settings.linkObject == this.objectBatch
+            f.settings.linkObject == this.objectBatch,
       )[0];
       if (!this.jeBatchField) {
          return this.errorConfig(
             instance,
             "Could not found the connect JE to Batch field",
-            "objectBatch"
+            "objectBatch",
          );
       }
 
@@ -74,7 +74,7 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
          return this.errorConfig(
             instance,
             `AccountingJEArchive.do(): unable to find relevant Batch ID [${this.processBatchValue}]`,
-            "processBatchValue"
+            "processBatchValue",
          );
       }
 
@@ -94,14 +94,14 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
             populate: false,
          },
          null,
-         req
+         req,
       );
 
       if (!batchEntries || batchEntries.length < 1) {
          return this.errorConfig(
             instance,
             `AccountingJEArchive.do(): unable to find Batch data for batchID[${currentBatchID}]`,
-            "currentBatchID"
+            "currentBatchID",
          );
       }
 
@@ -130,13 +130,13 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
             populate: true,
          },
          null,
-         req
+         req,
       );
 
       // Run Process
       const knex = this.AB.Knex.connection();
       const result = await this._req.retry(() =>
-         knex.raw(`CALL \`JEARCHIVE_PROCESS\`("${currentBatchID}");`)
+         knex.raw(`CALL \`JEARCHIVE_PROCESS\`("${currentBatchID}");`),
       );
       const responseVals = result[0];
       const resultVals = responseVals[0];
@@ -144,7 +144,7 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
       this.newJEArchIds = this.AB.uniq(
          resultVals
             .map((item) => item[this.jeArchiveObject.PK()])
-            .filter((id)=> id)
+            .filter((id) => id),
       );
 
       // Pull JE Archives
@@ -163,7 +163,7 @@ module.exports = class AccountingFPYearClose extends AccountingJEArchiveCore {
             populate: true,
          },
          null,
-         req
+         req,
       );
 
       // Broadcast

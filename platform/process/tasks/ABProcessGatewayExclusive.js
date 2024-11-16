@@ -39,7 +39,7 @@ module.exports = class ABProcessGatewayExclusive extends (
 
          // check to see if one of my conditions are true:
          var myOutgoingConnections = this.process.connectionsOutgoing(
-            this.diagramID
+            this.diagramID,
          );
          for (var c = 0; c < myOutgoingConnections.length; c++) {
             var conn = myOutgoingConnections[c];
@@ -67,7 +67,7 @@ module.exports = class ABProcessGatewayExclusive extends (
                instance,
                `chosen path towards ${
                   this.conditions[chosenPath].label || chosenPath
-               }`
+               }`,
             );
             var data = {
                chosenPath: chosenPath,

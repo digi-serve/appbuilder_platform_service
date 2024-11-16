@@ -34,7 +34,7 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
          if (!currentFiscalPeriodID) {
             this.log(instance, "unable to find relevant Fiscal Period ID");
             var error = new Error(
-               "AccountingFPClose.do(): unable to find relevant Fiscal Period ID"
+               "AccountingFPClose.do(): unable to find relevant Fiscal Period ID",
             );
             reject(error);
             return;
@@ -44,8 +44,8 @@ module.exports = class AccountingFPClose extends AccountingFPCloseCore {
                const knex = this.AB.Knex.connection();
                return this._req.retry(() =>
                   knex.raw(
-                     `CALL \`CLOSE_FP_PROCESS\`("${currentFiscalPeriodID}");`
-                  )
+                     `CALL \`CLOSE_FP_PROCESS\`("${currentFiscalPeriodID}");`,
+                  ),
                );
             })
             // Final step
