@@ -177,11 +177,17 @@ class ABQLSetPluck extends ABQLSetPluckCore {
                         value: this.AB.uniq(ids),
                      });
                   }
+               } else {
+                  // there were no ids, so let's make sure we don't gather anything
+                  nextContext._condition = cond;
+                  nextContext.object = linkObj;
+                  // nextContext.data = [];
+                  return nextContext;
                }
 
                return new Promise((resolve, reject) => {
                   req.retry(() =>
-                     linkObj.model().find({ where: cond, populate: true }, req)
+                     linkObj.model().find({ where: cond, populate: true }, req),
                   )
                      .then((rows) => {
                         // Special Formatting for Form.io fields.
