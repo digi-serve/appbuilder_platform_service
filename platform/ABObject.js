@@ -525,7 +525,7 @@ module.exports = class ABClassObject extends ABObjectCore {
          req.notify.developer(err, {
             context: `field[${f.name || f.label}].migrateCreate(): error:`,
             field: f,
-            AB: this.AB,
+            // AB: this.AB,
          });
          throw err;
       });

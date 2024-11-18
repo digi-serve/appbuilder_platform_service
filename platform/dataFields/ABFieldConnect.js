@@ -316,25 +316,19 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                   if (err) {
                      // if we already had that
                      if (err.code === "ER_DUP_FIELDNAME") {
-                        // req.notify.developer(err, {
-                        //    context: "ABFieldConnect.migrateCreate()",
-                        //    didExist,
-                        //    tableName,
-                        //    columnName: this.columnName,
-                        // });
                         resolve();
                         return;
                      }
-                     req.notify.developer(err, {
+                     this.AB.notify.developer(err, {
                         context: "ABFieldConnect.migrateCreate()",
                         field: this,
                         tableName,
                         columnName: this.columnName,
-                        AB: this.AB,
+                        // AB: this.AB,
                      });
                      reject(err);
                   } else resolve();
-               }
+               },
             );
          }
 
@@ -712,12 +706,12 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
                            req.notify.developer(err, {
                               context: "ABFieldConnect.migrateCreate()",
                               field: this,
-                              AB: this.AB,
+                              // AB: this.AB,
                            });
                            reject(err);
                         }
                      });
-               }
+               },
             );
          } else {
             resolve();
