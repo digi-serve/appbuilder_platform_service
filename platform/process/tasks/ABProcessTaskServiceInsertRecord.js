@@ -24,7 +24,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
          return this.errorConfig(
             instance,
             "Could not find the object to insert record task",
-            "objectID"
+            "objectID",
          );
       }
 
@@ -63,14 +63,14 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                                     populate: true,
                                  },
                                  null,
-                                 req
-                              )
+                                 req,
+                              ),
                            )
                            .then((result) => {
                               next(this.getDataValue(instance, result[0]));
                            })
                            .catch(bad);
-                     })
+                     }),
                );
             });
          }
@@ -85,7 +85,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
             Promise.resolve()
                .then(() => pullTask())
                .then((val) =>
-                  this._req.retry(() => this.object.model().create(val))
+                  this._req.retry(() => this.object.model().create(val)),
                )
                // NOTE: .create() returns the fully populated instance already.
                // .then((record) =>
@@ -109,10 +109,10 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
 
                   this.log(
                      instance,
-                     `Insert a new row to Object: [${this.object.label}] - Row ID: [${result?.id}]`
+                     `Insert a new row to Object: [${this.object.label}] - Row ID: [${result?.id}]`,
                   );
                   return Promise.resolve();
-               })
+               }),
          );
       });
 
@@ -234,8 +234,8 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                   f.id == linkFieldIds[0] ||
                   f.columnName == linkFieldIds[0] ||
                   (f.translations || []).filter(
-                     (tran) => tran.label == linkFieldIds[0]
-                  ).length
+                     (tran) => tran.label == linkFieldIds[0],
+                  ).length,
             )[0];
             if (!field) return null;
 
@@ -250,8 +250,8 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                      f.id == linkFieldIds[1] ||
                      f.columnName == linkFieldIds[1] ||
                      (f.translations || []).filter(
-                        (tran) => tran.label == linkFieldIds[1]
-                     ).length
+                        (tran) => tran.label == linkFieldIds[1],
+                     ).length,
                )[0];
                if (!fieldLink) return null;
 
@@ -287,8 +287,8 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                      f.id == fieldId ||
                      f.columnName == fieldId ||
                      (f.translations || []).filter(
-                        (tran) => tran.label == fieldId
-                     ).length
+                        (tran) => tran.label == fieldId,
+                     ).length,
                )[0];
                if (!field) return null;
 
@@ -314,14 +314,14 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                result[field.columnName] = getFieldValue(
                   this.objectOfStartElement,
                   item.value,
-                  startData
+                  startData,
                );
                break;
             case "3": // update with previous data step
                result[field.columnName] = getFieldValue(
                   this.objectOfPrevElement,
                   item.value,
-                  previousData
+                  previousData,
                );
                break;
             case "4": // formula value
@@ -356,7 +356,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                               f.id == fieldName ||
                               f.columnName == fieldName ||
                               (f.translations || []).filter(
-                                 (tran) => tran.label == fieldName
+                                 (tran) => tran.label == fieldName,
                               ).length
                            );
                         })[0];
@@ -368,14 +368,14 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                               match,
                               sourceName == "startData"
                                  ? sourceField.format(startData)
-                                 : sourceField.format(previousData)
+                                 : sourceField.format(previousData),
                            );
                         } else {
                            formula = formula.replace(
                               match,
                               sourceName == "startData"
                                  ? startData[fieldName]
-                                 : previousData[fieldName]
+                                 : previousData[fieldName],
                            );
                         }
                      }
@@ -388,8 +388,8 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                               getFieldValue(
                                  fieldRepeat.datasourceLink,
                                  fieldName,
-                                 rawData
-                              )
+                                 rawData,
+                              ),
                            );
                         }
                      }
@@ -402,7 +402,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                               opt &&
                               (opt.key == param ||
                                  opt.value == param ||
-                                 opt.label == param)
+                                 opt.label == param),
                         )[0];
 
                         if (processField) {
@@ -413,7 +413,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
 
                            if (Array.isArray(processData))
                               processData = processData.filter(
-                                 (d) => d != null
+                                 (d) => d != null,
                               );
 
                            formula = formula.replace(match, processData);
@@ -449,7 +449,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                result[field.columnName] = getFieldValue(
                   fieldRepeat.datasourceLink,
                   item.value,
-                  rawData
+                  rawData,
                );
                break;
             case "6":

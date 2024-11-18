@@ -1552,7 +1552,7 @@ module.exports = class ABModel extends ABModelCore {
             break;
          case "is_current_date":
             operator = "BETWEEN";
-            var datetimerange = condition.value.split("|");
+            var datetimerange = this.AB.rules.getUTCDayTimeRange().split("|");
             value = `"${datetimerange[0]}" AND "${datetimerange[1]}"`;
             break;
          case "is_empty":
@@ -2192,7 +2192,6 @@ module.exports = class ABModel extends ABModelCore {
          formulaField.settings.where.rules.length
       ) {
          let formulaFieldQuery = connectedObj.model().modelKnex().query();
-
          this.queryConditions(
             formulaFieldQuery,
             formulaField.settings.where,

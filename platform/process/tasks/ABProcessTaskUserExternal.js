@@ -71,7 +71,7 @@ module.exports = class ABProcessTaskUserExternal extends (
                return this.errorConfig(
                   instance,
                   `no lane found for id:[${this.laneDiagramID}]`,
-                  "laneDiagramID"
+                  "laneDiagramID",
                );
             }
 
@@ -98,7 +98,7 @@ module.exports = class ABProcessTaskUserExternal extends (
                if (err) {
                   this.log(
                      instance,
-                     "Error creating user form: " + err.toString()
+                     "Error creating user form: " + err.toString(),
                   );
                   reject(err);
                   return;
@@ -111,7 +111,7 @@ module.exports = class ABProcessTaskUserExternal extends (
                this.stateUpdate(instance, data);
 
                resolve(false);
-            }
+            },
          );
       });
    }
@@ -130,7 +130,7 @@ module.exports = class ABProcessTaskUserExternal extends (
                if (err) {
                   this.log(
                      instance,
-                     "Error checking user form status: " + err.toString()
+                     "Error checking user form status: " + err.toString(),
                   );
 
                   reject(err);
@@ -159,7 +159,7 @@ module.exports = class ABProcessTaskUserExternal extends (
                   // still pending:
                   resolve(false);
                }
-            }
+            },
          );
       });
    }

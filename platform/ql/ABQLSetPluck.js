@@ -109,25 +109,33 @@ class ABQLSetPluck extends ABQLSetPluckCore {
             if (!this.field) {
                // whoops!
                throw new Error(
-                  "ABQLSetPluck.do(): unable to resolve .fieldID."
+                  "ABQLSetPluck.do(): unable to resolve .fieldID.",
                );
             }
 
             // CASE 1:  Connected Objects:
             if (this.field.isConnection) {
-
                // Pull relation value of this.field
                const rowIds = context.data.map((row) => row.id ?? row.uuid);
-               const data = await context.object.model().findAll({
-                  glue: "and",
-                  rules: [{
-                     key: context.object.PK(),
-                     rule: "in",
-                     value: this.AB.uniq(rowIds),
-                  }],
-               }, {
-                  populate: [this.field.columnName],
-               }, req);
+               const data = await req.retry(() =>
+                  context.object.model().findAll(
+                     {
+                        where: {
+                           glue: "and",
+                           rules: [
+                              {
+                                 key: context.object.PK(),
+                                 rule: "in",
+                                 value: this.AB.uniq(rowIds),
+                              },
+                           ],
+                        },
+                        populate: [this.field.columnName],
+                     },
+                     null,
+                     req,
+                  ),
+               );
 
                var linkObj = this.field.datasourceLink;
                var PK = linkObj.PK();
@@ -169,11 +177,17 @@ class ABQLSetPluck extends ABQLSetPluckCore {
                         value: this.AB.uniq(ids),
                      });
                   }
+               } else {
+                  // there were no ids, so let's make sure we don't gather anything
+                  nextContext._condition = cond;
+                  nextContext.object = linkObj;
+                  // nextContext.data = [];
+                  return nextContext;
                }
 
                return new Promise((resolve, reject) => {
                   req.retry(() =>
-                     linkObj.model().find({ where: cond, populate: true }, req)
+                     linkObj.model().find({ where: cond, populate: true }, req),
                   )
                      .then((rows) => {
                         // Special Formatting for Form.io fields.

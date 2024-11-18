@@ -17,10 +17,12 @@ module.exports = class ABProcessTaskTrigger extends ABProcessTriggerCore {
       const object = this.AB.objectByID(this.objectID);
 
       return Promise.resolve()
-         .then(() => this.process.instanceNew(context, object, null, req, instanceKey, {
-            pruneData: true,
-            rowLogID,
-         }))
+         .then(() =>
+            this.process.instanceNew(context, object, null, req, instanceKey, {
+               pruneData: true,
+               rowLogID,
+            }),
+         )
          .catch((error) => {
             if (error.nativeError?.code == "ER_DUP_ENTRY") {
                // This means the instanceKey already exisits in the database,

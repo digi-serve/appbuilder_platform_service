@@ -39,7 +39,7 @@ module.exports = class AccountingBatchProcessing extends (
          return this.errorConfig(
             instance,
             `AccountBatchProcessing.do(): unable to find relevant Batch Object from our .objectBatch[${this.objectBatch}] configuration`,
-            "objectBatch"
+            "objectBatch",
          );
       }
 
@@ -47,7 +47,7 @@ module.exports = class AccountingBatchProcessing extends (
          return this.errorConfig(
             instance,
             `AccountBatchProcessing.do(): unable to find relevant Balance Object from our .objectBR[${this.objectBR}] configuration`,
-            "objectBR"
+            "objectBR",
          );
       }
 
@@ -55,17 +55,17 @@ module.exports = class AccountingBatchProcessing extends (
          return this.errorConfig(
             instance,
             `AccountBatchProcessing.do(): unable to find relevant Journal Entry Object from our .objectJE[${this.objectJE}] configuration`,
-            "objectJE"
+            "objectJE",
          );
       }
 
       // Fields
       this.batchFinancialPeriodField = this.batchObj.fieldByID(
-         this.fieldBatchFinancialPeriod
+         this.fieldBatchFinancialPeriod,
       );
       this.batchEntriesField = this.batchObj.fieldByID(this.fieldBatchEntries);
       this.brFinancialPeriodField = this.brObject.fieldByID(
-         this.fieldBRFinancialPeriod
+         this.fieldBRFinancialPeriod,
       );
       this.brAccountField = this.brObject.fieldByID(this.fieldBRAccount);
       this.jeAccountField = this.jeObject.fieldByID(this.fieldJEAccount);
@@ -77,7 +77,7 @@ module.exports = class AccountingBatchProcessing extends (
          return this.errorConfig(
             instance,
             `AccountBatchProcessing.do(): unable to find relevant Batch ID .processBatchValue[${this.processBatchValue}]`,
-            "processBatchValue"
+            "processBatchValue",
          );
       }
 
@@ -97,14 +97,14 @@ module.exports = class AccountingBatchProcessing extends (
             populate: true,
          },
          null,
-         req
+         req,
       );
 
       if (!batchEntries || batchEntries.length < 1) {
          return this.errorConfig(
             instance,
             `AccountBatchProcessing.do(): unable to find Batch data for batchID[${currentBatchID}]`,
-            "currentBatchID"
+            "currentBatchID",
          );
       }
 
@@ -113,19 +113,18 @@ module.exports = class AccountingBatchProcessing extends (
       // Run Process
       const knex = this.AB.Knex.connection();
       await this._req.retry(() =>
-         knex.raw(`CALL \`BALANCE_PROCESS\`("${currentBatchID}");`)
+         knex.raw(`CALL \`BALANCE_PROCESS\`("${currentBatchID}");`),
       );
 
       // Broadcast
-      let financialPeriod = this.batchEntry[
-         this.batchFinancialPeriodField.columnName
-      ];
+      let financialPeriod =
+         this.batchEntry[this.batchFinancialPeriodField.columnName];
       let journalEntries =
          this.batchEntry[this.batchEntriesField.relationName()] || [];
       let accountIDs = this.AB.uniq(
          journalEntries
             .map((je) => je[this.jeAccountField.columnName])
-            .filter((accId) => accId)
+            .filter((accId) => accId),
       );
 
       let balCond = { glue: "and", rules: [] };
@@ -146,7 +145,7 @@ module.exports = class AccountingBatchProcessing extends (
             populate: true,
          },
          null,
-         req
+         req,
       );
 
       (balances || []).forEach((brItem) => {

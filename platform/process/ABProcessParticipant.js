@@ -93,7 +93,7 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
                .model()
                .find({
                   or: [{ uuid: this.account }, { username: this.account }],
-               })
+               }),
          )
             .then((listUsers) => {
                resolve(listUsers);
@@ -117,7 +117,7 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
          req.retry(() =>
             this.AB.objectRole()
                .model()
-               .find({ where: { uuid: this.role }, populate: true }, req)
+               .find({ where: { uuid: this.role }, populate: true }, req),
          )
 
             .then((result = []) => {
@@ -140,8 +140,8 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
                      .model()
                      .find(
                         { where: { username: allUsers }, populate: false },
-                        req
-                     )
+                        req,
+                     ),
                )
                   .then(resolve)
                   .catch(reject);
@@ -161,17 +161,12 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
     * @returns {Promise} - the user list
     */
    usersForFields(req, object, data) {
-      if (
-         !this.useField ||
-         !this.fields?.length ||
-         !object ||
-         data == null
-      )
+      if (!this.useField || !this.fields?.length || !object || data == null)
          return Promise.resolve([]);
 
       // pull ABFieldUser list
       const userFields = object.fields(
-         (f) => (this.fields ?? []).indexOf(f.id) > -1
+         (f) => (this.fields ?? []).indexOf(f.id) > -1,
       );
 
       // Collect all usernames
@@ -184,7 +179,9 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
 
          // Add an user info to the list
          userLookups = userLookups.concat(
-            userData.map((uData) => uData.uuid ?? uData.id ?? uData.username ?? uData)
+            userData.map(
+               (uData) => uData.uuid ?? uData.id ?? uData.username ?? uData,
+            ),
          );
       });
 
@@ -192,20 +189,18 @@ module.exports = class ABProcessParticipant extends ABProcessParticipantCore {
       userLookups = userLookups.filter((uName) => uName);
 
       return new Promise((resolve, reject) => {
-
          req.retry(() =>
             this.AB.objectUser()
                .model()
                .find({
                   or: [{ uuid: userLookups }, { username: userLookups }],
-               })
+               }),
          )
-         .then((listUsers) => {
-            // return user list
-            resolve(listUsers);
-         })
-         .catch(reject);
+            .then((listUsers) => {
+               // return user list
+               resolve(listUsers);
+            })
+            .catch(reject);
       });
    }
 };
-
