@@ -31,7 +31,7 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
          if (!currentFPYearID) {
             this.log(instance, "unable to find relevant Fiscal Year ID");
             var error = new Error(
-               "AccountingFPYearClose.do(): unable to find relevant Fiscal Year ID"
+               "AccountingFPYearClose.do(): unable to find relevant Fiscal Year ID",
             );
             return Promise.reject(error);
          }
@@ -41,8 +41,8 @@ module.exports = class AccountingFPYearClose extends AccountingFPYearCloseCore {
                const knex = this.AB.Knex.connection();
                return this._req.retry(() =>
                   knex.raw(
-                     `CALL \`CLOSE_FY_YEAR_PROCESS\`("${currentFPYearID}");`
-                  )
+                     `CALL \`CLOSE_FY_YEAR_PROCESS\`("${currentFPYearID}");`,
+                  ),
                );
             })
             // Final step

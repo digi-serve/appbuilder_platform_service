@@ -57,7 +57,7 @@ module.exports = class ABProcessTaskUserApproval extends (
          if (entry.field?.key == "connectObject") {
             processData[`${entry.key}.format`] = this.process.processData(
                this,
-               [instance, `${entry.key}.format`]
+               [instance, `${entry.key}.format`],
             );
          }
       });
@@ -105,7 +105,7 @@ module.exports = class ABProcessTaskUserApproval extends (
                allUserFields = allUserFields.concat(
                   userData
                      .filter((u) => u)
-                     .map((u) => u.uuid || u.id || u.username || u)
+                     .map((u) => u.uuid || u.id || u.username || u),
                );
             });
             allUserFields = allUserFields.filter((uId) => uId);
@@ -127,7 +127,7 @@ module.exports = class ABProcessTaskUserApproval extends (
             return this.errorConfig(
                instance,
                `no lane found for id:[${this.laneDiagramID}]`,
-               "laneDiagramID"
+               "laneDiagramID",
             );
          }
          if (myLane.useRole) {
@@ -149,7 +149,7 @@ module.exports = class ABProcessTaskUserApproval extends (
       jobData.users = this.AB.uniq(
          jobData.users,
          false,
-         (u) => u.toString() // support compare with different types
+         (u) => u.toString(), // support compare with different types
       );
 
       return new Promise((resolve, reject) => {
@@ -160,7 +160,7 @@ module.exports = class ABProcessTaskUserApproval extends (
                if (err) {
                   this.log(
                      instance,
-                     "Error creating user form: " + err.toString()
+                     "Error creating user form: " + err.toString(),
                   );
                   reject(err);
                   return;
@@ -169,7 +169,7 @@ module.exports = class ABProcessTaskUserApproval extends (
                var data = { userFormID: userForm.uuid };
                this.stateUpdate(instance, data);
                resolve(false);
-            }
+            },
          );
       });
    }
@@ -188,7 +188,7 @@ module.exports = class ABProcessTaskUserApproval extends (
                if (err) {
                   this.log(
                      instance,
-                     "Error checking user form status: " + err.toString()
+                     "Error checking user form status: " + err.toString(),
                   );
                   reject(err);
                   return;
@@ -214,7 +214,7 @@ module.exports = class ABProcessTaskUserApproval extends (
                   // still pending:
                   resolve(false);
                }
-            }
+            },
          );
       });
    }

@@ -38,7 +38,7 @@ module.exports = class ABProcessTaskServiceGetResetPasswordUrl extends (
                this.stateUpdate(instance, { url: results.data });
                this.stateCompleted(instance);
                resolve(true);
-            }
+            },
          );
       });
    }
