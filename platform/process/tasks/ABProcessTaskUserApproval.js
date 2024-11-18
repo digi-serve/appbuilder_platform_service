@@ -5,6 +5,134 @@ const path = require("path");
 // prettier-ignore
 const ABProcessTaskUserApprovalCore = require(path.join(__dirname, "..", "..", "..", "core", "process", "tasks", "ABProcessTaskUserApprovalCore.js"));
 
+/**
+ * @function parseEntryKeys()
+ * Step through an array of formbuilder.io form entry descriptions
+ * and identify which of our processData[keys] are being referenced
+ * for their values.
+ * @param {array} keys
+ *        This is the array that will be UPDATED with the keys we
+ *        find.
+ * @param {array} entries
+ *        The .formBuilder description of the fields being displayed
+ *        on the form.
+ */
+function parseEntryKeys(keys, entries) {
+   if (entries.length == 0) {
+      return;
+   }
+   let entry = entries.shift();
+   // entries that have abFieldID are the ones that directly reference
+   // our data:
+   if (entry.abFieldID) {
+      if (entry.key) {
+         keys.push(entry.key);
+      }
+   }
+
+   // if this entry is a container, we need to parse it's children
+   if (entry.components) {
+      if (entry.path) {
+         // keep the path
+         keys.push(entry.path);
+      }
+
+      parseEntryKeys(keys, entry.components);
+   }
+
+   // recurse until we are done:
+   parseEntryKeys(keys, entries);
+}
+
+/**
+ * @function parseEntryArrays()
+ * Step through an array of formbuilder.io form entry descriptions
+ * and identify which them are containers for Arrays of information.
+ * Once we find them we will then try to reduce our .processData[key]
+ * to only have the essential fields that are referenced.
+ * @param {array} entries
+ *        The .formBuilder description of the fields being displayed
+ *        on the form.
+ * @param {json} data
+ *        The processData that we need to pair down.
+ */
+function parseEntryArrays(entries, data) {
+   if (entries.length == 0) {
+      return;
+   }
+
+   let entry = entries.shift();
+   if (entry.components) {
+      if (entry.path) {
+         // if entry.path refers to one of our entries:
+         let dataSet = data[entry.path];
+         if (dataSet && dataSet.length) {
+            let fieldsToKeep = parseEntryArrayFields(entry);
+
+            for (let i = 0; i < dataSet.length; i++) {
+               let d = dataSet[i];
+               Object.keys(d).forEach((k) => {
+                  if (fieldsToKeep.indexOf(k) == -1) {
+                     delete d[k];
+                  }
+               });
+            }
+         }
+      } else {
+         // this is a layout component, so scan it's children
+         parseEntryArrays(entry.components, data);
+      }
+   }
+
+   // do the next one
+   parseEntryArrays(entries, data);
+}
+
+/**
+ * @function parseEntryArrayFields()
+ * Step through the current formBuilder.io definition and find which
+ * fields are referenced in it's description.
+ * @param {array} entries
+ *        The .formBuilder description of the fields being displayed
+ *        on the form.
+ * @param {json} data
+ *        The processData that we need to pair down.
+ */
+function parseEntryArrayFields(entry) {
+   let fields = [];
+   entry.components.forEach((comp) => {
+      if (comp.components) {
+         // this is another layout element ... parse it:
+         let compFields = parseEntryArrayFields(comp);
+         if (compFields.length > 0) {
+            fields = fields.concat(compFields);
+         }
+      } else {
+         let field = comp.key;
+         if (comp.calculateValue) {
+            let match = [...comp.calculateValue.matchAll(/row\['(.+)'\]/g)][0];
+            if (match) {
+               field = match[1];
+            }
+         }
+         if (comp.attrs) {
+            try {
+               let match = [
+                  ...JSON.stringify(comp.attrs).matchAll(/row\['(.+)'\]/g),
+               ][0];
+               if (match) {
+                  field = match[1];
+               }
+            } catch (e) {
+               console.error(e);
+            }
+         }
+         fields.push(field);
+      }
+   });
+   return fields;
+}
+
 module.exports = class ABProcessTaskUserApproval extends (
    ABProcessTaskUserApprovalCore
 ) {
@@ -46,6 +174,11 @@ module.exports = class ABProcessTaskUserApproval extends (
          ui: this.formBuilder,
       };
 
+      /// getting ER_NET_PACKET_TOO_LARGE errors when creating userform
+      /// Instead of just saving all the ProcessDataFields()
+      /// look at formBuilder to see how we can decode the
+      /// components and what values specifically we need to save.
+
       var processData = {};
       var listDataFields = this.process.processDataFields(this);
       listDataFields.forEach((entry) => {
@@ -60,7 +193,55 @@ module.exports = class ABProcessTaskUserApproval extends (
                [instance, `${entry.key}.format`],
             );
          }
+
+         // make sure our user fields are not fully populated.  Just base user
+         // is fine.
+         if (entry.field?.key == "user") {
+            let foundUser = processData[entry.key];
+            if (foundUser) {
+               let baseUser = {};
+               let skipFields = ["salt", "password"];
+               let relFields = Object.keys(foundUser).filter(
+                  (f) => f.indexOf("__relation") > -1,
+               );
+               relFields.forEach((rf) => {
+                  let pairedField = rf.replaceAll("__relation", "");
+                  skipFields.push(rf);
+                  skipFields.push(pairedField);
+               });
+
+               Object.keys(foundUser).forEach((f) => {
+                  if (skipFields.indexOf(f) == -1) {
+                     baseUser[f] = foundUser[f];
+                  }
+               });
+               processData[entry.key] = baseUser;
+            }
+         }
       });
+
+      // reduce the amount of data we are storing to only the ones referenced
+      // by the formBuilder information:
+      /* 
+
+      // TODO: Test this once the UI is working for the embedded templates
+         It currently isn't displaying the data correctly without my changes.
+
+      // 1) only keep keys that are used in the form:
+      let keysToKeep = [];
+      let copyComponents = this.AB.cloneDeep(this.formBuilder.components);
+      parseEntryKeys(keysToKeep, copyComponents);
+      Object.keys(processData).forEach((k) => {
+         if (keysToKeep.indexOf(k) == -1) {
+            delete processData[k];
+         }
+      });
+
+      // 2) reduce the arrays of data to be minimal according to what
+      //    we actually reference
+      copyComponents = this.AB.cloneDeep(this.formBuilder.components);
+      parseEntryArrays(copyComponents, processData);
+*/
       jobData.data = processData;
 
       if (parseInt(this.who) == 1) {
@@ -83,15 +264,13 @@ module.exports = class ABProcessTaskUserApproval extends (
 
             if (Array.isArray(usedFields) && usedFields?.length) {
                usedFields.forEach((f) => {
-                  let foundUser = this.process.processData(this, [
-                     instance,
-                     f,
-                  ]);
+                  let foundUser = this.process.processData(this, [instance, f]);
                   if (foundUser) {
-                     if (!Array.isArray(foundUser))
-                        foundUser = [foundUser];
+                     if (!Array.isArray(foundUser)) foundUser = [foundUser];
 
-                     jobData.users = jobData.users.concat(foundUser.map((u) => u.uuid || u.id || u.username || u));
+                     jobData.users = jobData.users.concat(
+                        foundUser.map((u) => u.uuid || u.id || u.username || u),
+                     );
                   }
                });
             }
