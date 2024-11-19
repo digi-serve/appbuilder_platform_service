@@ -61,6 +61,7 @@ module.exports = class ABProcessTaskUserApproval extends (
             );
          }
       });
+
       jobData.data = processData;
 
       if (parseInt(this.who) == 1) {
@@ -83,15 +84,13 @@ module.exports = class ABProcessTaskUserApproval extends (
 
             if (Array.isArray(usedFields) && usedFields?.length) {
                usedFields.forEach((f) => {
-                  let foundUser = this.process.processData(this, [
-                     instance,
-                     f,
-                  ]);
+                  let foundUser = this.process.processData(this, [instance, f]);
                   if (foundUser) {
-                     if (!Array.isArray(foundUser))
-                        foundUser = [foundUser];
+                     if (!Array.isArray(foundUser)) foundUser = [foundUser];
 
-                     jobData.users = jobData.users.concat(foundUser.map((u) => u.uuid || u.id || u.username || u));
+                     jobData.users = jobData.users.concat(
+                        foundUser.map((u) => u.uuid || u.id || u.username || u),
+                     );
                   }
                });
             }
