@@ -16,6 +16,8 @@ const CONCURRENCY_LIMIT = 20;
 // This is the number of parallel operations we want to limit ourselves to
 // so we avoid trippig NetSuit's CONCURRENCY_LIMIT_EXCEEDED
 
+const TruthyValues = [true, 1, "1", "t", "true"];
+
 /**
  * (taken from https://github.com/digi-serve/global-hr-update/blob/master/back-end/api/netsuite.js)
  * Make an authorized HTTP request to NetSuite.
@@ -138,6 +140,63 @@ module.exports = class ABModelAPINetsuite extends ABModel {
    }
 
    /**
+    * @method toNetsuiteBool()
+    * this method changes the values in place to match what Netsuite wants
+    * for their create/update operations.
+    * @param {json} baseValues
+    *        the data we are sending TO Netsuite
+    * @return undefined
+    */
+   toNetsuiteBool(baseValues) {
+      // Boolean Fields
+      // in our AB system, we use 1/0 for true/false values.  Netsuite will
+      // want those as true/false.
+
+      let boolFields = this.object.fields((f) => f.key == "boolean");
+      for (let i = 0; i < boolFields.length; i++) {
+         let bF = boolFields[i];
+         if (typeof baseValues[bF.columnName] != "undefined") {
+            let val = baseValues[bF.columnName];
+            if (typeof val == "string") val = val.toLowerCase();
+            if (TruthyValues.indexOf(val) > -1) {
+               baseValues[bF.columnName] = true;
+            } else {
+               baseValues[bF.columnName] = false;
+            }
+         }
+      }
+   }
+
+   /**
+    * @method fromNetsuiteBool()
+    * this method changes the values in place to match what our Framework expects
+    * for our boolean values.
+    * @param {array} data
+    *        the data we are receiving FROM Netsuite
+    * @return undefined
+    */
+   fromNetsuiteBool(data) {
+      // Boolean Fields
+      let boolFields = this.object.fields((f) => f.key == "boolean");
+      for (let d = 0; d < data.length; d++) {
+         let row = data[d];
+
+         for (let i = 0; i < boolFields.length; i++) {
+            let bF = boolFields[i];
+            if (typeof row[bF.columnName] != "undefined") {
+               let val = row[bF.columnName];
+               if (typeof val == "string") val = val.toLowerCase();
+               if (TruthyValues.indexOf(val) > -1) {
+                  row[bF.columnName] = 1;
+               } else {
+                  row[bF.columnName] = 0;
+               }
+            }
+         }
+      }
+   }
+
+   /**
     * @method create
     * performs an update operation
     * @param {obj} values
@@ -168,6 +227,11 @@ module.exports = class ABModelAPINetsuite extends ABModel {
             baseValues[this.object.columnRef[field]] = val;
          }
       });
+
+      // Boolean Fields
+      // in our AB system, we use 1/0 for true/false values.  Netsuite will
+      // want those as true/false.
+      this.toNetsuiteBool(baseValues);
 
       let validationErrors = this.object.isValidData(baseValues);
       if (validationErrors.length > 0) {
@@ -412,6 +476,8 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       } else {
          values = await linkObj.model().find(where);
       }
+
+      if (typeof values == "undefined") values = [];
 
       // convert to a hash  ID : [{ value }]
       let valueHash = {};
@@ -857,6 +923,7 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          if (req) {
             req.performance.measure("populate");
          }
+         this.normalizeData(list);
          return list;
       } catch (err) {
          this.processError(
@@ -1193,7 +1260,7 @@ module.exports = class ABModelAPINetsuite extends ABModel {
 
          if (field.settings.joinActiveField) {
             let val = field.settings.joinActiveValue.toLowerCase();
-            if (["1", "t", "true"].indexOf(val) > -1) {
+            if (TruthyValues.indexOf(val) > -1) {
                val = true;
             } else {
                val = false;
@@ -1310,9 +1377,8 @@ module.exports = class ABModelAPINetsuite extends ABModel {
 
       let val = false;
       if (
-         ["1", "t", "true"].indexOf(
-            field.settings.joinInActiveValue.toLowerCase()
-         ) > -1
+         TruthyValues.indexOf(field.settings.joinInActiveValue.toLowerCase()) >
+         -1
       ) {
          val = true;
       }
@@ -1432,18 +1498,10 @@ module.exports = class ABModelAPINetsuite extends ABModel {
             }
          });
 
-      // // Booleans should be "T" or "F"
-      // this.object
-      //    .fields((f) => f.key == "boolean")
-      //    .forEach((f) => {
-      //       if (typeof baseValues[f.columnName] != "undefined") {
-      //          if (baseValues[f.columnName]) {
-      //             baseValues[f.columnName] = "T";
-      //          } else {
-      //             baseValues[f.columnName] = "F";
-      //          }
-      //       }
-      //    });
+      // Boolean Fields
+      // in our AB system, we use 1/0 for true/false values.  Netsuite will
+      // want those as true/false.
+      this.toNetsuiteBool(baseValues);
 
       let validationErrors = this.object.isValidData(baseValues);
       if (validationErrors.length > 0) {
@@ -1567,5 +1625,10 @@ module.exports = class ABModelAPINetsuite extends ABModel {
 
       // now join our where statements according to the .glue values
       return this.queryConditionsJoinConditions(whereParsed, req);
+   }
+
+   normalizeData(data) {
+      super.normalizeData(data);
+      this.fromNetsuiteBool(data);
    }
 };
