@@ -62,26 +62,27 @@ function parseEntryArrays(entries, data) {
    }
 
    let entry = entries.shift();
-   if (entry.components) {
-      if (
-         entry.path &&
-         entry.template /* && entry.customClass == "customList" */
-      ) {
-         // if entry.path refers to one of our entries:
-         let dataSet = data[entry.path];
-         if (dataSet && dataSet.length) {
-            let fieldsToKeep = parseEntryArrayFields(entry);
 
-            for (let i = 0; i < dataSet.length; i++) {
-               let d = dataSet[i];
-               Object.keys(d).forEach((k) => {
-                  if (fieldsToKeep.indexOf(k) == -1) {
-                     delete d[k];
-                  }
-               });
-            }
+   if (
+      entry.path &&
+      entry.templates /* && entry.customClass == "customList" */
+   ) {
+      // if entry.path refers to one of our entries:
+      let dataSet = data[entry.path];
+      if (dataSet && dataSet.length) {
+         let fieldsToKeep = parseEntryArrayFields(entry);
+
+         for (let i = 0; i < dataSet.length; i++) {
+            let d = dataSet[i];
+            Object.keys(d).forEach((k) => {
+               if (fieldsToKeep.indexOf(k) == -1) {
+                  delete d[k];
+               }
+            });
          }
-      } else {
+      }
+   } else {
+      if (entry.components) {
          // this is a layout component, so scan it's children
          parseEntryArrays(entry.components, data);
       }
@@ -102,47 +103,18 @@ function parseEntryArrays(entries, data) {
  *        The processData that we need to pair down.
  */
 function parseEntryArrayFields(entry) {
-   let fields = [];
+   let fieldHash = {};
    try {
-      let allMatches = [...JSON.stringify(entry).matchAll(/row\['(.+)'\]/g)];
+      let allMatches = [
+         ...JSON.stringify(entry).matchAll(/row\['([a-zA-Z_.0-9 ]+)'\]/g),
+      ];
       (allMatches || []).forEach((match) => {
-         fields.push(match[1]);
+         fieldHash[match[1]] = match;
       });
    } catch (e) {
       console.error(e);
    }
-
-   // entry.components.forEach((comp) => {
-   //    if (comp.components) {
-   //       // this is another layout element ... parse it:
-   //       let compFields = parseEntryArrayFields(comp);
-   //       if (compFields.length > 0) {
-   //          fields = fields.concat(compFields);
-   //       }
-   //    } else {
-   //       let field = comp.key;
-   //       if (comp.calculateValue) {
-   //          let match = [...comp.calculateValue.matchAll(/row\['(.+)'\]/g)][0];
-   //          if (match) {
-   //             field = match[1];
-   //          }
-   //       }
-   //       if (comp.attrs) {
-   //          try {
-   //             let match = [
-   //                ...JSON.stringify(comp.attrs).matchAll(/row\['(.+)'\]/g),
-   //             ][0];
-   //             if (match) {
-   //                field = match[1];
-   //             }
-   //          } catch (e) {
-   //             console.error(e);
-   //          }
-   //       }
-   //       fields.push(field);
-   //    }
-   // });
-   return fields;
+   return Object.keys(fieldHash);
 }
 
 module.exports = class ABProcessTaskUserApproval extends (
@@ -234,10 +206,6 @@ module.exports = class ABProcessTaskUserApproval extends (
 
       // reduce the amount of data we are storing to only the ones referenced
       // by the formBuilder information:
-      /* 
-
-      // TODO: Test this once the UI is working for the embedded templates
-         It currently isn't displaying the data correctly without my changes.
 
       // 1) only keep keys that are used in the form:
       let keysToKeep = [];
@@ -253,7 +221,6 @@ module.exports = class ABProcessTaskUserApproval extends (
       //    we actually reference
       copyComponents = this.AB.cloneDeep(this.formBuilder.components);
       parseEntryArrays(copyComponents, processData);
-*/
 
       jobData.data = processData;
 
