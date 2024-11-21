@@ -63,7 +63,10 @@ function parseEntryArrays(entries, data) {
 
    let entry = entries.shift();
    if (entry.components) {
-      if (entry.path) {
+      if (
+         entry.path &&
+         entry.template /* && entry.customClass == "customList" */
+      ) {
          // if entry.path refers to one of our entries:
          let dataSet = data[entry.path];
          if (dataSet && dataSet.length) {
@@ -100,36 +103,45 @@ function parseEntryArrays(entries, data) {
  */
 function parseEntryArrayFields(entry) {
    let fields = [];
-   entry.components.forEach((comp) => {
-      if (comp.components) {
-         // this is another layout element ... parse it:
-         let compFields = parseEntryArrayFields(comp);
-         if (compFields.length > 0) {
-            fields = fields.concat(compFields);
-         }
-      } else {
-         let field = comp.key;
-         if (comp.calculateValue) {
-            let match = [...comp.calculateValue.matchAll(/row\['(.+)'\]/g)][0];
-            if (match) {
-               field = match[1];
-            }
-         }
-         if (comp.attrs) {
-            try {
-               let match = [
-                  ...JSON.stringify(comp.attrs).matchAll(/row\['(.+)'\]/g),
-               ][0];
-               if (match) {
-                  field = match[1];
-               }
-            } catch (e) {
-               console.error(e);
-            }
-         }
-         fields.push(field);
-      }
-   });
+   try {
+      let allMatches = [...JSON.stringify(entry).matchAll(/row\['(.+)'\]/g)];
+      (allMatches || []).forEach((match) => {
+         fields.push(match[1]);
+      });
+   } catch (e) {
+      console.error(e);
+   }
+
+   // entry.components.forEach((comp) => {
+   //    if (comp.components) {
+   //       // this is another layout element ... parse it:
+   //       let compFields = parseEntryArrayFields(comp);
+   //       if (compFields.length > 0) {
+   //          fields = fields.concat(compFields);
+   //       }
+   //    } else {
+   //       let field = comp.key;
+   //       if (comp.calculateValue) {
+   //          let match = [...comp.calculateValue.matchAll(/row\['(.+)'\]/g)][0];
+   //          if (match) {
+   //             field = match[1];
+   //          }
+   //       }
+   //       if (comp.attrs) {
+   //          try {
+   //             let match = [
+   //                ...JSON.stringify(comp.attrs).matchAll(/row\['(.+)'\]/g),
+   //             ][0];
+   //             if (match) {
+   //                field = match[1];
+   //             }
+   //          } catch (e) {
+   //             console.error(e);
+   //          }
+   //       }
+   //       fields.push(field);
+   //    }
+   // });
    return fields;
 }
 
@@ -242,6 +254,7 @@ module.exports = class ABProcessTaskUserApproval extends (
       copyComponents = this.AB.cloneDeep(this.formBuilder.components);
       parseEntryArrays(copyComponents, processData);
 */
+
       jobData.data = processData;
 
       if (parseInt(this.who) == 1) {

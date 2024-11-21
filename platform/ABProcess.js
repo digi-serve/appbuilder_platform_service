@@ -282,9 +282,17 @@ module.exports = class ABProcess extends ABProcessCore {
          // look up the full definition
          if (!instance.jsonDefinition && instance.definition) {
             try {
-               instance.jsonDefinition = await this.AB.objectProcessDefinition()
-                  .model()
-                  .find({ uuid: instance.definition }, req)[0];
+               let defs = await req.retry(() =>
+                  this.AB.objectProcessDefinition()
+                     .model()
+                     .find({ uuid: instance.definition }, req),
+               );
+               if (defs.length == 0) {
+                  throw new Error(
+                     `No Process Instance found for uuid[${instance.definition}]`,
+                  );
+               }
+               instance.jsonDefinition = defs[0];
             } catch (err) {
                this.AB.notify.developer(err, {
                   context: "Error getting instance definition (ABProcess.run)",
