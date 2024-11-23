@@ -108,7 +108,7 @@ function parseEntryArrayFields(entry) {
       let allMatches = [
          ...JSON.stringify(entry).matchAll(/row\['([a-zA-Z_.0-9 ]+)'\]/g),
       ];
-      (allMatches || []).forEach((match) => {
+      allMatches.forEach((match) => {
          fieldHash[match[1]] = match;
       });
    } catch (e) {
