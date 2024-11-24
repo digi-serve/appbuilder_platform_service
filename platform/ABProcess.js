@@ -122,6 +122,7 @@ module.exports = class ABProcess extends ABProcessCore {
          if (error.toString().indexOf("ER_DUP_ENTRY") > -1) {
             return await this.instanceDefinition(req);
          }
+
          this.AB.notify.developer(error, {
             context: "ABProcess.instanceDefinition",
             process: this.toObj(),
