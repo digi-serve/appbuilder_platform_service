@@ -55,37 +55,8 @@ class ABQLRowPluck extends ABQLRowPluckCore {
                })
                // change label from "ABQLSetPluck" to "ABQLRowPluck"
                .then((context) => {
-                  let nextContext = this.AB.clone(context);
+                  const nextContext = this.AB.clone(context);
                   nextContext.label = "ABQLRowPluck";
-
-                  // Clean up the data to match the pluck field
-                  if (nextContext.data) {
-                     // If the pluck field is the M:N, M:1 connect field, then it should pass an array data
-                     if (
-                        this.fieldID != "_PK" &&
-                        (this.field.key == "connectObject" ||
-                           this.field.key == "user") &&
-                        this.field.settings.linkType == "many"
-                     ) {
-                        // Convert to an array
-                        if (!Array.isArray(nextContext.data))
-                           nextContext.data = [nextContext.data];
-                     }
-                     // Normal field should pass a single object value
-                     else if (Array.isArray(nextContext.data)) {
-                        if (nextContext.data.length > 1) {
-                           this.process.log(
-                              `The data values have more than 1. "${this.field.columnName}" does not support multiple values.`
-                           );
-                           nextContext.data = nextContext.data[0];
-                        } else if (nextContext.data.length == 1) {
-                           nextContext.data = nextContext.data[0];
-                        } else if (nextContext.data.length < 1) {
-                           nextContext.data = null;
-                        }
-                     }
-                  }
-
                   return nextContext;
                })
          );
