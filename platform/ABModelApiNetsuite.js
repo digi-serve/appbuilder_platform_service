@@ -213,8 +213,11 @@ module.exports = class ABModelAPINetsuite extends ABModel {
                condition.rule != "next_days" &&
                condition.rule != "is_current_date"
             ) {
-               condition.key = `DATE(${condition.key})`;
-               condition.value = `DATE("${condition.value}")`;
+               const dateVaue = condition.value;
+               if (dateVaue)
+                  condition.value = `TO_DATE('${
+                     new Date(dateVaue).toISOString().split("T")[0]
+                  }', 'YYYY-MM-DD')`;
             }
 
             // Search string value of FK column
@@ -535,7 +538,18 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          case "greater_or_equal_current":
          case "less_current":
          case "less_or_equal_current":
-            value = "NOW()";
+            switch (field?.key) {
+               case "date":
+                  value = `TO_DATE('${
+                     new Date().toISOString().split("T")[0]
+                  }', 'YYYY-MM-DD')`;
+                  break;
+               case "datetime":
+                  value = `TO_TIMESTAMP('${new Date().toISOString()}', 'YYYY-MM-DDTHH24:MI:SS')`;
+                  break;
+               default:
+                  break;
+            }
             break;
          case "last_days":
             value = `DATE_SUB(NOW(), INTERVAL ${condition.value} DAY) AND NOW()`;
