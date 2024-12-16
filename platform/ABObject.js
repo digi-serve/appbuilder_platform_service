@@ -20,6 +20,7 @@ const ConversionList = [
 
 const PolicyList = [
    require("../policies/ABModelConvertDataCollectionCondition"),
+   require("../policies/ABModelConvertIsUserMNConditions"),
    require("../policies/ABModelConvertSameAsUserConditions"),
    require("../policies/ABModelConvertQueryConditions"),
    require("../policies/ABModelConvertQueryFieldConditions"),
