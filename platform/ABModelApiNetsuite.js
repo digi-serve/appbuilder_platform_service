@@ -1262,9 +1262,9 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       // now construct the URL (including limit & skip)
       let qs = "";
       if (cond.limit) qs = `limit=${cond.limit}`;
-      if (cond.skip) {
+      if (cond.offset) {
          if (qs) qs += "&";
-         qs = `${qs}offset=${cond.skip}`;
+         qs = `${qs}offset=${cond.offset}`;
       }
       if (qs) qs = `?${qs}`;
 
