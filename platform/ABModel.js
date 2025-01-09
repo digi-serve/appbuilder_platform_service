@@ -2582,11 +2582,17 @@ function unRelate(obj, columnName, rowId, values, trx, req) {
             let objectLink = fieldLink.object;
             if (objectLink == null) return done(resolve, alias, req);
 
+            // NOTE: if our field has linked to an index value, we have to use that
+            // columnName here:
+            let PK = fieldLink.indexField
+               ? fieldLink.indexField.columnName
+               : objectLink.PK();
+
             record
                .$relatedQuery(clearRelationName)
                .alias(alias)
                .unrelate()
-               .where(objectLink.PK(), "in", values)
+               .where(PK, "in", values)
                .then(() => {
                   done(resolve, alias, req);
                })
