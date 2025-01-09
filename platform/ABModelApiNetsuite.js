@@ -2137,4 +2137,20 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       super.normalizeData(data);
       this.fromNetsuiteBool(data);
    }
+
+   /**
+    * Fix generated sql where for differences in NetSuite
+    */
+   parseCondition(cond, ...args) {
+      let sql = super.parseCondition(cond, ...args);
+      switch (cond.rule) {
+         case "checked":
+            sql = sql.replace("IS TRUE", "= 'T'");
+            break;
+         case "unchecked":
+            sql = sql.replace("IS NOT TRUE", "= 'F'");
+            break;
+      }
+      return sql;
+   }
 };
