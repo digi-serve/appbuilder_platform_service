@@ -281,8 +281,8 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          less_or_equal_current: "<=",
          last_days: "BETWEEN",
          next_days: "BETWEEN",
-         checked: "IS TRUE",
-         unchecked: "IS NOT TRUE", // FALSE or NULL
+         checked: "= 'T'",
+         unchecked: "= 'F'", // FALSE or NULL
          // SQL queries
          like: "LIKE",
       };
@@ -635,7 +635,7 @@ module.exports = class ABModelAPINetsuite extends ABModel {
    processError(url, msg, err, req) {
       if (req) {
          req.log(url);
-         req.log(msg, err.response?.status, err.response?.data);
+         req.log(msg, err.response?.status, err.response?.data, err.q);
       }
 
       let message = "Rejected by NetSuite. ";
@@ -1432,6 +1432,7 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          this.normalizeData(list);
          return list;
       } catch (err) {
+         err.q = sql;
          this.processError(
             `POST ${URL}`,
             `Error finding ${this.object.dbTableName()} data`,
@@ -2136,21 +2137,5 @@ module.exports = class ABModelAPINetsuite extends ABModel {
    normalizeData(data) {
       super.normalizeData(data);
       this.fromNetsuiteBool(data);
-   }
-
-   /**
-    * Fix generated sql where for differences in NetSuite
-    */
-   parseCondition(cond, ...args) {
-      let sql = super.parseCondition(cond, ...args);
-      switch (cond.rule) {
-         case "checked":
-            sql = sql.replace("IS TRUE", "= 'T'");
-            break;
-         case "unchecked":
-            sql = sql.replace("IS NOT TRUE", "= 'F'");
-            break;
-      }
-      return sql;
    }
 };
