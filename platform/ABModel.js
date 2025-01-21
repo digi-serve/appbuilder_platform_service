@@ -1809,18 +1809,24 @@ module.exports = class ABModel extends ABModelCore {
             var objectLink = field.datasourceLink;
             if (!objectLink) return;
 
+            let fnJoinRelation;
             let whereRaw;
             if (r.rule == "have_no_relation") {
                // 1:1 - Get rows that no relation with
+               fnJoinRelation = query.leftJoinRelation.bind(query);
+
                r.value = objectLink.PK();
+
                // "{relation_name}.{primary_name} IS NULL"
                whereRaw = `${relation_name}.${r.value} IS NULL`;
             } else if (r.rule == "have_relation") {
                // M:1 - Get rows that have relation with
+               fnJoinRelation = query.innerJoinRelation.bind(query);
+
                whereRaw = `${relation_name}.${objectLink.PK()} = '${r.value}'`;
             }
 
-            query.leftJoinRelation(relation_name).whereRaw(whereRaw);
+            fnJoinRelation(relation_name).whereRaw(whereRaw);
          });
       }
    } // queryConditions()
