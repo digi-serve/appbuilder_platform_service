@@ -432,6 +432,31 @@ class ABFactory extends ABFactoryCore {
    }
 
    /**
+    * @method cacheMatch()
+    * this lets you work with a set of cached entries whose keys match the provided key.
+    * This is useful for updating a number of cached entries at a time.
+    * @param {string} key
+    *        The searchKey to set/retrieve the cached data.
+    * @return {undefined | various}
+    */
+   cacheMatch(key, data) {
+      let matches = Object.keys(this.__Cache).filter(
+         (k) => k.indexOf(key) > -1
+      );
+      if (typeof data != "undefined") {
+         matches.forEach((k) => {
+            this.cache(k, data);
+         });
+      } else {
+         let response = {};
+         matches.forEach((k) => {
+            response[k] = this.cache(k);
+         });
+         return response;
+      }
+   }
+
+   /**
     * @method modelPool()
     * return the cached Model connection for the given modelName.
     * @param {string} modelName
