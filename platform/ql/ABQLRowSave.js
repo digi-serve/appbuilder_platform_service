@@ -7,7 +7,6 @@
  */
 
 const ABQLRowSaveCore = require("../../core/ql/ABQLRowSaveCore.js");
-
 class ABQLRowSave extends ABQLRowSaveCore {
    // constructor(attributes, prevOP, task, application) {
    //     super(attributes, [], prevOP, task, application);
@@ -49,17 +48,11 @@ class ABQLRowSave extends ABQLRowSaveCore {
          if (!context.data) {
             // weird!  pass along our context with data == null;
             nextContext.log = "no data set!";
-         } else {
-            // NOTE:: If context.data is an array, then save only the first row ?
-            nextContext.data =
-               Array.isArray(context.data) && context.data.length > 0
-                  ? context.data[0]
-                  : context.data;
-         }
+         } else nextContext.data = context.data;
 
          // save the current context.data to our process state:
          let value = {};
-         value[this.taskParam] = nextContext.data;
+         value[context.object.PK()] = nextContext.data;
          this.task.stateUpdate(instance, value);
 
          return nextContext;
