@@ -70,7 +70,7 @@ class ABQLFind extends ABQLFindCore {
             )
                .then((rows) => {
                   nextContext.data = rows;
-                  if (!rows) {
+                  if (!rows || rows.length === 0) {
                      // if we didn't get any data, then add some additional
                      // info in case we need to evaluate why.
                      nextContext.origCond = JSON.stringify(cond);
@@ -132,6 +132,7 @@ class ABQLFind extends ABQLFindCore {
                   instance,
                   cond.value,
                ]);
+               newCond.value = newCond.value?.uuid ? newCond.value.uuid : newCond.value;
                newCond.rule = cond.rule.split("context_")[1];
 
                // previous format fix:

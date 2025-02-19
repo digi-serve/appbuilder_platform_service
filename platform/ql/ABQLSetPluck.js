@@ -219,14 +219,15 @@ class ABQLSetPluck extends ABQLSetPluckCore {
                         (linkedConnections || []).forEach((f) => {
                            (rows || []).forEach((r) => {
                               if (Array.isArray(r[f.relationName()])) {
-                                 r[f.relationName()] = r[f.relationName()].map((rItem) => {
-                                    return {
-                                       id: rItem.id,
-                                       uuid: rItem.uuid,
-                                    };
-                                 });
-                              }
-                              else if (r[f.relationName()]) {
+                                 r[f.relationName()] = r[f.relationName()].map(
+                                    (rItem) => {
+                                       return {
+                                          id: rItem.id,
+                                          uuid: rItem.uuid,
+                                       };
+                                    },
+                                 );
+                              } else if (r[f.relationName()]) {
                                  r[f.relationName()] = {
                                     id: r[f.relationName()].id,
                                     uuid: r[f.relationName()].uuid,

@@ -1676,28 +1676,36 @@ module.exports = class ABModel extends ABModelCore {
    }
 
    /**
-    * queryConditionsPluckNoRelations()
-    * A helper method to remove the 'have_no_relation' conditions from our
+    * queryConditionsPluckRelationConditions()
+    * A helper method to remove the 'have_no_relation' and 'have_relation' conditions from our
     * conditions.
     * @param {obj} cond
     *        a QueryBuilder compatible condition object
     * @param {array} noRelationRules
     *        a list of the plucked conditions. This list will be updated
     *        as the conditions are evaluated and removed.
+    * @param {array} haveRelationRules
+    *        a list of the plucked conditions. This list will be updated
+    *        as the conditions are evaluated and removed.
     * @return {obj} newCond
-    *        A copy of the given cond object without the 'have_no_relation'
+    *        A copy of the given cond object without the 'have_no_relation' and 'have_relation'
     *        conditions in them.
     */
-   queryConditionsPluckNoRelations(cond, noRelationRules = []) {
+   queryConditionsPluckRelationConditions(
+      cond,
+      noRelationRules = [],
+      haveRelationRules = []
+   ) {
       if (!cond) return null;
 
       // if this is a "glue" condition, then process each of it's rules:
       if (cond?.glue) {
          var newRules = [];
          (cond.rules || []).forEach((r) => {
-            var pRule = this.queryConditionsPluckNoRelations(
+            var pRule = this.queryConditionsPluckRelationConditions(
                r,
-               noRelationRules
+               noRelationRules,
+               haveRelationRules
             );
             if (pRule) {
                newRules.push(pRule);
@@ -1707,15 +1715,18 @@ module.exports = class ABModel extends ABModelCore {
          cond.rules = newRules;
          return cond;
       } else {
+         if (cond.rule == "have_no_relation") {
+            noRelationRules.push(cond);
+            return null;
+         } else if (cond.rule == "have_relation") {
+            haveRelationRules.push(cond);
+            return null;
+         }
          // this is an individual Rule
-         // only return the ones that are NOT 'have_no_relation'
-         if (cond.rule != "have_no_relation") {
+         // only return the ones that are NOT 'have_no_relation' and 'have_relation'
+         else {
             return cond;
          }
-
-         // otherwise record this condition and return null
-         noRelationRules.push(cond);
-         return null;
       }
    }
 
@@ -1742,11 +1753,16 @@ module.exports = class ABModel extends ABModelCore {
 
          // first, pull out our "have_no_relation" rules for later:
          var noRelationRules = [];
+         const hasRelationRules = [];
 
          // make sure we don't edit the passed in where object
          where = this.AB.cloneDeep(where);
 
-         where = this.queryConditionsPluckNoRelations(where, noRelationRules);
+         where = this.queryConditionsPluckRelationConditions(
+            where,
+            noRelationRules,
+            hasRelationRules
+         );
 
          // Now walk through each of our conditions and turn them into their
          // sql WHERE statements
@@ -1762,12 +1778,11 @@ module.exports = class ABModel extends ABModelCore {
             query.whereRaw(sqlWhere);
          }
 
-         // Special Case:  'have_no_relation'
-         // 1:1 - Get rows that no relation with
+         // Special Case:  'have_no_relation' or 'have_relation'
          // var noRelationRules = (where.rules || []).filter(
          //    (r) => r.rule == "have_no_relation"
          // );
-         noRelationRules.forEach((r) => {
+         noRelationRules.concat(hasRelationRules).forEach((r) => {
             // var relation_name = AppBuilder.rules.toFieldRelationFormat(field.columnName);
 
             // var objectLink = field.objectLink();
@@ -1794,12 +1809,24 @@ module.exports = class ABModel extends ABModelCore {
             var objectLink = field.datasourceLink;
             if (!objectLink) return;
 
-            r.value = objectLink.PK();
+            let fnJoinRelation;
+            let whereRaw;
+            if (r.rule == "have_no_relation") {
+               // 1:1 - Get rows that no relation with
+               fnJoinRelation = query.leftJoinRelation.bind(query);
 
-            query.leftJoinRelation(relation_name).whereRaw(
+               r.value = objectLink.PK();
+
                // "{relation_name}.{primary_name} IS NULL"
-               `${relation_name}.${r.value} IS NULL`
-            );
+               whereRaw = `${relation_name}.${r.value} IS NULL`;
+            } else if (r.rule == "have_relation") {
+               // M:1 - Get rows that have relation with
+               fnJoinRelation = query.innerJoinRelation.bind(query);
+
+               whereRaw = `${relation_name}.${objectLink.PK()} = '${r.value}'`;
+            }
+
+            fnJoinRelation(relation_name).whereRaw(whereRaw);
          });
       }
    } // queryConditions()
