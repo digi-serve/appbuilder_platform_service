@@ -17,8 +17,10 @@
   },
   "homepage": "https://github.com/appdevdesigns/appbuilder_platform_service#readme",
   "dependencies": {
+    "axios": "^1.7.7",
     "ejs": "^3.1.8",
     "moment": "^2.29.1",
+    "oauth-1.0a": "^2.2.6",
     "object-hash": "^3.0.0",
     "objection": "github:Hiro-Nakamura/objection.js#fixDBErrors",
     "semver": "^7.7.1",

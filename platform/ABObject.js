@@ -499,13 +499,12 @@ module.exports = class ABClassObject extends ABObjectCore {
       if (prefixSchema) {
          // pull database name
          var schemaName = this.dbSchemaName();
-
-         return "#schema#.#table#"
-            .replace("#schema#", schemaName)
-            .replace("#table#", this.tableName);
-      } else {
-         return this.tableName;
+         if (schemaName) {
+            return `${schemaName}.${this.tableName}`;
+         }
       }
+
+      return this.tableName;
    }
 
    /**

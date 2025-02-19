@@ -52,9 +52,15 @@ module.exports = class ABField extends ABFieldCore {
       }
       // add database and table names to be prefix
       else {
-         result = "`{databaseName}`.`{tableName}`"
-            .replace("{databaseName}", this.object.dbSchemaName())
-            .replace("{tableName}", this.object.dbTableName());
+         // for local Objects, we want to include {db}.{table}
+         if (!this.object.isAPI) {
+            result = "`{databaseName}`.`{tableName}`"
+               .replace("{databaseName}", this.object.dbSchemaName())
+               .replace("{tableName}", this.object.dbTableName());
+         } else {
+            // for API based objects, we only reuse {table}
+            result = this.object.dbTableName();
+         }
       }
 
       return result;
