@@ -70,9 +70,7 @@ module.exports = class SubProcess extends SubProcessCore {
       // Find BPMN definition of this Sub process
       // And set it into the new ABProcessEngine
       let bpmnProcess =
-         instance.jsonDefinition.definition["bpmn2:definitions"][
-            "bpmn2:process"
-         ];
+         (instance.jsonDefinition["bpmn2:definitions"] ?? instance.jsonDefinition.definition["bpmn2:definitions"])["bpmn2:process"];
       let bpmnSubProcess;
 
       for (let key in bpmnProcess) {
