@@ -1272,7 +1272,7 @@ module.exports = class ABModelAPINetsuite extends ABModel {
 
       // first, pull out our "have_no_relation" rules for later:
       var noRelationRules = [];
-      cond.where = this.queryConditionsPluckNoRelations(
+      cond.where = this.queryConditionsPluckRelationConditions(
          cond.where,
          noRelationRules
       );
@@ -2120,7 +2120,7 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       // make sure we don't edit the passed in where object
       where = this.AB.cloneDeep(where);
 
-      where = this.queryConditionsPluckNoRelations(where, noRelationRules);
+      where = this.queryConditionsPluckRelationConditions(where, noRelationRules);
 
       // Now walk through each of our conditions and turn them into their
       // sql WHERE statements
