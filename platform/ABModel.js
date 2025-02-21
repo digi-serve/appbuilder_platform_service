@@ -2012,7 +2012,7 @@ module.exports = class ABModel extends ABModelCore {
    querySort(query, sort, userData) {
       if (!_.isEmpty(sort)) {
          sort.forEach((o) => {
-            if (o.key == "updated_at" || o.key == "created") {
+            if (o.key == "updated_at" || o.key == "created_at") {
                query.orderBy(o.key, o.dir.toLowerCase());
             }
             var orderField = this.object.fieldByID(o.key);
