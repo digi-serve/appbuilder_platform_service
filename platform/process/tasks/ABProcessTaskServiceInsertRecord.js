@@ -434,7 +434,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                   }
 
                   if (
-                     evalValue.toString &&
+                     evalValue?.toString &&
                      (field.key == "string" || field.key == "LongText")
                   ) {
                      evalValue = evalValue.toString();
