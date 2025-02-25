@@ -102,9 +102,11 @@ module.exports = class SubProcess extends SubProcessCore {
          // Pull pending tasks
          let subTasks = await processEngine.pendingTasks();
 
-         // Do tasks
-         while (subTasks && subTasks.length > 0) {
-            for (let t of subTasks) {
+         // Do tasks in SEQUENCE
+         const doTasks = async (tasks) => {
+            if (tasks?.length < 1) return Promise.resolve(null);
+
+            for (let t of tasks) {
                let isDone = false;
                taskElements.push(t);
 
@@ -132,7 +134,10 @@ module.exports = class SubProcess extends SubProcessCore {
 
             // Pull pending tasks again
             subTasks = await processEngine.pendingTasks();
-         }
+         };
+
+         // eslint-disable-next-line no-empty
+         while (subTasks?.length > 0 && await doTasks(subTasks)) {}
 
          // No pending tasks, then go to process the next data
          if (!subTasks || subTasks.length < 1) {
