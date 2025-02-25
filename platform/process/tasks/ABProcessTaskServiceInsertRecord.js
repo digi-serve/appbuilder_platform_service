@@ -387,7 +387,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
                      // Pull data from the repeat data
                      else if (sourceName == "repeatData") {
                         let fieldRepeat = this.fieldRepeat;
-                        if (fieldRepeat || fieldRepeat.datasourceLink) {
+                        if (fieldRepeat?.datasourceLink) {
                            formula = formula.replace(
                               match,
                               getFieldValue(
