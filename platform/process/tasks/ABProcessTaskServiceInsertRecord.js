@@ -33,7 +33,12 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
       let results = [];
 
       // Create tasks to pull data for repeat insert rows
-      if (this.isRepeat) {
+      if (
+         this.isRepeat ||
+         (this.process?.key == "SubProcess" &&
+            this.repeatMode &&
+            this.repeatColumn)
+      ) {
          let fieldRepeat = this.fieldRepeat;
          if (fieldRepeat) {
             let startData = this.processDataStart(instance);
