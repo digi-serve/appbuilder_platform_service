@@ -10,13 +10,6 @@ const ABQLRowUpdateCore = require("../../core/ql/ABQLRowUpdateCore.js");
 const _ = require("lodash");
 
 class ABQLRowUpdate extends ABQLRowUpdateCore {
-   // constructor(attributes, prevOP, task, application) {
-   //     super(attributes, ParameterDefinitions, prevOP, task, application);
-   //     // #Hack! : when an Operation provides the same .NextQlOps that it
-   //     // was defined in, we can't require it again ==> circular dependency.
-   //     // so we manually set it here from the operation that created us:
-   //     this.constructor.NextQLOps = prevOP.constructor.NextQLOps;
-   // }
    ///
    /// Instance Methods
    ///
@@ -108,12 +101,11 @@ class ABQLRowUpdate extends ABQLRowUpdateCore {
 
                   // pull/set the process value
                   if (processField) {
-                     updateParams[
-                        field.columnName
-                     ] = this.task.process.processData(this.task, [
-                        instance,
-                        processField.key,
-                     ]);
+                     updateParams[field.columnName] =
+                        this.task.process.processData(this.task, [
+                           instance,
+                           processField.key,
+                        ]);
                   }
                }
                // Set custom value
@@ -121,10 +113,6 @@ class ABQLRowUpdate extends ABQLRowUpdateCore {
                   updateParams[field.columnName] = value.value ?? null;
                }
             }
-
-            // Find the ID of the current .data row
-            var PK = context.object.PK();
-            var id = context.data[PK];
 
             // call .requestParams to set default values and reformat value properly
             var updateParams = _.merge(
@@ -147,26 +135,44 @@ class ABQLRowUpdate extends ABQLRowUpdateCore {
             //    })
             //    .catch(reject);
 
+            // Find the ID of the current .data row
+            const PK = context.object.PK();
+            const contentData = context.data;
+            const ids = (Array.isArray(contentData) &&
+               contentData.map((e) => e[PK])) || [contentData[PK]];
+
             // Calling the service to perform the update will implement all the
             // additional Process Lifecycle actions of the update:
-            let jobData = {
+            const limit = 10;
+            const jobData = {
                objectID: context.object.id,
-               ID: id,
                values: updateParams,
                fromProcessManager: true,
             };
-            req.serviceRequest(
-               "appbuilder.model-update",
-               jobData,
-               (err, updatedRow) => {
-                  if (err) {
-                     return reject(err);
-                  }
-                  // this returns the fully populated & updated row
-                  nextContext.data = updatedRow;
-                  resolve(nextContext);
-               }
-            );
+            const data = (nextContext.data = []);
+            let pending = Promise.resolve();
+            while (ids.length > 0) {
+               const newPendings = ids.splice(0, limit).map(
+                  (id) =>
+                     new Promise((resolve, reject) => {
+                        jobData.ID = id;
+                        req.serviceRequest(
+                           "appbuilder.model-update",
+                           jobData,
+                           (err, updatedRow) => {
+                              if (err) {
+                                 return reject(err);
+                              }
+                              // this returns the fully populated & updated row
+                              data.push(updatedRow);
+                              resolve();
+                           }
+                        );
+                     })
+               );
+               pending = pending.then(() => Promise.all(newPendings));
+            }
+            pending.then(() => resolve(nextContext)).catch(reject);
          });
       });
 
