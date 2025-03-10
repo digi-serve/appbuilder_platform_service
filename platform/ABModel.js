@@ -1025,10 +1025,10 @@ module.exports = class ABModel extends ABModelCore {
 
                   through: {
                      // "{joinTable}.{sourceColName}"
-                     from: `${joinTablename}.${joinColumnNames.sourceColumnName}`,
+                     from: f.joinTableSourceColumnName,
 
                      // "{joinTable}.{targetColName}"
-                     to: `${joinTablename}.${joinColumnNames.targetColumnName}`,
+                     to: f.joinTableTargetColumnName,
                   },
 
                   // "{targetTable}.{primaryField}"
@@ -2600,23 +2600,33 @@ function unRelate(obj, columnName, rowId, values, trx, req) {
          req.performance.mark(alias);
       }
 
+      const fieldLink = obj.fields((f) => f.columnName == columnName)[0],
+      objectLink = fieldLink.object,
+      linkType = fieldLink
+         ? `${fieldLink.linkType()}:${fieldLink.linkViaType()}`
+         : null;
+
       query
          .where(obj.PK(), rowId)
          .first()
          .then((record) => {
-            if (record == null) return done(resolve, alias, req);
+            if (record == null || fieldLink == null || objectLink == null)
+               return done(resolve, alias, req);
 
-            let fieldLink = obj.fields((f) => f.columnName == columnName)[0];
-            if (fieldLink == null) return done(resolve, alias, req);
-
-            let objectLink = fieldLink.object;
-            if (objectLink == null) return done(resolve, alias, req);
-
-            record
+            let unrelatePhase = record
                .$relatedQuery(clearRelationName)
                .alias(alias)
                .unrelate()
-               .where(objectLink.PK(), "in", values)
+               .where(objectLink.PK(), "in", values);
+
+            // Many-to-Many
+            if (linkType == "many:many") {
+               unrelatePhase = unrelatePhase
+                  .orWhere(fieldLink.joinTableSourceColumnName, "in", values)
+                  .orWhere(fieldLink.joinTableTargetColumnName, "in", values);
+            }
+
+            unrelatePhase
                .then(() => {
                   done(resolve, alias, req);
                })

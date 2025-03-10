@@ -1091,4 +1091,16 @@ module.exports = class ABFieldConnect extends ABFieldConnectCore {
 
       return result;
    }
+
+   get joinTableSourceColumnName() {
+      return `${this.joinTableName(true)}.${
+         this.joinColumnNames().sourceColumnName
+      }`;
+   }
+
+   get joinTableTargetColumnName() {
+      return `${this.joinTableName(true)}.${
+         this.joinColumnNames().targetColumnName
+      }`;
+   }
 };
