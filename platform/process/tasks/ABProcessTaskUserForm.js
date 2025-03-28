@@ -24,7 +24,14 @@ module.exports = class ABProcessTaskUserForm extends (
       return new Promise((resolve, reject) => {
 
          const userId = this._req?._user?.id;
-         if (!userId) return resolve(false);
+         if (!userId) return resolve(true);
+
+         // If the form input are set, then go to the next task
+         const myState = this.myState(instance);
+         if (myState?._isSet) {
+            this.stateCompleted(instance);
+            return resolve(true);
+         }
 
          // Call to display the input form popup.
          this._req.broadcast([
@@ -32,7 +39,9 @@ module.exports = class ABProcessTaskUserForm extends (
                room: this._req.socketKey(userId),
                event: "ab.task.userform",
                data: {
+                  processId: this.process.id,
                   taskId: this.id,
+                  instanceId: instance.id,
                   formio: this.formBuilder,
                },
             },
@@ -45,16 +54,15 @@ module.exports = class ABProcessTaskUserForm extends (
       });
    }
 
-   // TODO
-   // const states = {};
+   enterInputs(instance, values = null) {
+      if (values) {
+         if (typeof values == "string") {
+            values = JSON.parse(values);
+         }
+         values._isSet = true;
+         this.stateCompleted(instance);
+      }
 
-   // (this.formBuilder?.components ?? []).forEach((comp) => {
-   //    if (comp.type == "button") return;
-
-   //    states[comp.key] = "TODO";
-   // });
-
-   // this.stateUpdate(instance, states);
-   // this.stateCompleted(instance);
-
+      this.stateUpdate(instance, values);
+   }
 };
