@@ -6,7 +6,7 @@
 const _ = require("lodash");
 const axios = require("axios");
 const crypto = require("crypto");
-const moment = require("moment");
+// const moment = require("moment");
 const OAuth = require("oauth-1.0a");
 
 const ABModel = require("./ABModel.js");
@@ -15,8 +15,158 @@ const CONCURRENCY_LIMIT = 20;
 // {int}
 // This is the number of parallel operations we want to limit ourselves to
 // so we avoid trippig NetSuit's CONCURRENCY_LIMIT_EXCEEDED
+// This is local to our Relate/unRelate operations
+
+const CONCURRENCY_LIMIT_MAX = 200;
+// {int}
+// This is the number of parallel operations we want to limit ourselves to
+// so we avoid trippig NetSuit's CONCURRENCY_LIMIT_EXCEEDED.
+// This is global, across all our Netsuite API calls.
 
 const TruthyValues = [true, 1, "1", "t", "true"];
+
+var concurrency_count = 0;
+// {int}
+// a counter of the number of active requests we have made to NetSuite.
+
+var concurrency_history = [];
+// {int[]}
+// a history of the number of active requests we have made to NetSuite over
+// the past 5 seconds.
+
+const RequestsActive = {};
+// { jobID : {Promise} }
+// a hash of all the active requests we have made to NetSuite.
+// we use this to track the number of our requests.
+// Object.keys(RequestsActive).length will give us the number of active requests.
+
+const RequestsPending = [];
+// {Promise[]}
+// a list of all the requests that are waiting to be processed.
+
+setInterval(() => {
+   if (concurrency_history.length > 5) concurrency_history.shift();
+   concurrency_history.push(concurrency_count);
+   if (concurrency_count > 0) {
+      console.log(
+         `NetSuite API Concurrency: [${concurrency_history.join(
+            ","
+         )}] requests per second`
+      );
+   }
+   if (Object.keys(RequestsActive).length > 0) {
+      console.log(
+         `NetSuite API Concurrency: ${
+            Object.keys(RequestsActive).length
+         } active requests`
+      );
+   }
+   if (RequestsPending.length > 0) {
+      console.log(
+         `NetSuite API Concurrency: ${RequestsPending.length} pending requests`
+      );
+   }
+   concurrency_count = 0;
+}, 1000);
+// report on our concurrency status every second
+
+/**
+ * function fetchPending()
+ * This function is called whenever we have an open slot to process a new
+ * request.  It will pull the next request from RequestsPending and process it.
+ * If there are no requests pending, then it will do nothing.
+ */
+function fetchPending() {
+   if (RequestsPending.length == 0) return;
+
+   // get the next packet
+   let packet = RequestsPending.shift();
+
+   // make the request
+   let f = fetch(
+      packet.cred,
+      packet.url,
+      packet.method,
+      packet.data,
+      packet.headers
+   );
+
+   // register the request
+   RequestsActive[packet.jobID] = f;
+   f.then(packet.res)
+      .catch(packet.rej)
+      .finally(() => {
+         // remove the request from our active list
+         delete RequestsActive[packet.jobID];
+
+         // look for more to process
+         fetchPending();
+      });
+}
+/**
+ * function fetchConcurrent()
+ * This function is a wrapper around the fetch() function that will manage
+ * the number of concurrent requests we are making to NetSuite.
+ * If we are at our limit, then the request will be queued up to be processed
+ * when we have an open slot.
+ *
+ * @param {ABFactory} AB
+ * @param {obj} cred
+ *        Our Credentials object that contains our Netsuite & OAuth information.
+ *        cred.token
+ *        cred.oauth
+ *        cred.NETSUITE_* environment variables
+ * @param {string} url
+ * @param {string} [method]
+ *        Default is 'GET'
+ * @param {object} [data]
+ *        Optional JSON data to be included in the request body.
+ * @param {object} [headers]
+ *        Optional dictionary of headers to add to the request.
+ * @returns {Promise}
+ */
+function fetchConcurrent(
+   AB,
+   cred,
+   url,
+   method = "GET",
+   data = null,
+   headers = {}
+) {
+   concurrency_count++;
+   let jobID = AB.jobID();
+   if (Object.keys(RequestsActive).length >= CONCURRENCY_LIMIT_MAX) {
+      // we are at our limit, so we need to wait until we have an open slot
+      let p = new Promise((resolve, reject) => {
+         let pendingPacket = {
+            res: resolve,
+            rej: reject,
+            jobID,
+            cred,
+            url,
+            method,
+            data,
+            headers,
+         };
+         RequestsPending.push(pendingPacket);
+      });
+      return p;
+   }
+
+   let f = fetch(cred, url, method, data, headers);
+   RequestsActive[jobID] = f;
+
+   // ok, I know this is janky, but since our .finally() doesn't
+   // care about the result or an error, I'm declaring it here
+   // to make sure that no matter what, we continue our processing
+   f.finally((result) => {
+      delete RequestsActive[jobID];
+      fetchPending();
+      return result;
+   });
+
+   return f;
+}
 
 /**
  * (taken from https://github.com/digi-serve/global-hr-update/blob/master/back-end/api/netsuite.js)
@@ -614,7 +764,7 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          if (val.indexOf("ENV:") == 0) {
             val = process.env[val.replace("ENV:", "")] || "??";
          } else if (val.indexOf("SECRET:") == 0) {
-            req.log("TODO: decode SECRET here");
+            console.log("TODO: decode SECRET here");
          } else {
             // val remains credentials[k]
          }
@@ -755,7 +905,13 @@ module.exports = class ABModelAPINetsuite extends ABModel {
 
       let response;
       try {
-         response = await fetch(this.credentials, url, "POST", baseValues);
+         response = await fetchConcurrent(
+            this.AB,
+            this.credentials,
+            url,
+            "POST",
+            baseValues
+         );
       } catch (err) {
          this.processError(
             `POST ${url}`,
@@ -821,7 +977,12 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       }
 
       try {
-         let response = await fetch(this.credentials, url, "DELETE");
+         let response = await fetchConcurrent(
+            this.AB,
+            this.credentials,
+            url,
+            "DELETE"
+         );
          // let location = response.headers["location"];
          // let parts = location.split(`${this.object.dbTableName()}/`);
          // let id = parts[1];
@@ -1070,7 +1231,8 @@ module.exports = class ABModelAPINetsuite extends ABModel {
 
       let URL = `${this.credentials.NETSUITE_QUERY_BASE_URL}/suiteql`;
 
-      let response = await fetch(
+      let response = await fetchConcurrent(
+         this.AB,
          this.credentials,
          URL,
          "POST",
@@ -1121,7 +1283,8 @@ module.exports = class ABModelAPINetsuite extends ABModel {
             ", "
          )} )`;
 
-         let responseLinkObj = await fetch(
+         let responseLinkObj = await fetchConcurrent(
+            this.AB,
             this.credentials,
             URL,
             "POST",
@@ -1409,7 +1572,8 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          req.performance.mark("initial-find");
       }
       try {
-         let response = await fetch(
+         let response = await fetchConcurrent(
+            this.AB,
             this.credentials,
             URL,
             "POST",
@@ -1556,7 +1720,8 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          req.performance.mark(`${linkField.columnName}-lookup`);
       }
       // first get the old values:
-      let response = await fetch(
+      let response = await fetchConcurrent(
+         this.AB,
          this.credentials,
          URL,
          "POST",
@@ -1629,7 +1794,9 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          }/${linkObject.dbTableName()}/${vid}`;
 
          try {
-            allUpdates.push(fetch(this.credentials, url, "PATCH", setVal));
+            allUpdates.push(
+               fetchConcurrent(this.AB, this.credentials, url, "PATCH", setVal)
+            );
          } catch (err) {
             this.processError(
                `PATCH ${url}`,
@@ -1689,7 +1856,8 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          req.performance.mark(`${field.columnName}-lookup`);
       }
       // first get the old values:
-      let response = await fetch(
+      let response = await fetchConcurrent(
+         this.AB,
          this.credentials,
          URL,
          "POST",
@@ -1802,7 +1970,9 @@ module.exports = class ABModelAPINetsuite extends ABModel {
             req.log(url);
             req.log(newVal);
          }
-         allRelates.push(fetch(this.credentials, url, "POST", newVal));
+         allRelates.push(
+            fetchConcurrent(this.AB, this.credentials, url, "POST", newVal)
+         );
 
          // check concurrency limit
          parallelCount++;
@@ -1842,7 +2012,8 @@ module.exports = class ABModelAPINetsuite extends ABModel {
 
       sql = `${sql} WHERE ${conditions.join(" AND ")}`;
 
-      let response = await fetch(
+      let response = await fetchConcurrent(
+         this.AB,
          this.credentials,
          URL,
          "POST",
@@ -1899,7 +2070,8 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       let parallelCount = 0;
       for (let i = 0; i < pks.length; i++) {
          allUnRelates.push(
-            await fetch(
+            await fetchConcurrent(
+               this.AB,
                this.credentials,
                `${url}${pks[i]}`,
                "PATCH",
@@ -1928,7 +2100,12 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       let parallelCount = 0;
       for (let i = 0; i < pks.length; i++) {
          allUnRelates.push(
-            await fetch(this.credentials, `${url}${pks[i]}`, "DELETE")
+            await fetchConcurrent(
+               this.AB,
+               this.credentials,
+               `${url}${pks[i]}`,
+               "DELETE"
+            )
          );
          parallelCount++;
          if (parallelCount >= CONCURRENCY_LIMIT) {
@@ -1968,7 +2145,7 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       // {valueHash} updateRelationParams
       // return the parameters of connectObject data field values
 
-      let transParams = this.AB.cloneDeep(baseValues.translations);
+      // let transParams = this.AB.cloneDeep(baseValues.translations);
       // {array} transParams
       // get translations values for the external object
       // it will update to translations table after model values updated
@@ -2049,7 +2226,13 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       }
 
       try {
-         let response = await fetch(this.credentials, url, "PATCH", baseValues);
+         await fetchConcurrent(
+            this.AB,
+            this.credentials,
+            url,
+            "PATCH",
+            baseValues
+         );
       } catch (err) {
          this.processError(
             `PATCH ${url}`,
@@ -2120,7 +2303,10 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       // make sure we don't edit the passed in where object
       where = this.AB.cloneDeep(where);
 
-      where = this.queryConditionsPluckRelationConditions(where, noRelationRules);
+      where = this.queryConditionsPluckRelationConditions(
+         where,
+         noRelationRules
+      );
 
       // Now walk through each of our conditions and turn them into their
       // sql WHERE statements
