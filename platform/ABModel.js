@@ -2601,10 +2601,10 @@ function unRelate(obj, columnName, rowId, values, trx, req) {
       }
 
       const fieldLink = obj.fields((f) => f.columnName == columnName)[0],
-      objectLink = fieldLink.object,
-      linkType = fieldLink
-         ? `${fieldLink.linkType()}:${fieldLink.linkViaType()}`
-         : null;
+         objectLink = fieldLink.object,
+         linkType = fieldLink
+            ? `${fieldLink.linkType()}:${fieldLink.linkViaType()}`
+            : null;
 
       query
          .where(obj.PK(), rowId)
