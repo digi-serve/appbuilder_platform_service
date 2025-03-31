@@ -17,11 +17,13 @@ const CONCURRENCY_LIMIT = 20;
 // so we avoid trippig NetSuit's CONCURRENCY_LIMIT_EXCEEDED
 // This is local to our Relate/unRelate operations
 
-const CONCURRENCY_LIMIT_MAX = 200;
+const CONCURRENCY_LIMIT_MAX = process.env["NETSUITE_CONCURRENCY_LIMIT"] || 35;
 // {int}
 // This is the number of parallel operations we want to limit ourselves to
 // so we avoid trippig NetSuit's CONCURRENCY_LIMIT_EXCEEDED.
 // This is global, across all our Netsuite API calls.
+// NOTE: as of this writing, the NetSuite limit is 40 spread across all
+//       applications.  We are setting this to 35 to give us a little buffer.
 
 const TruthyValues = [true, 1, "1", "t", "true"];
 
