@@ -8,6 +8,7 @@
 const _ = require("lodash");
 const Knex = require("knex");
 const moment = require("moment");
+const nanoid = require("nanoid");
 const { serializeError, deserializeError } = require("serialize-error");
 const uuid = require("uuid");
 
@@ -561,6 +562,10 @@ class ABFactory extends ABFactoryCore {
 
    isUndefined(...params) {
       return _.isUndefined(...params);
+   }
+
+   jobID(length = 21) {
+      return nanoid(length);
    }
 
    merge(...params) {
