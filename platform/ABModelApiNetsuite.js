@@ -136,7 +136,7 @@ function fetchConcurrent(
    headers = {}
 ) {
    concurrency_count++;
-   let jobID = AB.uuid();
+   let jobID = AB.jobID(10);
    if (Object.keys(RequestsActive).length >= CONCURRENCY_LIMIT_MAX) {
       // we are at our limit, so we need to wait until we have an open slot
       let p = new Promise((resolve, reject) => {
