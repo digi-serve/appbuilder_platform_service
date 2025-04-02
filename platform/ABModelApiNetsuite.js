@@ -49,26 +49,38 @@ const RequestsPending = [];
 setInterval(() => {
    if (concurrency_history.length > 5) concurrency_history.shift();
    concurrency_history.push(concurrency_count);
-   if (concurrency_count > 0) {
-      console.log(
+   let displayLog = [];
+   let showConcurrent = false;
+   concurrency_history.forEach((c) => {
+      if (c > 0) showConcurrent = true;
+   });
+   if (showConcurrent) {
+      displayLog.push(
          `NetSuite API Concurrency: [${concurrency_history.join(
             ","
          )}] requests per second`
       );
    }
    if (Object.keys(RequestsActive).length > 0) {
-      console.log(
+      displayLog.push(
          `NetSuite API Concurrency: ${
             Object.keys(RequestsActive).length
          } active requests`
       );
    }
    if (RequestsPending.length > 0) {
-      console.log(
+      displayLog.push(
          `NetSuite API Concurrency: ${RequestsPending.length} pending requests`
       );
    }
    concurrency_count = 0;
+   if (displayLog.length > 0) {
+      console.log("=== Netsuite Concurrency ====");
+      displayLog.forEach((l) => {
+         console.log(l);
+      });
+      console.log("=============================");
+   }
 }, 1000);
 // report on our concurrency status every second
 
