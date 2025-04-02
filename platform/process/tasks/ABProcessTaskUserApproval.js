@@ -172,6 +172,7 @@ module.exports = class ABProcessTaskUserApproval extends (
          ]);
 
          if (entry.field?.key == "connectObject") {
+            delete processData[entry.key];
             processData[`${entry.key}.format`] = this.process.processData(
                this,
                [instance, `${entry.key}.format`],
@@ -212,6 +213,8 @@ module.exports = class ABProcessTaskUserApproval extends (
       let copyComponents = this.AB.cloneDeep(this.formBuilder.components);
       parseEntryKeys(keysToKeep, copyComponents);
       Object.keys(processData).forEach((k) => {
+         // skip any keys that have .format
+         if (k.indexOf(".format") > -1) return;
          if (keysToKeep.indexOf(k) == -1) {
             delete processData[k];
          }
