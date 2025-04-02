@@ -8,7 +8,7 @@
 const _ = require("lodash");
 const Knex = require("knex");
 const moment = require("moment");
-const nanoid = require("nanoid");
+const { nanoid } = require("nanoid");
 const { serializeError, deserializeError } = require("serialize-error");
 const uuid = require("uuid");
 const Papa = require("papaparse");
