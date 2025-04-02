@@ -914,7 +914,9 @@ module.exports = class ABModel extends ABModelCore {
          var linkField = f.fieldLink;
          if (linkField == null) return;
 
-         var linkModel = linkObject.model().modelKnex();
+         var linkModel = linkObject.model().modelKnex?.();
+         if (!linkModel) return;
+         
          var relationName = f.relationName();
 
          var LinkType = `${f.settings.linkType}:${f.settings.linkViaType}`;
