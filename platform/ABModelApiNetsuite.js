@@ -1436,17 +1436,6 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          this.credentials = this.pullCredentials();
       }
 
-      // now construct the URL (including limit & skip)
-      let qs = "";
-      if (cond.limit) qs = `limit=${cond.limit}`;
-      if (cond.offset) {
-         if (qs) qs += "&";
-         qs = `${qs}offset=${cond.offset}`;
-      }
-      if (qs) qs = `?${qs}`;
-
-      let URL = `${this.credentials.NETSUITE_QUERY_BASE_URL}/suiteql${qs}`;
-
       // first, pull out our "have_no_relation" rules for later:
       var noRelationRules = [];
       cond.where = this.queryConditionsPluckRelationConditions(
@@ -1585,7 +1574,31 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          req.log("Netsuite SQL:", sql);
          req.performance.mark("initial-find");
       }
-      try {
+
+      let URL;
+      // {string}
+      // the URL to use for our Netsuite API call
+
+      let list = [];
+      // {array} of result data
+
+      let getData = async () => {
+         // a recursive function to make sure we get all our expected results.
+         // this will detect Netsuite's paging (hasMore) value and pull the
+         // next set of data if needed.
+
+         let offset = cond.offset ?? list.length;
+         // now construct the URL (including limit & skip)
+         let qs = "";
+         if (cond.limit) qs = `limit=${cond.limit}`;
+         if (offset) {
+            if (qs) qs += "&";
+            qs = `${qs}offset=${offset}`;
+         }
+         if (qs) qs = `?${qs}`;
+
+         URL = `${this.credentials.NETSUITE_QUERY_BASE_URL}/suiteql${qs}`;
+
          let response = await fetchConcurrent(
             this.AB,
             this.credentials,
@@ -1596,9 +1609,19 @@ module.exports = class ABModelAPINetsuite extends ABModel {
             },
             { Prefer: "transient" }
          );
-         // console.log(response);
+         list = list.concat(response.data.items);
+         if (response.data.hasMore) {
+            // if we didn't ask for a limited set of data
+            if (!cond.limit && !cond.offset) {
+               // Netsuite has reached it's limit, so ask for more
+               await getData();
+            }
+         }
+      };
+      try {
+         await getData();
 
-         let list = response.data.items;
+         // let list = response.data.items;
          if (req) {
             req.performance.measure("initial-find");
             req.performance.mark("populate");
