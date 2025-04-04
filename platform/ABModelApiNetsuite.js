@@ -1440,7 +1440,7 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       if (cond.offset > 0 && cond.limit > 0) {
          let mod = cond.offset % cond.limit;
          if (mod != 0) {
-            // Netsuite needs offset to be a mutiple of limit
+            // Netsuite needs offset to be a multiple of limit
             // however, our ui library has widgets that can request
             // offsets and limits that are not multiples of each other.
             // For example: offset:75 limit:20
