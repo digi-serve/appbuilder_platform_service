@@ -1436,6 +1436,51 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          this.credentials = this.pullCredentials();
       }
 
+      let origPaging = {};
+      if (cond.offset > 0 && cond.limit > 0) {
+         let mod = cond.offset % cond.limit;
+         if (mod != 0) {
+            // Netsuite needs offset to be a mutiple of limit
+            // however, our ui library has widgets that can request
+            // offsets and limits that are not multiples of each other.
+            // For example: offset:75 limit:20
+
+            // in this case, we will make 2 calls to Netsuite
+            // we'll get the limit/offset multiple before the requested
+            // offset, and the one after.
+            // Once we do that, we'll figure out which of those entries
+            // so send back.
+            origPaging.offset = cond.offset;
+            origPaging.limit = cond.limit;
+            origPaging.remainder = cond.offset % cond.limit;
+
+            let prePage = this.AB.cloneDeep(cond);
+            prePage.offset = origPaging.offset - origPaging.remainder;
+
+            let postPage = this.AB.cloneDeep(cond);
+            postPage.offset = prePage.offset + cond.limit;
+
+            // now lets get both results
+            let bothCalls = [];
+            bothCalls.push(this.findAll(prePage, conditionDefaults, req));
+            bothCalls.push(this.findAll(postPage, conditionDefaults, req));
+            let bothResults = await Promise.all(bothCalls);
+            let list = bothResults[0].concat(bothResults[1]);
+
+            // remove the initial entries that we don't want
+            for (let i = 0; i < origPaging.remainder; i++) {
+               list.shift();
+            }
+
+            // only keep the entries we want
+            while (list.length > origPaging.limit) {
+               list.pop();
+            }
+
+            return list;
+         }
+      }
+
       // first, pull out our "have_no_relation" rules for later:
       var noRelationRules = [];
       cond.where = this.queryConditionsPluckRelationConditions(
