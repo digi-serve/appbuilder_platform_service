@@ -36,6 +36,11 @@ var concurrency_history = [];
 // a history of the number of active requests we have made to NetSuite over
 // the past 5 seconds.
 
+const PendingCountRequests = {};
+// {jobID : { res:Promise.response, rej:Promise.reject }}
+// a hash of the current findCount() requests that are waiting
+// for the main findAll() to complete.
+
 const RequestsActive = {};
 // { jobID : {Promise} }
 // a hash of all the active requests we have made to NetSuite.
@@ -1627,7 +1632,7 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       let list = [];
       // {array} of result data
 
-      let getData = async () => {
+      let getData = async (hasCountUpdated = false) => {
          // a recursive function to make sure we get all our expected results.
          // this will detect Netsuite's paging (hasMore) value and pull the
          // next set of data if needed.
@@ -1655,18 +1660,27 @@ module.exports = class ABModelAPINetsuite extends ABModel {
             { Prefer: "transient" }
          );
          list = list.concat(response.data.items);
+
+         // if there is a count request, then resolve it now
+         if (!hasCountUpdated && response.data.totalResults) {
+            let currCountJob = PendingCountRequests[cond.jobID];
+            if (currCountJob) {
+               currCountJob.res(response.data.totalResults);
+               hasCountUpdated = true;
+               delete PendingCountRequests[cond.jobID];
+            }
+         }
          if (response.data.hasMore) {
             // if we didn't ask for a limited set of data
             if (!cond.limit && !cond.offset) {
                // Netsuite has reached it's limit, so ask for more
-               await getData();
+               await getData(hasCountUpdated);
             }
          }
       };
       try {
          await getData();
 
-         // let list = response.data.items;
          if (req) {
             req.performance.measure("initial-find");
             req.performance.mark("populate");
@@ -1704,16 +1718,27 @@ module.exports = class ABModelAPINetsuite extends ABModel {
     * @return {Promise} resolved with the result of the find()
     */
    async findCount(cond, conditionDefaults, req) {
-      const returnData = await this.findAll(cond, conditionDefaults, req);
+      if (!cond.jobID) {
+         (req ?? console).log(
+            "ABModelApiNetsuite.findCount() called without jobID"
+         );
+         cond.jobID = cond.jobID ?? req?.jobID ?? this.AB.jobID();
+      }
 
-      // // Paging
-      // const pagingValues = this.object.getPagingValues({
-      //    skip: cond?.skip,
-      //    limit: cond?.limit,
-      // });
-      // pagingValues.total
-
-      return returnData?.length;
+      try {
+         let count = await new Promise((resolve, reject) => {
+            PendingCountRequests[cond.jobID] = {
+               res: resolve,
+               rej: reject,
+            };
+         });
+         delete PendingCountRequests[cond.jobID];
+         return count;
+      } catch (err) {
+         (req ?? console).log("Error in findCount", err);
+         delete PendingCountRequests[cond.jobID];
+         throw err;
+      }
    }
 
    insertRelationValuesToSave(baseValues, updateRelationParams) {
