@@ -36,6 +36,11 @@ var concurrency_history = [];
 // a history of the number of active requests we have made to NetSuite over
 // the past 5 seconds.
 
+const PendingCountRequests = {};
+// {jobID : { res:Promise.response, rej:Promise.reject }}
+// a hash of the current findCount() requests that are waiting
+// for the main findAll() to complete.
+
 const RequestsActive = {};
 // { jobID : {Promise} }
 // a hash of all the active requests we have made to NetSuite.
@@ -1436,16 +1441,50 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          this.credentials = this.pullCredentials();
       }
 
-      // now construct the URL (including limit & skip)
-      let qs = "";
-      if (cond.limit) qs = `limit=${cond.limit}`;
-      if (cond.offset) {
-         if (qs) qs += "&";
-         qs = `${qs}offset=${cond.offset}`;
-      }
-      if (qs) qs = `?${qs}`;
+      let origPaging = {};
+      if (cond.offset > 0 && cond.limit > 0) {
+         let mod = cond.offset % cond.limit;
+         if (mod != 0) {
+            // Netsuite needs offset to be a multiple of limit
+            // however, our ui library has widgets that can request
+            // offsets and limits that are not multiples of each other.
+            // For example: offset:75 limit:20
 
-      let URL = `${this.credentials.NETSUITE_QUERY_BASE_URL}/suiteql${qs}`;
+            // in this case, we will make 2 calls to Netsuite
+            // we'll get the limit/offset multiple before the requested
+            // offset, and the one after.
+            // Once we do that, we'll figure out which of those entries
+            // so send back.
+            origPaging.offset = cond.offset;
+            origPaging.limit = cond.limit;
+            origPaging.remainder = cond.offset % cond.limit;
+
+            let prePage = this.AB.cloneDeep(cond);
+            prePage.offset = origPaging.offset - origPaging.remainder;
+
+            let postPage = this.AB.cloneDeep(cond);
+            postPage.offset = prePage.offset + cond.limit;
+
+            // now lets get both results
+            let bothCalls = [];
+            bothCalls.push(this.findAll(prePage, conditionDefaults, req));
+            bothCalls.push(this.findAll(postPage, conditionDefaults, req));
+            let bothResults = await Promise.all(bothCalls);
+            let list = bothResults[0].concat(bothResults[1]);
+
+            // remove the initial entries that we don't want
+            for (let i = 0; i < origPaging.remainder; i++) {
+               list.shift();
+            }
+
+            // only keep the entries we want
+            while (list.length > origPaging.limit) {
+               list.pop();
+            }
+
+            return list;
+         }
+      }
 
       // first, pull out our "have_no_relation" rules for later:
       var noRelationRules = [];
@@ -1585,7 +1624,31 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          req.log("Netsuite SQL:", sql);
          req.performance.mark("initial-find");
       }
-      try {
+
+      let URL;
+      // {string}
+      // the URL to use for our Netsuite API call
+
+      let list = [];
+      // {array} of result data
+
+      let getData = async (hasCountUpdated = false) => {
+         // a recursive function to make sure we get all our expected results.
+         // this will detect Netsuite's paging (hasMore) value and pull the
+         // next set of data if needed.
+
+         let offset = cond.offset ?? list.length;
+         // now construct the URL (including limit & skip)
+         let qs = "";
+         if (cond.limit) qs = `limit=${cond.limit}`;
+         if (offset) {
+            if (qs) qs += "&";
+            qs = `${qs}offset=${offset}`;
+         }
+         if (qs) qs = `?${qs}`;
+
+         URL = `${this.credentials.NETSUITE_QUERY_BASE_URL}/suiteql${qs}`;
+
          let response = await fetchConcurrent(
             this.AB,
             this.credentials,
@@ -1596,9 +1659,28 @@ module.exports = class ABModelAPINetsuite extends ABModel {
             },
             { Prefer: "transient" }
          );
-         // console.log(response);
+         list = list.concat(response.data.items);
 
-         let list = response.data.items;
+         // if there is a count request, then resolve it now
+         if (!hasCountUpdated && response.data.totalResults) {
+            let currCountJob = PendingCountRequests[cond.jobID];
+            if (currCountJob) {
+               currCountJob.res(response.data.totalResults);
+               hasCountUpdated = true;
+               delete PendingCountRequests[cond.jobID];
+            }
+         }
+         if (response.data.hasMore) {
+            // if we didn't ask for a limited set of data
+            if (!cond.limit && !cond.offset) {
+               // Netsuite has reached it's limit, so ask for more
+               await getData(hasCountUpdated);
+            }
+         }
+      };
+      try {
+         await getData();
+
          if (req) {
             req.performance.measure("initial-find");
             req.performance.mark("populate");
@@ -1636,16 +1718,27 @@ module.exports = class ABModelAPINetsuite extends ABModel {
     * @return {Promise} resolved with the result of the find()
     */
    async findCount(cond, conditionDefaults, req) {
-      const returnData = await this.findAll(cond, conditionDefaults, req);
+      if (!cond.jobID) {
+         (req ?? console).log(
+            "ABModelApiNetsuite.findCount() called without jobID"
+         );
+         cond.jobID = cond.jobID ?? req?.jobID ?? this.AB.jobID();
+      }
 
-      // // Paging
-      // const pagingValues = this.object.getPagingValues({
-      //    skip: cond?.skip,
-      //    limit: cond?.limit,
-      // });
-      // pagingValues.total
-
-      return returnData?.length;
+      try {
+         let count = await new Promise((resolve, reject) => {
+            PendingCountRequests[cond.jobID] = {
+               res: resolve,
+               rej: reject,
+            };
+         });
+         delete PendingCountRequests[cond.jobID];
+         return count;
+      } catch (err) {
+         (req ?? console).log("Error in findCount", err);
+         delete PendingCountRequests[cond.jobID];
+         throw err;
+      }
    }
 
    insertRelationValuesToSave(baseValues, updateRelationParams) {
