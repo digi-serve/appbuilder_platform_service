@@ -1675,7 +1675,6 @@ module.exports = class ABModelAPINetsuite extends ABModel {
             let currCountJob = PendingCountRequests[cond.jobID];
             if (currCountJob) {
                currCountJob.res(response.data.totalResults);
-               hasCountUpdated = true;
                delete PendingCountRequests[cond.jobID];
             }
          }
