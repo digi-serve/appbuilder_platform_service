@@ -1080,9 +1080,9 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       let where = {};
       where[PK] = pks;
       if (req) {
-         values = await req.retry(() => linkObj.model().find(where));
+         values = await req.retry(() => linkObj.model().find(where, req));
       } else {
-         values = await linkObj.model().find(where);
+         values = await linkObj.model().find(where, req);
       }
 
       // convert to a hash  ID : { value }
@@ -1158,9 +1158,9 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       let col = linkField.columnName;
       where[col] = pks;
       if (req) {
-         values = await req.retry(() => linkObj.model().find(where));
+         values = await req.retry(() => linkObj.model().find(where, req));
       } else {
-         values = await linkObj.model().find(where);
+         values = await linkObj.model().find(where, req);
       }
 
       if (typeof values == "undefined") values = [];
