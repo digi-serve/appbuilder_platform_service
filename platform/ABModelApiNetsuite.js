@@ -1365,6 +1365,9 @@ module.exports = class ABModelAPINetsuite extends ABModel {
    async populate(cond, data, req) {
       let columns = [];
 
+      // don't need to populate anything if there is no data.
+      if (data.length == 0) return;
+
       // if .populate == false
       // if .populate not set, assume no
       if (!cond.populate || cond.populate === "false") return;
