@@ -78,6 +78,15 @@ setInterval(() => {
          `NetSuite API Concurrency: ${RequestsPending.length} pending requests`
       );
    }
+   let countPendingCounts = Object.keys(PendingCountRequests).length;
+   if (countPendingCounts > 0) {
+      displayLog.push(
+         `NetSuite Pending Counts (${countPendingCounts}): ${Object.keys(
+            PendingCountRequests
+         ).join(", ")}`
+      );
+   }
+
    concurrency_count = 0;
    if (displayLog.length > 0) {
       console.log("=== Netsuite Concurrency ====");
