@@ -1629,18 +1629,22 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       // {string}
       // the URL to use for our Netsuite API call
 
-      let list = [];
-      // {array} of result data
+      // let list = [];
 
-      let getData = async (hasCountUpdated = false) => {
+      let getData = async (
+         dList,
+         hasCountUpdated = false,
+         dOffset = 0,
+         dLimit = 0
+      ) => {
          // a recursive function to make sure we get all our expected results.
          // this will detect Netsuite's paging (hasMore) value and pull the
          // next set of data if needed.
 
-         let offset = cond.offset ?? list.length;
+         let offset = dOffset;
          // now construct the URL (including limit & skip)
          let qs = "";
-         if (cond.limit) qs = `limit=${cond.limit}`;
+         if (dLimit) qs = `limit=${dLimit}`;
          if (offset) {
             if (qs) qs += "&";
             qs = `${qs}offset=${offset}`;
@@ -1659,7 +1663,9 @@ module.exports = class ABModelAPINetsuite extends ABModel {
             },
             { Prefer: "transient" }
          );
-         list = list.concat(response.data.items);
+         // response.data has these properties:
+         //    links, count, hasMore, items, offset, totalResults
+         dList = dList.concat(response.data.items);
 
          // if there is a count request, then resolve it now
          if (!hasCountUpdated && response.data.totalResults) {
@@ -1672,14 +1678,36 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          }
          if (response.data.hasMore) {
             // if we didn't ask for a limited set of data
-            if (!cond.limit && !cond.offset) {
-               // Netsuite has reached it's limit, so ask for more
-               await getData(hasCountUpdated);
+            if (!dLimit && !dOffset) {
+               // let's make all the additionial calls in parallel
+               // we've just received the 1st page, so let's find out how many more
+
+               let apparentLimit = response.data.count;
+               let numPages = response.data.totalResults / apparentLimit;
+               let lookups = [];
+               for (let i = 1; i <= numPages; i++) {
+                  let offset = apparentLimit * i;
+                  lookups.push(getData([], true, offset, apparentLimit));
+               }
+               req.log(`Netsuite Paging: spawning ${lookups.length} lookups`);
+               let lookupResults = await Promise.all(lookups);
+               while (lookupResults.length > 0) {
+                  dList = dList.concat(lookupResults.shift());
+               }
+               if (dList.length != response.data.totalResults) {
+                  req.log(
+                     `Netsuite Paging Error: dList(${dList.length}) != Response(${response.data.totalResults})`
+                  );
+               } else {
+                  req.log("Netsuite Paging: valid number of results");
+               }
             }
          }
+         return dList;
       };
       try {
-         await getData();
+         let list = await getData([], false, cond.offset, cond.limit);
+         // {array} of result data
 
          if (req) {
             req.performance.measure("initial-find");
