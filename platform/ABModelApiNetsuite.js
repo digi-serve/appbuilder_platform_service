@@ -78,6 +78,15 @@ setInterval(() => {
          `NetSuite API Concurrency: ${RequestsPending.length} pending requests`
       );
    }
+   let countPendingCounts = Object.keys(PendingCountRequests).length;
+   if (countPendingCounts > 0) {
+      displayLog.push(
+         `NetSuite Pending Counts (${countPendingCounts}): ${Object.keys(
+            PendingCountRequests
+         ).join(", ")}`
+      );
+   }
+
    concurrency_count = 0;
    if (displayLog.length > 0) {
       console.log("=== Netsuite Concurrency ====");
@@ -1662,7 +1671,7 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          list = list.concat(response.data.items);
 
          // if there is a count request, then resolve it now
-         if (!hasCountUpdated && response.data.totalResults) {
+         if (!hasCountUpdated) {
             let currCountJob = PendingCountRequests[cond.jobID];
             if (currCountJob) {
                currCountJob.res(response.data.totalResults);
