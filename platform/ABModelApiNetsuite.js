@@ -1662,7 +1662,7 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          list = list.concat(response.data.items);
 
          // if there is a count request, then resolve it now
-         if (!hasCountUpdated && response.data.totalResults) {
+         if (!hasCountUpdated) {
             let currCountJob = PendingCountRequests[cond.jobID];
             if (currCountJob) {
                currCountJob.res(response.data.totalResults);
