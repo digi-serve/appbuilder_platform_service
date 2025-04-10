@@ -484,9 +484,7 @@ module.exports = class InsertRecord extends InsertRecordTaskCore {
 
                      // Reformat processData to be M:1 connect data value
                      let data = [];
-                     if (data == null) {
-                        data = [];
-                     } else if (Array.isArray(processData)) {
+                     if (Array.isArray(processData)) {
                         data = processData.filter((d) => d != null);
                      } else if (
                         typeof processData == "string" ||
