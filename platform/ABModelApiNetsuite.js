@@ -51,6 +51,13 @@ const RequestsPending = [];
 // {Promise[]}
 // a list of all the requests that are waiting to be processed.
 
+const RequestsRepeats = {};
+// { <sqlKey> : [ { request, reject} ... ]}
+// This is a hash of the unique sql operations being performed. If we detect
+// a repeat request, we can then Promise.then(request).catch(reject) on the
+// current promise and return the result without making a new request to
+// NetSuite.
+
 setInterval(() => {
    if (concurrency_history.length > 5) concurrency_history.shift();
    concurrency_history.push(concurrency_count);
@@ -121,11 +128,22 @@ function fetchPending() {
 
    // register the request
    RequestsActive[packet.jobID] = f;
-   f.then(packet.res)
-      .catch(packet.rej)
+   f.then((result) => {
+      packet.res(result);
+      RequestsRepeats[packet.sqlKey].forEach((p) => {
+         p.resolve(result);
+      });
+   })
+      .catch((err) => {
+         packet.rej(err);
+         RequestsRepeats[packet.sqlKey].forEach((p) => {
+            p.reject(err);
+         });
+      })
       .finally(() => {
-         // remove the request from our active list
+         // remove the request from our active list and Repeat List
          delete RequestsActive[packet.jobID];
+         delete RequestsRepeats[packet.sqlKey];
 
          // look for more to process
          fetchPending();
@@ -161,11 +179,23 @@ function fetchConcurrent(
    data = null,
    headers = {}
 ) {
-   concurrency_count++;
-   let jobID = AB.jobID(10);
-   if (Object.keys(RequestsActive).length >= CONCURRENCY_LIMIT_MAX) {
-      // we are at our limit, so we need to wait until we have an open slot
-      let p = new Promise((resolve, reject) => {
+   let p = new Promise((resolve, reject) => {
+      concurrency_count++;
+      let jobID = AB.jobID(10);
+
+      let sqlKey = `${method}-${url}-${JSON.stringify(data)}`;
+      if (typeof RequestsRepeats[sqlKey] != "undefined") {
+         // we have a repeat request, so we can just return the result
+         RequestsRepeats[sqlKey].push({ resolve, reject });
+         return;
+      }
+
+      // add this request to our repeat list
+      RequestsRepeats[sqlKey] = [];
+
+      if (Object.keys(RequestsActive).length >= CONCURRENCY_LIMIT_MAX) {
+         // we are at our limit, so we need to wait until we have an open slot
+
          let pendingPacket = {
             res: resolve,
             rej: reject,
@@ -175,25 +205,34 @@ function fetchConcurrent(
             method,
             data,
             headers,
+            sqlKey,
          };
          RequestsPending.push(pendingPacket);
-      });
-      return p;
-   }
+         return;
+      }
 
-   let f = fetch(cred, url, method, data, headers);
-   RequestsActive[jobID] = f;
-
-   // ok, I know this is janky, but since our .finally() doesn't
-   // care about the result or an error, I'm declaring it here
-   // to make sure that no matter what, we continue our processing
-   f.finally((result) => {
-      delete RequestsActive[jobID];
-      fetchPending();
-      return result;
+      let f = fetch(cred, url, method, data, headers);
+      RequestsActive[jobID] = f;
+      f.then((result) => {
+         resolve(result);
+         RequestsRepeats[sqlKey].forEach((p) => {
+            p.resolve(result);
+         });
+      })
+         .catch((err) => {
+            reject(err);
+            RequestsRepeats[sqlKey].forEach((p) => {
+               p.reject(err);
+            });
+         })
+         .finally(() => {
+            delete RequestsActive[jobID];
+            delete RequestsRepeats[sqlKey];
+            fetchPending();
+         });
    });
 
-   return f;
+   return p;
 }
 
 /**
