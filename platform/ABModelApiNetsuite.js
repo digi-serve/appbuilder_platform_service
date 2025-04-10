@@ -31,10 +31,16 @@ var concurrency_count = 0;
 // {int}
 // a counter of the number of active requests we have made to NetSuite.
 
-var concurrency_history = [];
-// {int[]}
-// a history of the number of active requests we have made to NetSuite over
-// the past 5 seconds.
+var concurrency_history = {
+   Requests: [],
+   // CountRequests: [],
+   Active: [],
+   Pending: [],
+   Repeats: [],
+};
+// { "key" : int[] }
+// a running history of the number of active requests we have made to NetSuite
+// over the past 5 seconds.
 
 const PendingCountRequests = {};
 // {jobID : { res:Promise.response, rej:Promise.reject }}
@@ -59,40 +65,57 @@ const RequestsRepeats = {};
 // NetSuite.
 
 setInterval(() => {
-   if (concurrency_history.length > 5) concurrency_history.shift();
-   concurrency_history.push(concurrency_count);
    let displayLog = [];
-   let showConcurrent = false;
-   concurrency_history.forEach((c) => {
-      if (c > 0) showConcurrent = true;
+
+   Object.keys(concurrency_history).forEach((key) => {
+      if (concurrency_history[key].length >= 5)
+         concurrency_history[key].shift();
+      let count = 0;
+      switch (key) {
+         case "Requests":
+            concurrency_history[key].push(concurrency_count);
+            break;
+         case "CountRequests":
+            concurrency_history[key].push(Object.keys(PendingCountRequests));
+            break;
+         case "Active":
+            concurrency_history[key].push(Object.keys(RequestsActive).length);
+            break;
+         case "Pending":
+            concurrency_history[key].push(RequestsPending.length);
+            break;
+         case "Repeats":
+            Object.keys(RequestsRepeats).forEach((key) => {
+               count += RequestsRepeats[key].length;
+            });
+            concurrency_history[key].push(count);
+            break;
+      }
+
+      let showLine = false;
+      concurrency_history[key].forEach((c) => {
+         if (typeof c.length != "undefined") c = c.length;
+         if (c > 0) showLine = true;
+      });
+
+      if (showLine) {
+         if (key == "CountRequests") {
+            let lastPendingCount = concurrency_history[key].length - 1;
+            displayLog.push(
+               `NetSuite API Concurrency: [${concurrency_history[key][
+                  lastPendingCount
+               ].join(",")}] ${key}`
+            );
+            return;
+         } else {
+            displayLog.push(
+               `NetSuite API Concurrency: [${concurrency_history[key].join(
+                  ","
+               )}] ${key}`
+            );
+         }
+      }
    });
-   if (showConcurrent) {
-      displayLog.push(
-         `NetSuite API Concurrency: [${concurrency_history.join(
-            ","
-         )}] requests per second`
-      );
-   }
-   if (Object.keys(RequestsActive).length > 0) {
-      displayLog.push(
-         `NetSuite API Concurrency: ${
-            Object.keys(RequestsActive).length
-         } active requests`
-      );
-   }
-   if (RequestsPending.length > 0) {
-      displayLog.push(
-         `NetSuite API Concurrency: ${RequestsPending.length} pending requests`
-      );
-   }
-   let countPendingCounts = Object.keys(PendingCountRequests).length;
-   if (countPendingCounts > 0) {
-      displayLog.push(
-         `NetSuite Pending Counts (${countPendingCounts}): ${Object.keys(
-            PendingCountRequests
-         ).join(", ")}`
-      );
-   }
 
    concurrency_count = 0;
    if (displayLog.length > 0) {
