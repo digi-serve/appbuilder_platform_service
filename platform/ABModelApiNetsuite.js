@@ -1789,17 +1789,26 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          await this.populate(cond, list, req);
          if (req) {
             req.performance.measure("populate");
+            req.performance.mark("normalize");
          }
          this.normalizeData(list);
+         if (req) {
+            req.performance.measure("normalize");
+         }
          return list;
       } catch (err) {
-         err.q = sql;
-         this.processError(
-            `POST ${URL}`,
-            `Error finding ${this.object.dbTableName()} data`,
-            err,
-            req
-         );
+         // if this is an error from an api call:
+         if (err.response) {
+            err.q = sql;
+            this.processError(
+               `POST ${URL}`,
+               `Error finding ${this.object.dbTableName()} data`,
+               err,
+               req
+            );
+         } else {
+            throw err;
+         }
       }
    }
 
