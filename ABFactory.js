@@ -11,6 +11,7 @@ const moment = require("moment");
 const { nanoid } = require("nanoid");
 const { serializeError, deserializeError } = require("serialize-error");
 const uuid = require("uuid");
+const Papa = require("papaparse");
 
 var ABFactoryCore = require("./core/ABFactoryCore");
 
@@ -586,6 +587,17 @@ class ABFactory extends ABFactoryCore {
 
    toJSON() {
       return { tenantID: this.req.tenantID() };
+   }
+
+   csvToJson(csvData) {
+      return Papa.parse(csvData, {
+         header: true,
+         skipEmptyLines: true,
+      });
+   }
+
+   jsonToCsv(jsonData) {
+      return Papa.unparse(jsonData);
    }
 }
 
