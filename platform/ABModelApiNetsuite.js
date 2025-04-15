@@ -31,10 +31,16 @@ var concurrency_count = 0;
 // {int}
 // a counter of the number of active requests we have made to NetSuite.
 
-var concurrency_history = [];
-// {int[]}
-// a history of the number of active requests we have made to NetSuite over
-// the past 5 seconds.
+var concurrency_history = {
+   Requests: [],
+   // CountRequests: [],
+   Active: [],
+   Pending: [],
+   Repeats: [],
+};
+// { "key" : int[] }
+// a running history of the number of active requests we have made to NetSuite
+// over the past 5 seconds.
 
 const PendingCountRequests = {};
 // {jobID : { res:Promise.response, rej:Promise.reject }}
@@ -51,33 +57,66 @@ const RequestsPending = [];
 // {Promise[]}
 // a list of all the requests that are waiting to be processed.
 
+const RequestsRepeats = {};
+// { <sqlKey> : [ { request, reject} ... ]}
+// This is a hash of the unique sql operations being performed. If we detect
+// a repeat request, we can then Promise.then(request).catch(reject) on the
+// current promise and return the result without making a new request to
+// NetSuite.
+
 setInterval(() => {
-   if (concurrency_history.length > 5) concurrency_history.shift();
-   concurrency_history.push(concurrency_count);
    let displayLog = [];
-   let showConcurrent = false;
-   concurrency_history.forEach((c) => {
-      if (c > 0) showConcurrent = true;
+
+   Object.keys(concurrency_history).forEach((key) => {
+      if (concurrency_history[key].length >= 5)
+         concurrency_history[key].shift();
+      let count = 0;
+      switch (key) {
+         case "Requests":
+            concurrency_history[key].push(concurrency_count);
+            break;
+         case "CountRequests":
+            concurrency_history[key].push(Object.keys(PendingCountRequests));
+            break;
+         case "Active":
+            concurrency_history[key].push(Object.keys(RequestsActive).length);
+            break;
+         case "Pending":
+            concurrency_history[key].push(RequestsPending.length);
+            break;
+         case "Repeats":
+            Object.keys(RequestsRepeats).forEach((key) => {
+               count += RequestsRepeats[key].length;
+            });
+            concurrency_history[key].push(count);
+            break;
+      }
+
+      let showLine = false;
+      concurrency_history[key].forEach((c) => {
+         if (typeof c.length != "undefined") c = c.length;
+         if (c > 0) showLine = true;
+      });
+
+      if (showLine) {
+         if (key == "CountRequests") {
+            let lastPendingCount = concurrency_history[key].length - 1;
+            displayLog.push(
+               `NetSuite API Concurrency: [${concurrency_history[key][
+                  lastPendingCount
+               ].join(",")}] ${key}`
+            );
+            return;
+         } else {
+            displayLog.push(
+               `NetSuite API Concurrency: [${concurrency_history[key].join(
+                  ","
+               )}] ${key}`
+            );
+         }
+      }
    });
-   if (showConcurrent) {
-      displayLog.push(
-         `NetSuite API Concurrency: [${concurrency_history.join(
-            ","
-         )}] requests per second`
-      );
-   }
-   if (Object.keys(RequestsActive).length > 0) {
-      displayLog.push(
-         `NetSuite API Concurrency: ${
-            Object.keys(RequestsActive).length
-         } active requests`
-      );
-   }
-   if (RequestsPending.length > 0) {
-      displayLog.push(
-         `NetSuite API Concurrency: ${RequestsPending.length} pending requests`
-      );
-   }
+
    concurrency_count = 0;
    if (displayLog.length > 0) {
       console.log("=== Netsuite Concurrency ====");
@@ -112,11 +151,22 @@ function fetchPending() {
 
    // register the request
    RequestsActive[packet.jobID] = f;
-   f.then(packet.res)
-      .catch(packet.rej)
+   f.then((result) => {
+      packet.res(result);
+      RequestsRepeats[packet.sqlKey].forEach((p) => {
+         p.resolve(result);
+      });
+   })
+      .catch((err) => {
+         packet.rej(err);
+         RequestsRepeats[packet.sqlKey].forEach((p) => {
+            p.reject(err);
+         });
+      })
       .finally(() => {
-         // remove the request from our active list
+         // remove the request from our active list and Repeat List
          delete RequestsActive[packet.jobID];
+         delete RequestsRepeats[packet.sqlKey];
 
          // look for more to process
          fetchPending();
@@ -152,11 +202,23 @@ function fetchConcurrent(
    data = null,
    headers = {}
 ) {
-   concurrency_count++;
-   let jobID = AB.jobID(10);
-   if (Object.keys(RequestsActive).length >= CONCURRENCY_LIMIT_MAX) {
-      // we are at our limit, so we need to wait until we have an open slot
-      let p = new Promise((resolve, reject) => {
+   let p = new Promise((resolve, reject) => {
+      concurrency_count++;
+      let jobID = AB.jobID(10);
+
+      let sqlKey = `${method}-${url}-${JSON.stringify(data)}`;
+      if (typeof RequestsRepeats[sqlKey] != "undefined") {
+         // we have a repeat request, so we can just return the result
+         RequestsRepeats[sqlKey].push({ resolve, reject });
+         return;
+      }
+
+      // add this request to our repeat list
+      RequestsRepeats[sqlKey] = [];
+
+      if (Object.keys(RequestsActive).length >= CONCURRENCY_LIMIT_MAX) {
+         // we are at our limit, so we need to wait until we have an open slot
+
          let pendingPacket = {
             res: resolve,
             rej: reject,
@@ -166,25 +228,34 @@ function fetchConcurrent(
             method,
             data,
             headers,
+            sqlKey,
          };
          RequestsPending.push(pendingPacket);
-      });
-      return p;
-   }
+         return;
+      }
 
-   let f = fetch(cred, url, method, data, headers);
-   RequestsActive[jobID] = f;
-
-   // ok, I know this is janky, but since our .finally() doesn't
-   // care about the result or an error, I'm declaring it here
-   // to make sure that no matter what, we continue our processing
-   f.finally((result) => {
-      delete RequestsActive[jobID];
-      fetchPending();
-      return result;
+      let f = fetch(cred, url, method, data, headers);
+      RequestsActive[jobID] = f;
+      f.then((result) => {
+         resolve(result);
+         RequestsRepeats[sqlKey].forEach((p) => {
+            p.resolve(result);
+         });
+      })
+         .catch((err) => {
+            reject(err);
+            RequestsRepeats[sqlKey].forEach((p) => {
+               p.reject(err);
+            });
+         })
+         .finally(() => {
+            delete RequestsActive[jobID];
+            delete RequestsRepeats[sqlKey];
+            fetchPending();
+         });
    });
 
-   return f;
+   return p;
 }
 
 /**
@@ -1080,9 +1151,9 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       let where = {};
       where[PK] = pks;
       if (req) {
-         values = await req.retry(() => linkObj.model().find(where));
+         values = await req.retry(() => linkObj.model().find(where, req));
       } else {
-         values = await linkObj.model().find(where);
+         values = await linkObj.model().find(where, req);
       }
 
       // convert to a hash  ID : { value }
@@ -1158,9 +1229,9 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       let col = linkField.columnName;
       where[col] = pks;
       if (req) {
-         values = await req.retry(() => linkObj.model().find(where));
+         values = await req.retry(() => linkObj.model().find(where, req));
       } else {
-         values = await linkObj.model().find(where);
+         values = await linkObj.model().find(where, req);
       }
 
       if (typeof values == "undefined") values = [];
@@ -1364,6 +1435,9 @@ module.exports = class ABModelAPINetsuite extends ABModel {
     */
    async populate(cond, data, req) {
       let columns = [];
+
+      // don't need to populate anything if there is no data.
+      if (data.length == 0) return;
 
       // if .populate == false
       // if .populate not set, assume no
@@ -1629,18 +1703,22 @@ module.exports = class ABModelAPINetsuite extends ABModel {
       // {string}
       // the URL to use for our Netsuite API call
 
-      let list = [];
-      // {array} of result data
+      // let list = [];
 
-      let getData = async (hasCountUpdated = false) => {
+      let getData = async (
+         dList,
+         hasCountUpdated = false,
+         dOffset = 0,
+         dLimit = 0
+      ) => {
          // a recursive function to make sure we get all our expected results.
          // this will detect Netsuite's paging (hasMore) value and pull the
          // next set of data if needed.
 
-         let offset = cond.offset ?? list.length;
+         let offset = dOffset;
          // now construct the URL (including limit & skip)
          let qs = "";
-         if (cond.limit) qs = `limit=${cond.limit}`;
+         if (dLimit) qs = `limit=${dLimit}`;
          if (offset) {
             if (qs) qs += "&";
             qs = `${qs}offset=${offset}`;
@@ -1659,27 +1737,50 @@ module.exports = class ABModelAPINetsuite extends ABModel {
             },
             { Prefer: "transient" }
          );
-         list = list.concat(response.data.items);
+         // response.data has these properties:
+         //    links, count, hasMore, items, offset, totalResults
+         dList = dList.concat(response.data.items);
 
          // if there is a count request, then resolve it now
-         if (!hasCountUpdated && response.data.totalResults) {
+         if (!hasCountUpdated) {
             let currCountJob = PendingCountRequests[cond.jobID];
             if (currCountJob) {
                currCountJob.res(response.data.totalResults);
-               hasCountUpdated = true;
                delete PendingCountRequests[cond.jobID];
             }
          }
          if (response.data.hasMore) {
             // if we didn't ask for a limited set of data
-            if (!cond.limit && !cond.offset) {
-               // Netsuite has reached it's limit, so ask for more
-               await getData(hasCountUpdated);
+            if (!dLimit && !dOffset) {
+               // let's make all the additionial calls in parallel
+               // we've just received the 1st page, so let's find out how many more
+
+               let apparentLimit = response.data.count;
+               let numPages = response.data.totalResults / apparentLimit;
+               let lookups = [];
+               for (let i = 1; i <= numPages; i++) {
+                  let offset = apparentLimit * i;
+                  lookups.push(getData([], true, offset, apparentLimit));
+               }
+               req.log(`Netsuite Paging: spawning ${lookups.length} lookups`);
+               let lookupResults = await Promise.all(lookups);
+               while (lookupResults.length > 0) {
+                  dList = dList.concat(lookupResults.shift());
+               }
+               if (dList.length != response.data.totalResults) {
+                  req.log(
+                     `Netsuite Paging Error: dList(${dList.length}) != Response(${response.data.totalResults})`
+                  );
+               } else {
+                  req.log("Netsuite Paging: valid number of results");
+               }
             }
          }
+         return dList;
       };
       try {
-         await getData();
+         let list = await getData([], false, cond.offset, cond.limit);
+         // {array} of result data
 
          if (req) {
             req.performance.measure("initial-find");
@@ -1688,17 +1789,26 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          await this.populate(cond, list, req);
          if (req) {
             req.performance.measure("populate");
+            req.performance.mark("normalize");
          }
          this.normalizeData(list);
+         if (req) {
+            req.performance.measure("normalize");
+         }
          return list;
       } catch (err) {
-         err.q = sql;
-         this.processError(
-            `POST ${URL}`,
-            `Error finding ${this.object.dbTableName()} data`,
-            err,
-            req
-         );
+         // if this is an error from an api call:
+         if (err.response) {
+            err.q = sql;
+            this.processError(
+               `POST ${URL}`,
+               `Error finding ${this.object.dbTableName()} data`,
+               err,
+               req
+            );
+         } else {
+            throw err;
+         }
       }
    }
 
