@@ -2615,11 +2615,17 @@ function unRelate(obj, columnName, rowId, values, trx, req) {
             if (record == null || fieldLink == null || objectLink == null)
                return done(resolve, alias, req);
 
+            // NOTE: if our field has linked to an index value, we have to use that
+            // columnName here:
+            let PK = fieldLink.indexField
+               ? fieldLink.indexField.columnName
+               : objectLink.PK();
+
             let unrelatePhase = record
                .$relatedQuery(clearRelationName)
                .alias(alias)
                .unrelate()
-               .where(objectLink.PK(), "in", values);
+               .where(PK, "in", values)
 
             // Many-to-Many
             if (linkType == "many:many") {
