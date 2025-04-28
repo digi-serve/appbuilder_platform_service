@@ -1510,6 +1510,8 @@ module.exports = class ABModelAPINetsuite extends ABModel {
     * @return {Promise} resolved with the result of the find()
     */
    async findAll(cond, conditionDefaults, req) {
+      cond = this.formatCondition(cond);
+
       // make sure we have built our credentials
       if (!this.credentials) {
          this.credentials = this.pullCredentials();
