@@ -916,7 +916,7 @@ module.exports = class ABModel extends ABModelCore {
 
          var linkModel = linkObject.model().modelKnex?.();
          if (!linkModel) return;
-         
+
          var relationName = f.relationName();
 
          var LinkType = `${f.settings.linkType}:${f.settings.linkViaType}`;
@@ -983,12 +983,9 @@ module.exports = class ABModel extends ABModelCore {
             // contains the .indexField2 field.
 
             // get join table name
-            let joinTablename = f.joinTableName(true),
-               joinColumnNames = f.joinColumnNames(),
-               sourceTableName,
-               sourcePkName,
-               targetTableName,
-               targetPkName;
+            // let joinTablename = f.joinTableName(true),
+            //    joinColumnNames = f.joinColumnNames(),
+            let sourceTableName, sourcePkName, targetTableName, targetPkName;
 
             sourceTableName = f.object.dbTableName(true);
             sourcePkName = f.object.PK();
@@ -2625,7 +2622,7 @@ function unRelate(obj, columnName, rowId, values, trx, req) {
                .$relatedQuery(clearRelationName)
                .alias(alias)
                .unrelate()
-               .where(PK, "in", values)
+               .where(PK, "in", values);
 
             // Many-to-Many
             if (linkType == "many:many") {
@@ -2674,7 +2671,7 @@ function unRelate(obj, columnName, rowId, values, trx, req) {
  *        one or more new values we are establishing a relation to.
  * @return {Promise}
  */
-function setRelate(obj, columnName, rowId, values, req) {
+/*function setRelate(obj, columnName, rowId, values, req) {
    return new Promise((resolve, reject) => {
       // create a new query to update relation data
       // NOTE: when use same query, it will have a "created duplicate" error
@@ -2726,6 +2723,7 @@ function setRelate(obj, columnName, rowId, values, req) {
          });
    });
 }
+*/
 
 /**
  * @function updateRelationValues()
