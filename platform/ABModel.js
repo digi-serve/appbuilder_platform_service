@@ -338,52 +338,8 @@ module.exports = class ABModel extends ABModelCore {
     *    The request object associated with the current tenant/request
     * @return {Promise} resolved with the result of the find()
     */
-   findAll(cond, conditionDefaults, req) {
-      // make sure cond is defined, and in the EXPANDED format:
-      // cond.where : {obj}
-      //     queryBuilder condition format. This must ALREADY be reduced to
-      //     the actual conditions.  No placeholders at this point.
-      // cond.sort : {array}
-      //     an array of { key:{field.id}, dir:["ASC", "DESC"] } sort
-      //     definitions
-      //  cond.offset: {int}
-      //     the offset into the data set to start returning data.
-      //  cond.limit: {int}
-      //     the # of entries to return in this query
-      // cond.populate: {bool}
-      //     should we populate the connected fields of the entries
-      //     returned?
-      cond = cond || {};
-      var defaultCond = {
-         // where: cond,
-         sort: [], // No Sorts
-         offset: 0, // no offset
-         limit: 0, // no limit
-         populate: false, // don't populate the data
-      };
-      if (!cond.where) {
-         // if we don't seem to have an EXPANDED format, see if we can
-         // figure it out:
-
-         conditionFields.forEach((f) => {
-            if (!_.isUndefined(cond[f])) {
-               defaultCond[f] = cond[f];
-               delete cond[f];
-            }
-         });
-
-         // store the rest as our .where cond
-         defaultCond.where = cond;
-
-         cond = defaultCond;
-      } else {
-         // make sure cond has our defaults set:
-         conditionFields.forEach((f) => {
-            if (_.isUndefined(cond[f])) {
-               cond[f] = defaultCond[f];
-            }
-         });
-      }
+   findAll(cond = {}, conditionDefaults, req) {
+      cond = this.formatCondition(cond);
 
       // conditionDefaults is optional.  Some system tasks wont provide this.
       // but we need to provide some defaults to the queryConditions() to
@@ -518,6 +474,55 @@ module.exports = class ABModel extends ABModelCore {
                reject(error);
             });
       });
+   }
+
+   formatCondition(cond) {
+      // make sure cond is defined, and in the EXPANDED format:
+      // cond.where : {obj}
+      //     queryBuilder condition format. This must ALREADY be reduced to
+      //     the actual conditions.  No placeholders at this point.
+      // cond.sort : {array}
+      //     an array of { key:{field.id}, dir:["ASC", "DESC"] } sort
+      //     definitions
+      //  cond.offset: {int}
+      //     the offset into the data set to start returning data.
+      //  cond.limit: {int}
+      //     the # of entries to return in this query
+      // cond.populate: {bool}
+      //     should we populate the connected fields of the entries
+      //     returned?
+      var defaultCond = {
+         // where: cond,
+         sort: [], // No Sorts
+         offset: 0, // no offset
+         limit: 0, // no limit
+         populate: false, // don't populate the data
+      };
+      if (!cond.where) {
+         // if we don't seem to have an EXPANDED format, see if we can
+         // figure it out:
+
+         conditionFields.forEach((f) => {
+            if (!_.isUndefined(cond[f])) {
+               defaultCond[f] = cond[f];
+               delete cond[f];
+            }
+         });
+
+         // store the rest as our .where cond
+         defaultCond.where = cond;
+
+         cond = defaultCond;
+      } else {
+         // make sure cond has our defaults set:
+         conditionFields.forEach((f) => {
+            if (_.isUndefined(cond[f])) {
+               cond[f] = defaultCond[f];
+            }
+         });
+      }
+
+      return cond;
    }
 
    /**
