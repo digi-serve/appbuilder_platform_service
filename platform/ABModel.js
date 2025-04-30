@@ -2644,7 +2644,7 @@ function unRelate(obj, columnName, rowId, values, trx, req) {
                   try {
                      err._sql = record.$query().toKnexQuery().toSQL().sql;
                   } catch (e) {
-                     error._sql = "??";
+                     err._sql = "??";
                   }
                   reject(err);
                });
