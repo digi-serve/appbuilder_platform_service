@@ -20,6 +20,7 @@ const KEY_LENGTH = 32;
 const VI_LENGTH = 16;
 
 var ABFactoryCore = require("./core/ABFactoryCore");
+const { definition } = require("./platform/ABDefinition");
 
 function stringifyErrors(param) {
    if (param instanceof Error) {
@@ -119,7 +120,7 @@ class ABFactory extends ABFactoryCore {
                // NOTE: .tenantDB() returns the db name enclosed with ` `
                // our KNEX connection doesn't want that for the DB Name:
                var tenantDB = this.req.tenantDB().replaceAll("`", "");
-if (!tenantDB) {
+               if (!tenantDB) {
                   throw new Error(
                      `ABFactory.Knex.connection(): Could not find Tenant DB information for id[${this.req.tenantID()}]`,
                   );
@@ -521,72 +522,127 @@ if (!tenantDB) {
    }
 
    //
-   // Secrets
+   // Secret Management
    //
-   async createPrivateKey(definitionID) {
-      const key = crypto.randomBytes(KEY_LENGTH);
-      const hex = key.toString("hex");
-      const model = this.objectKey().model();
-      await model.create({
-         Key: hex,
-         DefinitionID: definitionID,
-      });
-      return hex;
+
+   /**
+    * Retrieves a saved private key for a given definition. Will create and save
+    * one if it does not exist.
+    * @param {string} definitionID unique id of the definition the key is for
+    * @resolves {string} private key
+    */
+   async secretKey(definitionID) {
+      const cacheKey = `_cachePK_${definitionID}`;
+      if (!this[cacheKey]) {
+         const model = this.AB.objectKey().model();
+         const [key] =
+            (await model.find({
+               where: { DefinitionID: definitionID },
+               limit: 1,
+            })) ?? [];
+         if (key) {
+            this[cacheKey] = key.Key;
+         } else {
+            this[cacheKey] = crypto.randomBytes(KEY_LENGTH).toString("hex");
+            await model.create({
+               Key: this[cacheKey],
+               DefinitionID: definitionID,
+            });
+         }
+
+         // We don't want to cache these keys in memory for a long time, but also
+         // don't want to read from the database each time. One defintion might
+         // have multiple secrets that will be read or written within a few
+         // seconds. So we'll cache it, but also schedule a cleanup in 5 mins.
+         const cacheCleanup = `${cacheKey}_cleanup`;
+         clearTimeout(this[cacheCleanup]);
+         this[cacheCleanup] = setTimeout(() => {
+            delete this[cacheKey];
+            delete this[cacheCleanup];
+         }, 5 * 60 * 1000);
+      }
+      return this[cacheKey];
    }
 
-   async getPrivateKey(definitionID) {
-      const modelKey = this.AB.objectKey().model();
-      const list = await modelKey.find({
-         where: { DefinitionID: definitionID },
-         limit: 1,
-      });
+   /**
+    * Encyrpts and stores a secret value
+    * @param {string} defintionID - unique id of the definition this secret
+    * belongs to
+    * @param {string} name to refernce this secret by
+    * @param {string} value the secret to be encrypted
+    */
+   async secretCreate(defintionID, name, value) {
+      const pk = await this.secretKey(defintionID);
 
-      return list[0]?.Key ?? null;
-   }
-
-   _encryptSecret(key, text) {
+      // Encrypt
       const iv = crypto.randomBytes(VI_LENGTH);
       const cipher = crypto.createCipheriv(
          CRYPTO_ALGORITHM,
-         Buffer.from(key, "hex"),
-         iv,
+         Buffer.from(pk, "hex"),
+         iv
       );
-
-      const encrypted = cipher.update(Buffer.from(text, "utf-8"));
+      const encrypted = cipher.update(Buffer.from(value, "utf-8"));
       cipher.final();
+      const encryptedValue = Buffer.concat([
+         encrypted,
+         iv,
+         cipher.getAuthTag(),
+      ]).toString("hex");
 
-      return Buffer.concat([encrypted, iv, cipher.getAuthTag()]).toString(
-         "hex",
-      );
+      // Save to DB
+      const model = this.AB.objectKey().model();
+      await model.create({
+         Name: name,
+         Secret: encryptedValue,
+         DefinitionID: defintionID,
+      });
    }
 
-   _decryptSecret(key, encrypted) {
-      const encryptedBuffer = Buffer.from(encrypted, "hex");
+   /**
+    * Retrieve and decrypt a stored secret
+    * @param {string} defintionID - unique id of the definition the secret
+    * belongs to
+    * @param {string} name of the secret
+    */
+   async secretGet(definitionID, name) {
+      const pk = await this.secretKey(definitionID);
+
+      // Lookup the secret from the DB
+      const modelSecret = this.AB.objectSecret().model();
+      const list = await modelSecret.find({
+         where: {
+            DefinitionID: definitionID,
+            Name: name,
+         },
+         limit: 1,
+      });
+      const secret = list?.[0]?.Secret ?? "";
+      if (!secret) return null;
+
+      // Decrypt the secret
+      const encryptedBuffer = Buffer.from(secret, "hex");
       const text = encryptedBuffer.subarray(
          0,
-         encryptedBuffer.length - VI_LENGTH * 2,
+         encryptedBuffer.length - VI_LENGTH * 2
       );
       const vi = encryptedBuffer.subarray(
          encryptedBuffer.length - VI_LENGTH * 2,
-         encryptedBuffer.length - VI_LENGTH,
+         encryptedBuffer.length - VI_LENGTH
       );
       const authTag = encryptedBuffer.subarray(
          encryptedBuffer.length - VI_LENGTH,
-         encryptedBuffer.length,
+         encryptedBuffer.length
       );
-
       const decipher = crypto.createDecipheriv(
          CRYPTO_ALGORITHM,
-         Buffer.from(key, "hex"),
-         vi,
+         Buffer.from(pk, "hex"),
+         vi
       );
       decipher.setAuthTag(authTag);
-
       let decrypted = decipher.update(text);
       decrypted = Buffer.concat([decrypted, decipher.final()]);
       return decrypted.toString("utf-8");
    }
-
 
    //
    // Utilities
