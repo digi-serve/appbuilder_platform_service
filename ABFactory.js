@@ -20,7 +20,6 @@ const KEY_LENGTH = 32;
 const VI_LENGTH = 16;
 
 var ABFactoryCore = require("./core/ABFactoryCore");
-const { definition } = require("./platform/ABDefinition");
 
 function stringifyErrors(param) {
    if (param instanceof Error) {
@@ -534,7 +533,7 @@ class ABFactory extends ABFactoryCore {
    async secretKey(definitionID) {
       const cacheKey = `_cachePK_${definitionID}`;
       if (!this[cacheKey]) {
-         const model = this.AB.objectKey().model();
+         const model = this.objectKey().model();
          const [key] =
             (await model.find({
                where: { DefinitionID: definitionID },
@@ -590,7 +589,7 @@ class ABFactory extends ABFactoryCore {
       ]).toString("hex");
 
       // Save to DB
-      const model = this.AB.objectKey().model();
+      const model = this.objectSecret().model();
       await model.create({
          Name: name,
          Secret: encryptedValue,
@@ -608,7 +607,7 @@ class ABFactory extends ABFactoryCore {
       const pk = await this.secretKey(definitionID);
 
       // Lookup the secret from the DB
-      const modelSecret = this.AB.objectSecret().model();
+      const modelSecret = this.objectSecret().model();
       const list = await modelSecret.find({
          where: {
             DefinitionID: definitionID,
