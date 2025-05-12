@@ -6,12 +6,18 @@
  */
 
 const _ = require("lodash");
+const crypto = require("crypto");
 const Knex = require("knex");
 const moment = require("moment");
 const { nanoid } = require("nanoid");
+const Papa = require("papaparse");
 const { serializeError, deserializeError } = require("serialize-error");
 const uuid = require("uuid");
-const Papa = require("papaparse");
+
+// Encryption settings
+const CRYPTO_ALGORITHM = "aes-256-gcm";
+const KEY_LENGTH = 32;
+const VI_LENGTH = 16;
 
 var ABFactoryCore = require("./core/ABFactoryCore");
 
@@ -113,15 +119,15 @@ class ABFactory extends ABFactoryCore {
                // NOTE: .tenantDB() returns the db name enclosed with ` `
                // our KNEX connection doesn't want that for the DB Name:
                var tenantDB = this.req.tenantDB().replaceAll("`", "");
-               if (!tenantDB) {
+if (!tenantDB) {
                   throw new Error(
-                     `ABFactory.Knex.connection(): Could not find Tenant DB information for id[${this.req.tenantID()}]`
+                     `ABFactory.Knex.connection(): Could not find Tenant DB information for id[${this.req.tenantID()}]`,
                   );
                }
                var config = this.req.connections()["appbuilder"];
                if (!config) {
                   throw new Error(
-                     `ABFactory.Knex.connection(): Could not find configuration settings`
+                     `ABFactory.Knex.connection(): Could not find configuration settings`,
                   );
                }
 
@@ -186,7 +192,7 @@ class ABFactory extends ABFactoryCore {
           * @param {string} date  String of a date you want converted
           * @return {string}
           */
-         toSQLDate: function (date) {
+         toSQLDate: function(date) {
             return moment(date).format("YYYY-MM-DD");
             // return moment(date).format("YYYY-MM-DD 00:00:00");
          },
@@ -197,7 +203,7 @@ class ABFactory extends ABFactoryCore {
           * @param {string} date  String of a date you want converted
           * @return {string}
           */
-         toSQLDateTime: function (date) {
+         toSQLDateTime: function(date) {
             return moment(date).utc().format("YYYY-MM-DD HH:mm:ss");
          },
 
@@ -304,10 +310,10 @@ class ABFactory extends ABFactoryCore {
 
             // Convert to UTC by subtracting the timezone offset
             let startOfDayUTC = new Date(
-               startOfDay.getTime() + startOfDay.getTimezoneOffset() * 60000
+               startOfDay.getTime() + startOfDay.getTimezoneOffset() * 60000,
             );
             let endOfDayUTC = new Date(
-               endOfDay.getTime() + endOfDay.getTimezoneOffset() * 60000
+               endOfDay.getTime() + endOfDay.getTimezoneOffset() * 60000,
             );
 
             //  Format the date in "YYYY-MM-DD HH:MM:SS" format
@@ -317,7 +323,7 @@ class ABFactory extends ABFactoryCore {
             };
             return formatDate(startOfDayUTC).concat(
                "|",
-               formatDate(endOfDayUTC)
+               formatDate(endOfDayUTC),
             );
          },
       };
@@ -350,7 +356,7 @@ class ABFactory extends ABFactoryCore {
             let newDef = this.definitionNew(fullDef);
             this.emit("definition.created", newDef);
             return newDef;
-         }
+         },
       );
    }
 
@@ -396,7 +402,7 @@ class ABFactory extends ABFactoryCore {
             this._definitions[id] = newDef;
             this.emit("definition.updated", id);
             return newDef;
-         }
+         },
       );
    }
 
@@ -443,7 +449,7 @@ class ABFactory extends ABFactoryCore {
     */
    cacheMatch(key, data) {
       let matches = Object.keys(this.__Cache).filter(
-         (k) => k.indexOf(key) > -1
+         (k) => k.indexOf(key) > -1,
       );
       if (typeof data != "undefined") {
          matches.forEach((k) => {
@@ -513,6 +519,74 @@ class ABFactory extends ABFactoryCore {
    notify(domain, error, info) {
       return this.req.notify(domain, error, this._notifyInfo(info));
    }
+
+   //
+   // Secrets
+   //
+   async createPrivateKey(definitionID) {
+      const key = crypto.randomBytes(KEY_LENGTH);
+      const hex = key.toString("hex");
+      const model = this.objectKey().model();
+      await model.create({
+         Key: hex,
+         DefinitionID: definitionID,
+      });
+      return hex;
+   }
+
+   async getPrivateKey(definitionID) {
+      const modelKey = this.AB.objectKey().model();
+      const list = await modelKey.find({
+         where: { DefinitionID: definitionID },
+         limit: 1,
+      });
+
+      return list[0]?.Key ?? null;
+   }
+
+   _encryptSecret(key, text) {
+      const iv = crypto.randomBytes(VI_LENGTH);
+      const cipher = crypto.createCipheriv(
+         CRYPTO_ALGORITHM,
+         Buffer.from(key, "hex"),
+         iv,
+      );
+
+      const encrypted = cipher.update(Buffer.from(text, "utf-8"));
+      cipher.final();
+
+      return Buffer.concat([encrypted, iv, cipher.getAuthTag()]).toString(
+         "hex",
+      );
+   }
+
+   _decryptSecret(key, encrypted) {
+      const encryptedBuffer = Buffer.from(encrypted, "hex");
+      const text = encryptedBuffer.subarray(
+         0,
+         encryptedBuffer.length - VI_LENGTH * 2,
+      );
+      const vi = encryptedBuffer.subarray(
+         encryptedBuffer.length - VI_LENGTH * 2,
+         encryptedBuffer.length - VI_LENGTH,
+      );
+      const authTag = encryptedBuffer.subarray(
+         encryptedBuffer.length - VI_LENGTH,
+         encryptedBuffer.length,
+      );
+
+      const decipher = crypto.createDecipheriv(
+         CRYPTO_ALGORITHM,
+         Buffer.from(key, "hex"),
+         vi,
+      );
+      decipher.setAuthTag(authTag);
+
+      let decrypted = decipher.update(text);
+      decrypted = Buffer.concat([decrypted, decipher.final()]);
+      return decrypted.toString("utf-8");
+   }
+
 
    //
    // Utilities
