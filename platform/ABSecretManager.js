@@ -6,10 +6,9 @@ const KEY_LENGTH = 32;
 const IV_LENGTH = 16;
 
 class SecretManager {
-   constructor(AB) {
-      this.AB = AB;
-      this.secret = this.objectSecret().model();
-      this.key = this.objectKey().model();
+   async init(AB) {
+      this.secret = AB.objectSecret().model();
+      this.key = AB.objectKey().model();
    }
 
    /**

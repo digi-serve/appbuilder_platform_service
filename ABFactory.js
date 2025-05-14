@@ -329,11 +329,10 @@ class ABFactory extends ABFactoryCore {
       this.Secret = new SecretManager(this);
    }
 
-   // init() {
-   // super.init().then(()=>{
-   //    // perform any local setups here.
-   // });
-   // }
+   async init() {
+      await super.init();
+      await this.Secret.init(this);
+   }
 
    //
    // Definitions
