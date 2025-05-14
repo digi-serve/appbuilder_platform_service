@@ -14,9 +14,9 @@ module.exports = class ABObjectApi extends ABObjectApiCore {
       const createTasks = [];
 
       // Encrypt/Store secrets of the API Object
-      (this.secrets ?? []).forEach((secret) => {
-         this.AB.secretCreate(this.id, secret.name, secret.value);
-      });
+      if (this.secrets) {
+         this.AB.Secret.create(this.id, ...this.secrets);
+      }
 
       return Promise.all(createTasks);
    }
@@ -44,7 +44,7 @@ module.exports = class ABObjectApi extends ABObjectApiCore {
             .modelKnex()
             .query()
             .delete()
-            .where("DefinitionID", "=", this.id),
+            .where("DefinitionID", "=", this.id)
       );
 
       // Remove secret values of this API Object
@@ -53,13 +53,13 @@ module.exports = class ABObjectApi extends ABObjectApiCore {
             .modelKnex()
             .query()
             .delete()
-            .where("DefinitionID", "=", this.id),
+            .where("DefinitionID", "=", this.id)
       );
 
       return Promise.all(dropTasks);
    }
 
    async getSecretValue(secretName) {
-      return this.AB.secretGet(this.id, secretName);
+      return this.AB.Secret.getValue(this.id, secretName);
    }
 };

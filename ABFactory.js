@@ -6,7 +6,6 @@
  */
 
 const _ = require("lodash");
-const crypto = require("crypto");
 const Knex = require("knex");
 const moment = require("moment");
 const { nanoid } = require("nanoid");
@@ -14,12 +13,8 @@ const Papa = require("papaparse");
 const { serializeError, deserializeError } = require("serialize-error");
 const uuid = require("uuid");
 
-// Encryption settings
-const CRYPTO_ALGORITHM = "aes-256-gcm";
-const KEY_LENGTH = 32;
-const VI_LENGTH = 16;
-
 var ABFactoryCore = require("./core/ABFactoryCore");
+const SecretManager = require("./platform/ABSecretManager");
 
 function stringifyErrors(param) {
    if (param instanceof Error) {
@@ -121,13 +116,13 @@ class ABFactory extends ABFactoryCore {
                var tenantDB = this.req.tenantDB().replaceAll("`", "");
                if (!tenantDB) {
                   throw new Error(
-                     `ABFactory.Knex.connection(): Could not find Tenant DB information for id[${this.req.tenantID()}]`,
+                     `ABFactory.Knex.connection(): Could not find Tenant DB information for id[${this.req.tenantID()}]`
                   );
                }
                var config = this.req.connections()["appbuilder"];
                if (!config) {
                   throw new Error(
-                     `ABFactory.Knex.connection(): Could not find configuration settings`,
+                     `ABFactory.Knex.connection(): Could not find configuration settings`
                   );
                }
 
@@ -310,10 +305,10 @@ class ABFactory extends ABFactoryCore {
 
             // Convert to UTC by subtracting the timezone offset
             let startOfDayUTC = new Date(
-               startOfDay.getTime() + startOfDay.getTimezoneOffset() * 60000,
+               startOfDay.getTime() + startOfDay.getTimezoneOffset() * 60000
             );
             let endOfDayUTC = new Date(
-               endOfDay.getTime() + endOfDay.getTimezoneOffset() * 60000,
+               endOfDay.getTime() + endOfDay.getTimezoneOffset() * 60000
             );
 
             //  Format the date in "YYYY-MM-DD HH:MM:SS" format
@@ -323,13 +318,15 @@ class ABFactory extends ABFactoryCore {
             };
             return formatDate(startOfDayUTC).concat(
                "|",
-               formatDate(endOfDayUTC),
+               formatDate(endOfDayUTC)
             );
          },
       };
       (Object.keys(platformRules) || []).forEach((k) => {
          this.rules[k] = platformRules[k];
       });
+
+      this.Secret = new SecretManager(this);
    }
 
    // init() {
@@ -356,7 +353,7 @@ class ABFactory extends ABFactoryCore {
             let newDef = this.definitionNew(fullDef);
             this.emit("definition.created", newDef);
             return newDef;
-         },
+         }
       );
    }
 
@@ -402,7 +399,7 @@ class ABFactory extends ABFactoryCore {
             this._definitions[id] = newDef;
             this.emit("definition.updated", id);
             return newDef;
-         },
+         }
       );
    }
 
@@ -449,7 +446,7 @@ class ABFactory extends ABFactoryCore {
     */
    cacheMatch(key, data) {
       let matches = Object.keys(this.__Cache).filter(
-         (k) => k.indexOf(key) > -1,
+         (k) => k.indexOf(key) > -1
       );
       if (typeof data != "undefined") {
          matches.forEach((k) => {
@@ -521,131 +518,9 @@ class ABFactory extends ABFactoryCore {
    }
 
    //
-   // Secret Management
-   //
-
-   /**
-    * Retrieves a saved private key for a given definition. Will create and save
-    * one if it does not exist.
-    * @param {string} definitionID unique id of the definition the key is for
-    * @resolves {string} private key
-    */
-   async secretKey(definitionID) {
-      const cacheKey = `_cachePK_${definitionID}`;
-      if (!this[cacheKey]) {
-         const model = this.objectKey().model();
-         const [key] =
-            (await model.find({
-               where: { DefinitionID: definitionID },
-               limit: 1,
-            })) ?? [];
-         if (key) {
-            this[cacheKey] = key.Key;
-         } else {
-            this[cacheKey] = crypto.randomBytes(KEY_LENGTH).toString("hex");
-            await model.create({
-               Key: this[cacheKey],
-               DefinitionID: definitionID,
-            });
-         }
-
-         // We don't want to cache these keys in memory for a long time, but also
-         // don't want to read from the database each time. One defintion might
-         // have multiple secrets that will be read or written within a few
-         // seconds. So we'll cache it, but also schedule a cleanup in 5 mins.
-         const cacheCleanup = `${cacheKey}_cleanup`;
-         clearTimeout(this[cacheCleanup]);
-         this[cacheCleanup] = setTimeout(() => {
-            delete this[cacheKey];
-            delete this[cacheCleanup];
-         }, 5 * 60 * 1000);
-      }
-      return this[cacheKey];
-   }
-
-   /**
-    * Encyrpts and stores a secret value
-    * @param {string} defintionID - unique id of the definition this secret
-    * belongs to
-    * @param {string} name to refernce this secret by
-    * @param {string} value the secret to be encrypted
-    */
-   async secretCreate(defintionID, name, value) {
-      const pk = await this.secretKey(defintionID);
-
-      // Encrypt
-      const iv = crypto.randomBytes(VI_LENGTH);
-      const cipher = crypto.createCipheriv(
-         CRYPTO_ALGORITHM,
-         Buffer.from(pk, "hex"),
-         iv
-      );
-      const encrypted = cipher.update(Buffer.from(value, "utf-8"));
-      cipher.final();
-      const encryptedValue = Buffer.concat([
-         encrypted,
-         iv,
-         cipher.getAuthTag(),
-      ]).toString("hex");
-
-      // Save to DB
-      const model = this.objectSecret().model();
-      await model.create({
-         Name: name,
-         Secret: encryptedValue,
-         DefinitionID: defintionID,
-      });
-   }
-
-   /**
-    * Retrieve and decrypt a stored secret
-    * @param {string} defintionID - unique id of the definition the secret
-    * belongs to
-    * @param {string} name of the secret
-    */
-   async secretGet(definitionID, name) {
-      const pk = await this.secretKey(definitionID);
-
-      // Lookup the secret from the DB
-      const modelSecret = this.objectSecret().model();
-      const list = await modelSecret.find({
-         where: {
-            DefinitionID: definitionID,
-            Name: name,
-         },
-         limit: 1,
-      });
-      const secret = list?.[0]?.Secret ?? "";
-      if (!secret) return null;
-
-      // Decrypt the secret
-      const encryptedBuffer = Buffer.from(secret, "hex");
-      const text = encryptedBuffer.subarray(
-         0,
-         encryptedBuffer.length - VI_LENGTH * 2
-      );
-      const vi = encryptedBuffer.subarray(
-         encryptedBuffer.length - VI_LENGTH * 2,
-         encryptedBuffer.length - VI_LENGTH
-      );
-      const authTag = encryptedBuffer.subarray(
-         encryptedBuffer.length - VI_LENGTH,
-         encryptedBuffer.length
-      );
-      const decipher = crypto.createDecipheriv(
-         CRYPTO_ALGORITHM,
-         Buffer.from(pk, "hex"),
-         vi
-      );
-      decipher.setAuthTag(authTag);
-      let decrypted = decipher.update(text);
-      decrypted = Buffer.concat([decrypted, decipher.final()]);
-      return decrypted.toString("utf-8");
-   }
-
-   //
    // Utilities
    //
+
    clone(value) {
       return _.clone(value);
    }
