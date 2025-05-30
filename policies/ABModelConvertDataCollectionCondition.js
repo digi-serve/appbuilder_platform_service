@@ -361,6 +361,7 @@ function parseQueryCondition(AB, _where, object, userData, cb, req) {
                rules: [],
             };
             if (cond) {
+               // if the .linkCond was passed in, then include that here
                if (cond.glue && where.rules.length == 0) {
                   where = cond;
                } else {
