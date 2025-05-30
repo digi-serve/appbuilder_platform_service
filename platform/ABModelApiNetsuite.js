@@ -1319,6 +1319,10 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          field.settings.joinTableReference
       } IN ( ${pks.join(", ")} )`;
 
+      if (req) {
+         req.log(`SQL: ${sql}`);
+      }
+
       let URL = `${this.credentials.NETSUITE_QUERY_BASE_URL}/suiteql`;
 
       let response = await fetchConcurrent(
@@ -1372,6 +1376,10 @@ module.exports = class ABModelAPINetsuite extends ABModel {
          sql = `SELECT * FROM ${linkObj.dbTableName()}  WHERE ${thatPK} IN ( ${thatPKs.join(
             ", "
          )} )`;
+
+         if (req) {
+            req.log(`SQL: ${sql}`);
+         }
 
          let responseLinkObj = await fetchConcurrent(
             this.AB,
