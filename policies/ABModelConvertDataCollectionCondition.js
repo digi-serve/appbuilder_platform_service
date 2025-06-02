@@ -133,13 +133,13 @@ function parseQueryCondition(AB, _where, object, userData, cb, req) {
          var objectColumn;
          // {string} this is the 'tablename'.'colname' of the data to return
 
-         var newKey = cond.key;
+         var newKey;
          // {string} this is the colName of the condition statement we want to pass
          // on.  So for instance, if the condition we received was the 'this_object',
          // filter, then we want the final condition to be:  id IN [],  and the
          // QB condition would be:  { key:'id', rule:'in', value:[] }.  So newKey == 'id'
 
-         var parseColumn = cond.key;
+         var parseColumn;
          // {string} this is the column we want our reference query to return so we can
          // pull out the data for this filter condition.  So for example, the current query
          // is returning userid and subaccount.id.  However our filter is filtering on
