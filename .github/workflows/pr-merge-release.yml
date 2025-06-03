@@ -32,7 +32,7 @@ jobs:
       tag: v${{ needs.call-bump-version.outputs.new_version }}
   call-dispatch-update-services:
     needs: [ call-bump-version, call-get-label ]
-    uses: digi-serve/.github/.github/workflows/dispatch-services.yml@master
+    uses: digi-serve/.github/.github/workflows/dispatch-update.yml@master
     with:
       dispatch_repos: '["appbuilder","custom_reports","definition_manager","file_processor","process_manager","user_manager"]'
       dispatch_type: platform_new_version
