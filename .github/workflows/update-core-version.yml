@@ -53,7 +53,7 @@ jobs:
 
   call-dispatch-update-services:
     needs: [ call-bump-version, call-merge-release ]
-    uses: digi-serve/.github/.github/workflows/dispatch-update-services.yml@master
+    uses: digi-serve/.github/.github/workflows/dispatch-update.yml@master
     with:
       dispatch_repos: '["appbuilder","custom_reports","definition_manager","file_processor","process_manager","user_manager"]'
       dispatch_type: platform_new_version
