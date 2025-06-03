@@ -31,12 +31,14 @@ jobs:
     with:
       tag: v${{ needs.call-bump-version.outputs.new_version }}
   call-dispatch-update-services:
-    name: Dispatch
     needs: [ call-bump-version, call-get-label ]
-    uses: ./.github/workflows/dispatch-update-services.yml
+    uses: digi-serve/.github/.github/workflows/dispatch-update-services.yml@master
     with:
+      dispatch_repos: '["appbuilder","custom_reports","definition_manager","file_processor","process_manager","user_manager"]'
+      dispatch_type: platform_new_version
       version: ${{ needs.call-bump-version.outputs.new_version }}
-      type:  ${{ needs.call-get-label.outputs.label }}
+      type: ${{ needs.call-get-label.outputs.label }}
+      app_id: ${{ vars.GS_DEV_APP_ID }}
     secrets:
-      TOKEN: ${{ secrets.PAT }}
+      app_token: ${{ secrets.GS_DEV_APP_PK }}
   
