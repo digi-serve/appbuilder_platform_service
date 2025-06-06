@@ -259,7 +259,7 @@ function fetchConcurrent(
 }
 
 /**
- * (taken from https://github.com/digi-serve/global-hr-update/blob/master/back-end/api/netsuite.js)
+ * (taken from https://github.com/CruGlobal/global-hr-update/blob/master/back-end/api/netsuite.js)
  * Make an authorized HTTP request to NetSuite.
  *
  * This takes care of the OAuth 1.0 headers.
