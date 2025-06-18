@@ -60,6 +60,9 @@ class ABFactory extends ABFactoryCore {
 
       super(definitions);
 
+      this.platform = "service";
+      // {string} the platform this ABFactory is running on.
+
       this.Definitions = DefinitionManager;
       // {obj} the provided interface for working with the ABDefinition table.
 
