@@ -55,10 +55,10 @@ function createObject(key, config, AB) {
 let devPlugins = [require("./plugins/developer/ObjectNetsuite.js")];
 
 function registerLocalPlugins(API) {
-   let { AB, ABObjectPlugin, registerObject } = API;
+   let { registerObjectType } = API;
    devPlugins.forEach((p) => {
-      let pluginClass = p(AB, ABObjectPlugin);
-      registerObject(pluginClass.getPluginKey(), pluginClass);
+      let pluginClass = p(API);
+      registerObjectType(pluginClass.getPluginKey(), pluginClass);
    });
 }
 

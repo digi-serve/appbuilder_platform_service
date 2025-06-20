@@ -1,4 +1,4 @@
-module.export = function FNObjectNetsuite({ /*AB,*/ ABObjectPlugin }) {
+module.exports = function FNObjectNetsuite({ /*AB,*/ ABObjectPlugin }) {
    return class ABObjectNetsuiteAPI extends ABObjectPlugin {
       constructor(...params) {
          super(...params);
