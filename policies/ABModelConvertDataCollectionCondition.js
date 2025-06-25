@@ -79,7 +79,6 @@ function findDcEntry(_where) {
       for (var i = 0; i < _where.rules.length; i++) {
          entry = findDcEntry(_where.rules[i]);
          if (entry) {
-            return entry;
             break;
          }
       }
@@ -109,7 +108,7 @@ function parseQueryCondition(AB, _where, object, userData, cb, req) {
 
       Promise.resolve().then(() => {
          if (!defDC) {
-            var err = AB.toError("Unknown Data collection ID in condition.", {
+            let err = AB.toError("Unknown Data collection ID in condition.", {
                location: "ABModelConvertDataCollectionCondition",
                dcId: cond.value,
                condition: cond,
@@ -121,7 +120,7 @@ function parseQueryCondition(AB, _where, object, userData, cb, req) {
          // var sourceObject = object.application.objects(obj => obj.id == dc.settings.object)[0];
          var sourceObject = AB.objectByID(defDC.settings.datasourceID);
          if (!sourceObject) {
-            var err = AB.toError("Source object does not exist.", {
+            let err = AB.toError("Source object does not exist.", {
                location: "ABModelConvertDataCollectionCondition",
                sourceObjectID: defDC.settings.datasourceID,
                dcID: defDC.id,
@@ -172,7 +171,7 @@ function parseQueryCondition(AB, _where, object, userData, cb, req) {
                // ok, maybe we passed in a field.id:
                field = object.fieldByID(cond.key);
                if (!field) {
-                  var err = AB.toError("Unable to resolve condition field.", {
+                  let err = AB.toError("Unable to resolve condition field.", {
                      location: "ABModelConvertDataCollectionCondition",
                      field: cond.key,
                      condition: cond,
