@@ -953,6 +953,10 @@ module.exports = class ABModelAPINetsuite extends ABModel {
     * @return {Promise} resolved with the result of the find()
     */
    async create(values, trx = null, condDefaults = null, req = null) {
+      if (trx) {
+         console.log("ABModelAPINetsuite.create() does not support trx");
+      }
+
       if (!this.credentials) {
          this.credentials = this.pullCredentials();
       }
@@ -1053,6 +1057,10 @@ module.exports = class ABModelAPINetsuite extends ABModel {
     * @return {Promise} resolved with {int} numRows : the # rows affected
     */
    async delete(id, trx = null, req = null) {
+      if (trx) {
+         console.log("ABModelAPINetsuite.delete() does not support trx");
+      }
+
       // make sure we have built our credentials
       if (!this.credentials) {
          this.credentials = this.pullCredentials();
@@ -1668,11 +1676,12 @@ module.exports = class ABModelAPINetsuite extends ABModel {
                JOINTABLE = "?? many:many ?? "; // HOW DO I FIND THE JOIN TABLE IN NETSUITE?
                ON = ""; // AND HOW DO I FIND THE JOINTABLE.COLUMN in NETSUITE?
                WHERE = `?? `; // want to find fieldLink's column IS NULL
+               // eslint-disable-next-line no-case-declarations
                let todoError = new Error(
-                  "TODO: figure out Netsuite many:many connections"
+                  "TODO: NoRelationRules: figure out Netsuite many:many connections"
                );
                throw todoError;
-               break;
+            // break;
          }
 
          let join = `LEFT JOIN ${JOINTABLE} ON ${ON}`;
@@ -2357,6 +2366,10 @@ module.exports = class ABModelAPINetsuite extends ABModel {
     * @return {Promise} resolved with the result of the find()
     */
    async update(id, values, userData, trx = null, req = null) {
+      if (trx) {
+         console.log("ABModelAPINetsuite.update() does not support trx");
+      }
+
       let PK = this.object.PK();
       id = id[PK] || id.id || id.uuid || id;
       // id should be just the .uuid or .id value of the row we are updating

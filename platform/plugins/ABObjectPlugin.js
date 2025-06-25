@@ -19,6 +19,7 @@ module.exports = class ABObjectPlugin extends ABObject {
     */
    fromValues(attributes) {
       super.fromValues(attributes);
+      this.isPlugin = true;
       this.plugin_key = this.constructor.getPluginKey();
    }
 

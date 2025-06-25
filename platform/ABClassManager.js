@@ -1,4 +1,6 @@
 const ABObjectPlugin = require("./plugins/ABObjectPlugin.js");
+const ABModelPlugin = require("./plugins/ABModelPlugin.js");
+
 // import { ABObjectPlugin } from './plugins/ABObjectPlugin.js';
 // import { ABObjectPropertiesPlugin } from './plugins/ABObjectPropertiesPlugin.js';
 // import { ABFieldPlugin } from './ABFieldPlugin.js';
@@ -14,6 +16,7 @@ const classRegistry = {
 function getPluginAPI() {
    return {
       ABObjectPlugin,
+      ABModelPlugin,
       // ABObjectPropertiesPlugin,
       //  ABFieldPlugin,
       //  ABViewPlugin,

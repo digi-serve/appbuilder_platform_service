@@ -83,7 +83,7 @@ function requireFromURL(url) {
                const exports = {};
                const module = { exports };
                const context = vm.createContext({ module, exports, require });
-               const exported = script.runInContext(context);
+               /*const exported = */ script.runInContext(context);
 
                // resolve(exported.Plugin || exported.default || exported);
                resolve(

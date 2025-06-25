@@ -1,10 +1,10 @@
-const crypto = require("crypto");
+// const crypto = require("crypto");
 
 const ABObjectApiNetsuiteCore = require("../core/ABObjectApiNetsuiteCore");
 
-const CRYPTO_ALGORITHM = "aes-256-gcm";
-const KEY_LENGTH = 32;
-const VI_LENGTH = 16;
+// const CRYPTO_ALGORITHM = "aes-256-gcm";
+// const KEY_LENGTH = 32;
+// const VI_LENGTH = 16;
 
 module.exports = class ABObjectApiNetsuite extends ABObjectApiNetsuiteCore {
    // /**
