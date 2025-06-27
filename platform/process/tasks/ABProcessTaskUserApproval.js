@@ -24,10 +24,8 @@ function parseEntryKeys(keys, entries) {
    let entry = entries.shift();
    // entries that have abFieldID are the ones that directly reference
    // our data:
-   if (entry.abFieldID) {
-      if (entry.key) {
-         keys.push(entry.key);
-      }
+   if (entry.key) {
+      keys.push(entry.key);
    }
 
    // if this entry is a container, we need to parse it's children
